@@ -281,6 +281,13 @@ export const challanById = (id: string) => challans.find((c) => c.id === id)
  * receipts here, so the desk's rejection allowance and this queue are the same
  * fact seen twice.
  */
+/**
+ * Invented on the five PURCHASE receipts only: `orderedQty` and `promisedDate`.
+ * §9.1 records neither, and without them OTIF cannot be measured at all — "on
+ * time" needs a promise to be late against, and "in full" needs a quantity to
+ * fall short of. Jobwork returns deliberately carry neither: a challan coming
+ * back is not a supplier delivery and does not belong in a supplier's OTIF.
+ */
 export const grns: Grn[] = [
   /* ---------------------------------------------------------------- waiting -- */
   {
@@ -357,6 +364,7 @@ export const grns: Grn[] = [
     itemName: 'Incoloy 800 sheathed element tube Ø8.5', uom: 'm',
     vendorName: 'Nirmal Alloy Tubes', poNo: 'PO-2571',
     receivedOn: '2026-08-08', qtyReceived: 500, rate: 212,
+    orderedQty: 500, promisedDate: '2026-08-06',  // two days late, full quantity
     status: 'closed', acceptedQty: 491, rejectedQty: 9,
     failedCheckIds: ['SC-TUB-OD'], inspector: INSPECTOR, closedAt: '2026-08-08',
   },
@@ -365,6 +373,7 @@ export const grns: Grn[] = [
     itemName: 'CRCA sheet 1.2 mm × 1250', uom: 'MT',
     vendorName: 'Mahalaxmi Steel', poNo: 'PO-2566',
     receivedOn: '2026-08-04', qtyReceived: 1.5, rate: 61400,
+    orderedQty: 1.5, promisedDate: '2026-08-05',  // a day early, full quantity
     status: 'closed', acceptedQty: 1.4775, rejectedQty: 0.0225,
     failedCheckIds: ['SC-CRC-SURF'], inspector: INSPECTOR, closedAt: '2026-08-05',
   },
@@ -373,6 +382,7 @@ export const grns: Grn[] = [
     itemName: 'MgO powder, electrical grade', uom: 'kg',
     vendorName: 'Nirmal Minerals', poNo: 'PO-2558',
     receivedOn: '2026-07-28', qtyReceived: 400, rate: 142,
+    orderedQty: 400, promisedDate: '2026-07-29',  // a day early, full quantity
     status: 'closed', acceptedQty: 393.6, rejectedQty: 6.4,
     failedCheckIds: ['SC-MGO-MOIST'], inspector: INSPECTOR, closedAt: '2026-07-29',
   },
@@ -381,6 +391,7 @@ export const grns: Grn[] = [
     itemName: 'Cable gland M20, brass', uom: 'nos',
     vendorName: 'Krishna Electricals', poNo: 'PO-2547',
     receivedOn: '2026-07-21', qtyReceived: 2000, rate: 35.8,
+    orderedQty: 2000, promisedDate: '2026-07-21',  // on the day, full quantity
     status: 'closed', acceptedQty: 1974, rejectedQty: 26,
     failedCheckIds: ['SC-GLD-THR'], inspector: INSPECTOR, closedAt: '2026-07-21',
   },
@@ -389,6 +400,7 @@ export const grns: Grn[] = [
     itemName: 'Ceramic terminal block 2-way 30 A', uom: 'nos',
     vendorName: 'Krishna Ceramics', poNo: 'PO-2540',
     receivedOn: '2026-07-14', qtyReceived: 5000, rate: 19.8,
+    orderedQty: 5000, promisedDate: '2026-07-12',  // two days late, full quantity
     status: 'closed', acceptedQty: 4915, rejectedQty: 85,
     failedCheckIds: ['SC-TRB-VIS'], inspector: INSPECTOR, closedAt: '2026-07-15',
   },

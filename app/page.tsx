@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { PageHeader } from '@/components/shell/PageHeader'
 import { Card, Pill, StatusPill } from '@/components/ui/bits'
 import { KpiTile } from '@/components/desk/KpiRow'
+import { Num } from '@/components/ui/Num'
 import { BarRows, CAT, LineChart, Legend } from '@/components/charts/kit'
 import { buildRows, deskKpis, needsDecision, type SeedBundle } from '@/lib/domain/derive'
 import { buildLineWatch } from '@/lib/domain/linewatch'
@@ -14,6 +15,11 @@ import { daysBetween } from '@/lib/domain/calc'
 import { lakh, longDate, STATUS_LABEL, STATUS_TONE } from '@/lib/domain/format'
 import type { Derived } from '@/lib/domain/types'
 import { useDesk } from '@/components/desk/store'
+import { useInventory } from '@/components/inventory/store'
+import { useInbound } from '@/components/inbound/store'
+import * as X from '@/lib/domain/exec'
+import { ASSUMPTIONS, A } from '@/lib/seed/exec'
+import { AssumptionLedger, ExecSection, ProvenanceChip } from '@/components/exec/Section'
 
 const seed: SeedBundle = {
   today: S.TODAY_SOURCING, items: S.items, vendors: S.vendors, vendorItems: S.vendorItems,
@@ -49,6 +55,10 @@ const leadSeries = ['EL-TUB-INC85', 'RM-MGO-EG', 'RM-NCR-8020'].map((code, i) =>
   return { label: r.item.code, color: CAT[i], points: rc.map((x) => daysBetween(x.orderedOn, x.receivedOn)) }
 })
 
+const quotedFor = (vendorId: string, itemId: string) =>
+  S.vendorItems.find((v) => v.vendorId === vendorId && v.itemId === itemId)?.quotedLeadTimeDays ?? 0
+const onTime = X.onTimeRate(S.receipts, quotedFor)
+
 const causeRows = (() => {
   const m = new Map<string, number>()
   for (const b of blockedStock) m.set(b.cause, (m.get(b.cause) ?? 0) + b.value)
@@ -57,17 +67,74 @@ const causeRows = (() => {
 
 export default function Page() {
   const decide = rows.filter(needsDecision)
-  const { intakeCounts: ic } = useDesk()
+  const { intakeCounts: ic, kpis: deskKpi } = useDesk()
+  const { lossRows, stockRows, offcutRows, netLoss } = useInventory()
+  const { grns, challanRows } = useInbound()
   const halting = lw.jobs.filter((j) => j.status.value === 'will_halt').length
   const risky = lw.jobs.filter((j) => j.status.value === 'at_risk').length
   const pace = [...lw.materials].sort((a, b) => a.coverDays.value - b.coverDays.value)[0]
   const overdue = lw.jobwork.filter((j) => j.dueBack < lw.today)
+
+  /* ---- the four sections, live off the same data the modules render ---- */
+  const rateOf = (id: string) => S.items.find((i) => i.id === id)?.lastPurchaseRate ?? 0
+  const usableValue = rows.reduce((a, r) => a + r.usable.value * r.item.lastPurchaseRate, 0)
+  const jobworkValue = challanRows
+    .filter((c) => c.challan.status === 'out')
+    .reduce((a, c) => a + c.valueOut.value, 0)
+  const movements = stockRows.flatMap((r) => r.movements)
+  const blockingMaterials = [...new Set(lw.jobs.flatMap((j) => j.status.blocking))]
+
+  const inbound = [
+    X.supplierOtif(grns),
+    X.supplierDefectRate(grns),
+    X.avgLeadTime(rows),
+    X.poBacklog(rows, S.poLines, seed.today),
+  ]
+  const dioKpi = X.daysInventoryOutstanding(rows)
+  const warehouse = [
+    dioKpi,
+    X.stockoutRisk(halting, risky, lw.jobs.length, blockingMaterials),
+    X.shrinkageAndWaste(lossRows.map((l) => l.loss), movements, rateOf),
+    X.stockSplit(
+      usableValue, jobworkValue, A.finishedGoodsValue,
+      rows.filter((r) => r.usable.value > 0).slice(0, 4).map((r) => ({
+        name: r.item.code, value: Math.round(r.usable.value * r.item.lastPurchaseRate), unit: '₹',
+      })),
+      challanRows.filter((c) => c.challan.status === 'out').map((c) => ({
+        name: c.challan.challanNo, value: Math.round(c.valueOut.value), unit: '₹',
+        source: `at ${c.challan.jobworkerName}`,
+      })),
+    ),
+  ]
+  const outbound = [
+    X.customerOtif(lw.salesOrders),
+    X.fulfilmentCycle(),
+    X.carrierDelays(),
+    X.rmaRate(),
+  ]
+  const financial = [
+    X.holdingCost(usableValue, deskKpi.nonUsableValue.value, jobworkValue),
+    X.outboundFreightPerUnit(),
+    X.cashToCash(dioKpi.d.value, S.vendors[0].paymentTermsDays),
+    X.procurementCost(deskKpi.draftPoCount, rows.length),
+  ]
+  const inFreight = X.inboundFreight(rows)
+  const all16 = [...inbound, ...warehouse, ...outbound, ...financial]
+  const mix = {
+    derived: all16.filter((k) => k.provenance === 'derived').length,
+    part: all16.filter((k) => k.provenance === 'part').length,
+    illustrative: all16.filter((k) => k.provenance === 'illustrative').length,
+  }
+
   return (
     <>
       <PageHeader eyebrow="Level 1 · end-to-end material view" title="Executive Dashboard"
         meta={<>
           <Pill mono>{longDate(seed.today)}</Pill>
           <Pill tone="accent">Stage 1 live · Stages 2–5 scoped</Pill>
+          <Pill tone="good" title="Computed from this build’s own data.">{mix.derived} measured</Pill>
+          <Pill tone="warn" title="A measured base figure times a stated assumption.">{mix.part} part measured</Pill>
+          <Pill tone="neutral" title="Nothing here measures it — §2 puts Stage 5 out of scope.">{mix.illustrative} illustrative</Pill>
         </>} />
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -83,33 +150,58 @@ export default function Page() {
           caption="3 customer orders behind short materials" />
       </div>
 
-      <div className="mb-4 grid gap-3 lg:grid-cols-2">
-        <Card index={5} title="Actual delivery time, last six receipts" live
-          annotation="lead time is measured, never quoted"
-          sub="§5 · the trailing average of six real receipts is what drives every reorder point">
-          <div className="p-4">
-            <LineChart series={leadSeries} yLabel="Days from order to receipt"
-              xLabels={['−6', '−5', '−4', '−3', '−2', 'last']}
-              reference={{ value: 12, label: 'MgO reorder point runs on 12 days' }} />
-            <div className="mt-2"><Legend items={leadSeries.map((s) => ({ label: s.label, color: s.color }))} /></div>
-            <p className="mt-2.5 text-[12px] leading-relaxed text-ink-3">
-              A vendor’s quoted lead time is a promise; this is the record. Where the two disagree,
-              the record wins — that is why a material can show twenty days of cover and still be a
-              stockout.
-            </p>
-          </div>
-        </Card>
+      <p className="mb-4 max-w-4xl rounded-lg border border-line bg-surface p-3.5 text-[12.5px] leading-relaxed text-ink-2">
+        <strong className="text-ink">Every figure below says where it came from.</strong> A{' '}
+        <ProvenanceChip p="derived" /> number is computed from this build’s own data and opens into its
+        arithmetic. A <ProvenanceChip p="part" /> number is a measured base times a stated assumption.
+        An <ProvenanceChip p="illustrative" /> number is made up, and the tile says what would have to
+        start being recorded to make it real — §2 puts Stage 5 out of scope, so every outbound figure
+        is illustrative by construction. Sixteen figures where some are measured and some are assumed,
+        with nothing to tell them apart, would be worse than eight measured ones.
+      </p>
 
-        <Card index={6} title="Blocked capital by cause" live annotation={`${lakh(blockedTotal)} across ${blockedStock.length} lots`}
-          sub="§8.4 · age tells you how bad it is, cause tells you what to do about it">
-          <div className="p-4">
-            <BarRows rows={causeRows} format="lakh" colorMode="categorical" />
-            <p className="mt-3 text-[12px] leading-relaxed text-ink-3">
-              MOQ forced is the largest single cause. That is a conversation with a vendor about
-              splitting minimum order quantities — not a software change.
-            </p>
-          </div>
-        </Card>
+      <div className="mb-4 space-y-3">
+        <ExecSection no={1} index={0} title="Inbound procurement" kpis={inbound}
+          blurb="Supplier efficiency and risk — whether the people you buy from can be relied on to keep the line fed">
+          <p className="border-t border-line-soft px-4 py-3 text-[12px] leading-relaxed text-ink-2">
+            <strong className="text-ink">Two different promises, and the gap between them is the point.</strong>{' '}
+            OTIF above is measured against the date written on the purchase order — a promise a person
+            made. Measured instead against the lead time each vendor quotes in their price list, across
+            every seeded receipt — all 27 supplier–item pairs, six receipts each — only{' '}
+            <Num d={onTime} format="raw" dp={1} suffix="%" /> arrived inside it. A supplier who quotes
+            nine days and takes twelve is on time against neither, and that is precisely why §5 forbids
+            using a quoted lead time to compute a reorder point. Both halves of OTIF together are only
+            measurable on the five receipts carrying a promised date and an ordered quantity, and that
+            thinness is itself a finding: most factories cannot compute OTIF at all, because the
+            promise was never written down.
+          </p>
+        </ExecSection>
+
+        <ExecSection no={2} index={1} title="Warehouse & inventory health" kpis={warehouse}
+          blurb="Whether the cash is rotting on shelves, or the line is about to stop" />
+
+        <ExecSection no={3} index={2} title="Outbound fulfilment" kpis={outbound}
+          blurb="Delivery to customers — scoped but not built, so every figure here is illustrative">
+          <p className="border-t border-line-soft px-4 py-3 text-[12px] leading-relaxed text-ink-2">
+            <strong className="text-ink">Nothing in this build ships anything.</strong> §2 scopes it to
+            Stage 1 plus the shop-floor read of Stages 3–4, so there is no despatch table, no carrier
+            record and no returns route. These four are shown as the shape of the answer rather than the
+            answer — and the one real thing on this row is underneath the headline: the customer orders
+            Line Watch can already see are at risk, because a material behind them is genuinely short.
+          </p>
+        </ExecSection>
+
+        <ExecSection no={4} index={3} title="Supply chain financials" kpis={financial}
+          blurb="Cash flow and cost — every supply-chain decision lands on the runway">
+          <p className="border-t border-line-soft px-4 py-3 text-[12px] leading-relaxed text-ink-2">
+            <strong className="text-ink">The freight half that IS measured:</strong> inbound freight on
+            this run is <Num d={inFreight} format="raw" dp={2} suffix="% of order value" /> — ₹11,200
+            against ₹4,55,100 of orders. It is quoted as a share rather than rupees per unit because
+            these orders are in metres, kilograms and pieces, and dividing one rupee total by the sum of
+            those would be arithmetic on nothing. Freight is one of the five components of landed cost
+            (§5), which is why the cheapest quoted rate is so often not the cheapest material.
+          </p>
+        </ExecSection>
       </div>
 
       <div className="grid gap-3 lg:grid-cols-3">
@@ -181,6 +273,8 @@ export default function Page() {
           </div>
         </Card>
       </div>
+
+      <AssumptionLedger assumptions={ASSUMPTIONS} />
     </>
   )
 }

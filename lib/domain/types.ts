@@ -280,6 +280,10 @@ export interface Grn {
   challanId?: string
   receivedOn: string
   qtyReceived: number
+  /** what the PO asked for — the "in full" half of OTIF. Purchase receipts only. */
+  orderedQty?: number
+  /** what the vendor promised — the "on time" half of OTIF. Purchase receipts only. */
+  promisedDate?: string
   /** the PO revision the vendor actually shipped against — INB-02's evidence */
   againstVersion?: number
   /** ₹/uom, last purchase price ex-freight — the §13-1 valuation basis */
