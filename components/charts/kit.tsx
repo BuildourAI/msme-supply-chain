@@ -48,7 +48,8 @@ export function Legend({ items }: { items: { label: string; color: string }[] })
 export interface StackRow {
   label: string
   sub?: string
-  segments: { key: string; value: number }[]
+  /** an optional inspectable figure per segment — rendered in the value table in place of plain text */
+  segments: { key: string; value: number; inspect?: React.ReactNode }[]
   total: number
   badges?: { text: string; tone: 'good' | 'accent' | 'warn' }[]
 }
@@ -129,7 +130,7 @@ export function StackedBars({ rows, keys, format = 'money', max }: {
             <tr key={r.label} className="border-b border-line-soft last:border-0">
               <td className="py-1.5 pr-2 text-ink-2">{r.label}</td>
               {r.segments.map((s) => (
-                <td key={s.key} className="num py-1.5 pl-2 text-right">{fmt(s.value)}</td>
+                <td key={s.key} className="num py-1.5 pl-2 text-right">{s.inspect ?? fmt(s.value)}</td>
               ))}
               <td className="num py-1.5 pl-2 text-right font-semibold">{fmt(r.total)}</td>
             </tr>

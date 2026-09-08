@@ -47,6 +47,7 @@ type Action =
   | { t: 'select'; id: string }
   | { t: 'vendor'; id: string; vendorId: string }
   | { t: 'decide'; id: string; record: DecisionRecord }
+  | { t: 'undecide'; id: string }
   | { t: 'view'; view: ViewMode }
   | { t: 'sort'; col: SortCol }
   | { t: 'query'; q: string }
@@ -70,6 +71,10 @@ function reducer(s: State, a: Action): State {
     case 'vendor': return { ...s, overrides: { ...s.overrides, [a.id]: a.vendorId } }
     case 'decide':
       return { ...s, decisions: { ...s.decisions, [a.id]: a.record } }
+    case 'undecide': {
+      const { [a.id]: _gone, ...rest } = s.decisions
+      return { ...s, decisions: rest }
+    }
     case 'view': return { ...s, view: a.view }
     case 'sort':
       return { ...s, sort: { col: a.col, dir: s.sort.col === a.col && s.sort.dir === 'asc' ? 'desc' : 'asc' } }
@@ -103,6 +108,8 @@ interface Ctx {
   select: (id: string) => void
   chooseVendor: (row: DerivedRow, vendorId: string) => void
   decide: (row: DerivedRow, decision: Decision, reason?: string) => void
+  /** §11 — every automated action reversible. Reverses a decision and says so in the log. */
+  undo: (row: DerivedRow) => void
   setView: (v: ViewMode) => void
   toggleSort: (c: SortCol) => void
   setQuery: (q: string) => void
@@ -180,8 +187,11 @@ export function DeskProvider({ children }: { children: React.ReactNode }) {
     const premium = to.landedPerUnit.value - row.quotes[0].landedPerUnit.value
     log({
       entity: 'reorder_suggestion', entityId: row.item.code, action: 'Supplier changed',
-      detail: `${row.item.code} · ${row.chosen.vendor.name} → ${to.vendor.name}` +
-        (premium > 0 ? ` · ${money(premium, 2)}/unit above the recommendation` : ' · at or below the recommendation'),
+      detail: `${row.item.code}` +
+        (premium > 0 ? ` · ${money(premium, 2)}/unit above the recommendation` : ' · at or below the recommendation') +
+        (to.vendorItem.rate > row.item.lastPurchaseRate ? ` · rate above last purchase price ${money(row.item.lastPurchaseRate, 2)} — needs sign-off (§11)` : ''),
+      before: `${row.chosen.vendor.name} · ${money(row.landedTotal.value)}`,
+      after: `${to.vendor.name} · ${money(row.reorderQty.value * to.landedPerUnit.value)}`,
     })
     say(`Supplier for ${row.item.code} set to ${to.vendor.name}. The line has been re-priced and the choice logged against you.`)
   }, [log, say])
@@ -201,10 +211,15 @@ export function DeskProvider({ children }: { children: React.ReactNode }) {
       approved: 'Draft PO raised', held: 'Held', overridden: 'Guardrail overridden',
       expedited: 'Expedite requested', deferred: 'Deferred',
     }
+    const flags = [
+      row.aboveLastPurchase.value ? 'rate above last purchase price' : '',
+      row.needsOwnerSignoff.value ? `above the owner’s ₹${(state.policy.ownerApprovalThreshold / 100000).toFixed(1)} L threshold — owner must sign off` : '',
+    ].filter(Boolean).join(' · ')
     log({
       entity: 'reorder_suggestion', entityId: row.item.code,
       action: verb[decision] ?? decision, reason,
-      detail: `${row.item.code} · ${row.chosen.vendor.name} · ${money(row.landedTotal.value)}`,
+      detail: `${row.item.code} · ${row.chosen.vendor.name} · ${money(row.landedTotal.value)}${flags ? ' · ' + flags : ''}`,
+      before: 'pending', after: decision,
     })
     const msg: Record<string, string> = {
       approved: `Draft PO prepared for ${row.chosen.vendor.name}. Nothing has been sent — the system never places an order.`,
@@ -214,7 +229,18 @@ export function DeskProvider({ children }: { children: React.ReactNode }) {
       deferred: `${row.item.code} set aside. It will be raised again on the next run.`,
     }
     say(msg[decision] ?? 'Recorded.')
-  }, [log, say])
+  }, [log, say, state.policy.ownerApprovalThreshold])
+
+  const undo = useCallback((row: DerivedRow) => {
+    const prev = state.decisions[row.item.id]
+    dispatch({ t: 'undecide', id: row.item.id })
+    log({
+      entity: 'reorder_suggestion', entityId: row.item.code, action: 'Decision reversed',
+      detail: `${row.item.code} · back to pending — the earlier entry stays on the trail`,
+      before: prev?.decision ?? '—', after: 'pending',
+    })
+    say(`${row.item.code} is back on the desk. Nothing was sent, so there is nothing to recall.`)
+  }, [log, say, state.decisions])
 
   const reviewIntake = useCallback((lineId: string, status: 'confirmed' | 'rejected') => {
     const line = reviewQueue.find((l) => l.id === lineId)!
@@ -236,7 +262,7 @@ export function DeskProvider({ children }: { children: React.ReactNode }) {
   }, [log, say])
 
   const value: Ctx = {
-    state, rows, visible, selected, kpis, intakeCounts, select, chooseVendor, decide, reviewIntake,
+    state, rows, visible, selected, kpis, intakeCounts, select, chooseVendor, decide, undo, reviewIntake,
     setView: (v) => dispatch({ t: 'view', view: v }),
     toggleSort: (c) => dispatch({ t: 'sort', col: c }),
     setQuery: (q) => dispatch({ t: 'query', q }),

@@ -8,7 +8,7 @@ import { buildRows, deskKpis, needsDecision, type SeedBundle } from '@/lib/domai
 import { DEFAULT_POLICY } from '@/lib/domain/policy'
 import * as S from '@/lib/seed/sourcing'
 import { blockedStock } from '@/lib/seed/blocked'
-import { reviewQueue, supplierDocuments } from '@/lib/seed/intake'
+import { resolveAlias, reviewQueue, seededAliases, supplierDocuments } from '@/lib/seed/intake'
 
 const seed: SeedBundle = {
   today: S.TODAY_SOURCING,
@@ -92,7 +92,7 @@ describe('§5 · reorder quantity rounds up to the MOQ, and only when at_risk', 
 describe('§8.4 · the coverage guardrail holds CM-TRB-2W and nothing else', () => {
   it('MOQ 5,000 against a net need of 1,420', () => {
     const r = row('CM-TRB-2W')
-    const netNeed = r.reorderPoint.value + DEFAULT_POLICY.cycleDays * r.item.avgDailyConsumption - r.truePosition.value
+    const netNeed = r.reorderPoint.value + DEFAULT_POLICY.cycleDays[r.item.itemClass] * r.item.avgDailyConsumption - r.truePosition.value
     expect(netNeed).toBe(1420)
   })
   it('pushes coverage to 2.91 months against a 2.0 ceiling', () =>
@@ -252,6 +252,39 @@ describe('§9.1 · intake — 14 documents, 11 auto-filed, 3 in review', () => {
     const l = reviewQueue.find((x) => x.rawItemText === 'TERMINAL BLK CERAMIC 2WAY 30A')!
     expect(l.suggestedItemId).toBe('CM-TRB-2W')
     expect(l.confidence).toBeGreaterThan(0.5)
+  })
+})
+
+describe('§8.2 · a confirmed alias resolves that vendor’s spelling from then on', () => {
+  it('a repeat of a confirmed spelling resolves without review', () => {
+    expect(resolveAlias(seededAliases, 'Nirmal Minerals', 'MAGNESIUM OXIDE ELECT GRADE')).toBe('RM-MGO-EG')
+    expect(resolveAlias(seededAliases, 'Nirmal Minerals', 'magnesium oxide elect. grade')).toBe('RM-MGO-EG')
+  })
+  it('the same words from a different vendor still go to a person', () =>
+    expect(resolveAlias(seededAliases, 'Deccan Ceramics', 'MAGNESIUM OXIDE ELECT GRADE')).toBeNull())
+  it('the teaching case resolves once accepted', () => {
+    const after = [...seededAliases, { itemId: 'CM-TRB-2W', vendorName: 'Krishna Ceramics', rawText: 'TERMINAL BLK CERAMIC 2WAY 30A' }]
+    expect(resolveAlias(after, 'Krishna Ceramics', 'TERMINAL BLK CERAMIC 2WAY 30A')).toBe('CM-TRB-2W')
+  })
+})
+
+describe('§11 · the sign-off triggers the data can evaluate', () => {
+  it('no recommended line is above its last purchase price', () => {
+    for (const r of rows) expect(r.aboveLastPurchase.value).toBe(false)
+  })
+  it('choosing a vendor whose RATE is above the last-bought price flags it', () => {
+    // Deccan quotes ₹219 against a last purchase of ₹212 → flagged.
+    // Sanghvi quotes ₹206 — dearer landed, cheaper rate — → not flagged. The trigger is the rate (§11).
+    const deccan = row('EL-TUB-INC85').quotes.find((q) => q.vendor.name === 'Deccan Tube & Alloy')!.vendor.id
+    const sanghvi = row('EL-TUB-INC85').quotes.find((q) => q.vendor.name === 'Sanghvi Special Metals')!.vendor.id
+    const withDeccan = buildRows(seed, DEFAULT_POLICY, { 'EL-TUB-INC85': deccan })
+    const withSanghvi = buildRows(seed, DEFAULT_POLICY, { 'EL-TUB-INC85': sanghvi })
+    expect(withDeccan.find((r) => r.item.code === 'EL-TUB-INC85')!.aboveLastPurchase.value).toBe(true)
+    expect(withSanghvi.find((r) => r.item.code === 'EL-TUB-INC85')!.aboveLastPurchase.value).toBe(false)
+  })
+  it('the element tube order is above the owner’s ₹2 L threshold; the nichrome one is not', () => {
+    expect(row('EL-TUB-INC85').needsOwnerSignoff.value).toBe(true)
+    expect(row('RM-NCR-8020').needsOwnerSignoff.value).toBe(false)
   })
 })
 

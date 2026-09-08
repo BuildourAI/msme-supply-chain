@@ -24,7 +24,8 @@ export function LandedCostCompare() {
       { key: 'Freight', value: vi.freightPerUnit },
       { key: 'Non-cred. GST', value: vi.nonCreditableGst },
       { key: 'Payment term', value: vi.paymentTermCost },
-      { key: 'Rejection', value: q.rejectionAllowance.value },
+      { key: 'Rejection', value: q.rejectionAllowance.value,
+        inspect: <Num d={q.rejectionAllowance} format="money" dp={2} tone={q.rejectionAllowance.crossCheck ? 'warn' : undefined} /> },
     ]
     const badges: StackRow['badges'] = []
     if (q.isRecommended) badges.push({ text: 'Recommended', tone: 'accent' })
@@ -119,7 +120,7 @@ export function GuardrailPanel() {
             <StatusPill label="Held by the guardrail" tone="critical" />
             <p className="mt-2 text-[12.5px] leading-relaxed text-ink-2">
               An MOQ of {num(r.item.moq, 0)} {r.item.uom} against a net need of{' '}
-              {num(r.reorderPoint.value + state.policy.cycleDays * r.item.avgDailyConsumption - r.truePosition.value, 0)}{' '}
+              {num(r.reorderPoint.value + state.policy.cycleDays[r.item.itemClass] * r.item.avgDailyConsumption - r.truePosition.value, 0)}{' '}
               {r.item.uom} pushes cover to {num(cover, 2)} months. The system holds the line and asks
               for a written reason. It does not block you — only a person can release it.
             </p>
@@ -212,11 +213,12 @@ export function IntakeQueue() {
           </p>
           <ul className="mt-1.5 space-y-1">
             {state.aliases.map((a, i) => (
-              <li key={i} className="flex flex-wrap items-baseline gap-x-2 text-[11.5px]">
+              <li key={i} className="flex flex-wrap items-baseline gap-x-2 text-[11.5px]"
+                  title={`Any future line from ${a.vendorName} reading “${a.rawText}” resolves to ${a.itemId} without review.`}>
                 <span className="mono truncate text-ink-2">“{a.rawText}”</span>
                 <span aria-hidden className="text-ink-3">→</span>
                 <span className="mono font-medium">{a.itemId}</span>
-                <span className="ml-auto text-[10.5px] text-ink-3">{a.vendorName}</span>
+                <span className="ml-auto text-[10.5px] text-ink-3">{a.vendorName} · resolves automatically</span>
               </li>
             ))}
           </ul>

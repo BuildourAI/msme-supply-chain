@@ -21,7 +21,7 @@ export default function Page() {
           <div>
             <p className="mono text-[10px] uppercase tracking-wider text-ink-3">The guardrails, which bite hardest here</p>
             <ul className="mt-1.5 space-y-1 text-[12.5px] leading-relaxed text-ink-2">
-              {GUARDRAILS.slice(0, 3).map((g) => <li key={g}>· {g}</li>)}
+              {GUARDRAILS.map((g) => <li key={g}>· {g}</li>)}
             </ul>
           </div>
         </div>

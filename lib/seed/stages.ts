@@ -55,6 +55,7 @@ export const STAGES: Stage[] = [
       { label: 'Purchase orders', lock: { phase: '§14 Phase 3', needs: 'Approval thresholds and the owner’s sign-off rules.' } },
       { label: 'Vendor master', lock: { phase: 'Track 0', needs: 'Vendor master, payment terms and lead times for the top 20 items.' } },
       { label: 'Vendor scorecard', lock: { phase: 'Excluded', needs: '', excludedReason: 'The score feeds ranking silently. Too much precision for a hands-on owner — it stays on the buyer’s detail view only (§12).' } },
+      { label: 'Automatic PO placement', lock: { phase: 'Excluded', needs: '', excludedReason: 'Explicitly refused by every client in the source set (§12). The system drafts; a person places the order. There is no code path that can send anything.' } },
     ],
   },
   {
@@ -105,6 +106,7 @@ export const STAGES: Stage[] = [
       { label: 'Feeds map', href: '/production#feeds', note: 'live — if I run out of X I cannot make Y' },
       { label: 'Capacity & promise dates', lock: { phase: 'Track 0', needs: 'Machine and labour capacity per work centre.' } },
       { label: 'Full BOM explosion', lock: { phase: 'Excluded', needs: '', excludedReason: 'Surface the "feeds" link only for the material that is actually short (§12).' } },
+      { label: 'Separate mobile app', lock: { phase: 'Excluded', needs: '', excludedReason: 'A web app installable to the home screen, one login per employee — that is what the source clients asked for (§12). No native app.' } },
     ],
   },
   {
@@ -120,7 +122,7 @@ export const STAGES: Stage[] = [
       { label: 'Dispatch documents', lock: { phase: 'Out of scope', needs: 'A sales-order and despatch table. §2 scopes this build to Stage 1.' } },
       { label: 'Shipment milestones', lock: { phase: 'Out of scope', needs: 'Carrier milestones, which no client in the source set captures today.' } },
       { label: 'Reverse logistics', lock: { phase: 'Out of scope', needs: 'A returns route with an owner and a deadline.' } },
-      { label: 'e-Way bill', lock: { phase: 'Out of scope', needs: 'Exchange with the accounting system — never a replacement for it (§12).' } },
+      { label: 'e-Way bill', lock: { phase: 'Out of scope', needs: 'Exchange with the accounting system the client already runs — Tally, Vyapar, Spectrum or Odoo — never a replacement for it (§12).' } },
     ],
   },
 ]

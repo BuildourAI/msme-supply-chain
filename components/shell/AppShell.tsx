@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AppProvider, useApp } from '@/state/app-store'
 import { useTheme } from '@/state/theme-provider'
 import { Inspector } from '@/components/ui/Inspector'
@@ -10,6 +10,12 @@ import { DeskProvider } from '@/components/desk/store'
 
 function ActivityDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { audit } = useApp()
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open, onClose])
   if (!open) return null
   return (
     <div className="anim-backdrop fixed inset-0 z-[55] flex justify-end bg-ink/20" onClick={onClose}>
@@ -40,6 +46,11 @@ function ActivityDrawer({ open, onClose }: { open: boolean; onClose: () => void 
                     <span className="mono ml-auto text-[10px] text-ink-3">{e.at}</span>
                   </div>
                   <p className="mt-0.5 text-[12px] leading-snug text-ink-2">{e.detail}</p>
+                  {(e.before || e.after) && (
+                    <p className="mono mt-1 text-[10.5px] text-ink-3">
+                      {e.before ?? '—'} <span aria-hidden>→</span> {e.after ?? '—'}
+                    </p>
+                  )}
                   {e.reason && (
                     <p className="mt-1 border-l-2 border-warn/40 pl-2 text-[11.5px] italic leading-snug text-ink-2">
                       “{e.reason}”

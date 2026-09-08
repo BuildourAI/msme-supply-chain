@@ -255,9 +255,13 @@ export function rejectionAllowance(
  * landed_cost_per_unit = rate + freight + non_creditable_gst
  *                      + payment_term_cost + rejection_allowance
  */
-export function landedCostPerUnit(vi: VendorItem, rejAllowance: number): Derived {
+export function landedCostPerUnit(vi: VendorItem, rej: Derived): Derived {
+  // §11 — errors surface, never silently resolve. Where the quoted allowance
+  // drifts from the §5 rule, the input says so and the cross-check rides along,
+  // so the drift is visible from the landed-cost figure a buyer actually clicks.
+  const drifted = !!rej.crossCheck
   return D(
-    money(vi.rate + vi.freightPerUnit + vi.nonCreditableGst + vi.paymentTermCost + rejAllowance),
+    money(vi.rate + vi.freightPerUnit + vi.nonCreditableGst + vi.paymentTermCost + rej.value),
     'Landed cost per unit',
     'rate + freight + non_creditable_gst + payment_term_cost + rejection_allowance',
     [
@@ -265,9 +269,12 @@ export function landedCostPerUnit(vi: VendorItem, rejAllowance: number): Derived
       { name: 'freight', value: vi.freightPerUnit, unit: '₹/unit' },
       { name: 'non_creditable_gst', value: vi.nonCreditableGst, unit: '₹/unit' },
       { name: 'payment_term_cost', value: vi.paymentTermCost, unit: '₹/unit', source: 'cost of the vendor’s payment terms' },
-      { name: 'rejection_allowance', value: rejAllowance, unit: '₹/unit', source: `rate × ${vi.trailingRejectionRate}% rejection history` },
+      { name: 'rejection_allowance', value: rej.value, unit: '₹/unit',
+        source: drifted
+          ? `as quoted — differs from rate × ${vi.trailingRejectionRate}% (see cross-check)`
+          : `rate × ${vi.trailingRejectionRate}% rejection history` },
     ],
-    { unit: '₹/unit', note: 'Landed cost is derived, never stored (§7).' },
+    { unit: '₹/unit', note: 'Landed cost is derived, never stored (§7).', crossCheck: rej.crossCheck },
   )
 }
 

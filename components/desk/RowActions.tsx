@@ -12,7 +12,7 @@ import { useDesk } from './store'
  * contacts a supplier, and the verbs say so.
  */
 export function RowActions({ row, size = 'sm' }: { row: DerivedRow; size?: 'sm' | 'md' }) {
-  const { decide, state } = useDesk()
+  const { decide, undo, state } = useDesk()
   const { log, say } = useApp()
   const [reasonOpen, setReasonOpen] = useState(false)
   const [reason, setReason] = useState('')
@@ -29,6 +29,11 @@ export function RowActions({ row, size = 'sm' }: { row: DerivedRow; size?: 'sm' 
         <span aria-hidden className="size-1.5 rounded-full bg-good" />
         {label[decided.decision] ?? decided.decision}
         <span className="mono text-[10px] text-ink-3">· figures frozen</span>
+        <button type="button" onClick={() => undo(row)}
+          className="ml-1 text-[11px] font-medium text-accent hover:underline"
+          title="Every automated action is reversible (§11). Nothing was sent, so nothing needs recalling.">
+          Undo
+        </button>
       </span>
     )
   }
@@ -39,8 +44,26 @@ export function RowActions({ row, size = 'sm' }: { row: DerivedRow; size?: 'sm' 
     setReasonOpen(false); setReason('')
   }
 
+  const flags = (
+    <>
+      {row.aboveLastPurchase.value && (
+        <span className="basis-full text-[10.5px] leading-tight text-warn"
+              title={row.aboveLastPurchase.note}>
+          rate above last purchase price · needs sign-off
+        </span>
+      )}
+      {row.needsOwnerSignoff.value && (
+        <span className="basis-full text-[10.5px] leading-tight text-warn"
+              title={row.needsOwnerSignoff.note}>
+          above the owner’s threshold · owner signs off
+        </span>
+      )}
+    </>
+  )
+
   return (
     <div className="flex flex-wrap items-center gap-1.5">
+      {flags}
       {row.held.value ? (
         <>
           <Button size={size} variant="danger" onClick={() => setReasonOpen(true)}>Override with reason</Button>
@@ -52,7 +75,9 @@ export function RowActions({ row, size = 'sm' }: { row: DerivedRow; size?: 'sm' 
         </>
       ) : row.status.value === 'at_risk' ? (
         <>
-          <Button size={size} variant="primary" onClick={() => decide(row, 'approved')}>Approve draft PO</Button>
+          <Button size={size} variant="primary" onClick={() => decide(row, 'approved')}>
+            {row.needsOwnerSignoff.value ? 'Draft PO for owner sign-off' : 'Approve draft PO'}
+          </Button>
           <Button size={size} variant="ghost" onClick={() => decide(row, 'deferred')}>Not now</Button>
         </>
       ) : row.status.value === 'at_risk_late' ? (
@@ -79,7 +104,7 @@ export function RowActions({ row, size = 'sm' }: { row: DerivedRow; size?: 'sm' 
             This order takes cover to <strong className="text-ink">{num(row.coverageAfterMonths.value, 2)} months</strong>,
             past the {num(state.policy.coverageCeiling[row.item.itemClass], 1)}-month ceiling for class {row.item.itemClass}.
             The MOQ of {num(row.item.moq, 0)} {row.item.uom} against a net need of{' '}
-            {num(row.reorderPoint.value + state.policy.cycleDays * row.item.avgDailyConsumption - row.truePosition.value, 0)} {row.item.uom} is why.
+            {num(row.reorderPoint.value + state.policy.cycleDays[row.item.itemClass] * row.item.avgDailyConsumption - row.truePosition.value, 0)} {row.item.uom} is why.
           </div>
           <label className="block">
             <span className="text-[12px] font-medium">Why are you releasing it?</span>

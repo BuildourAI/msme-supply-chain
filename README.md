@@ -52,7 +52,16 @@ the whole run. The differing supplier defaults between the two screens (§13-2) 
 visible policy — the desk optimises on landed cost, Line Watch keeps the usual supplier.
 
 Where §9.1's quoted rejection allowance disagrees with the §5 rule (8 of 27 quotes do), the
-derivation panel shows both figures and names the drift instead of silently picking one.
+landed-cost inspector and the SRC-03 rejection figure both show the quoted value and the rule's
+value and name the drift, instead of silently picking one.
+
+Three dark-theme tokens — `--critical-soft`, `--warn-soft`, `--good-soft` — are not in §10's dark
+block, which defines no soft colours. They are chosen so status pills keep their contrast on the
+dark ground; without them the light softs would leak through.
+
+Still open, and stated on the desk's Policy tab: unit conversion (§13-6) is not modelled, every
+action is attributed to one demo buyer because there is no login, and safety stock is a per-item
+given rather than recomputed from variance.
 
 ## Verifying it
 

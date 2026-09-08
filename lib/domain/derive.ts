@@ -49,6 +49,9 @@ export interface DerivedRow {
   nonUsableValue: Derived
   /** §8.3 — does landed cost overturn the cheapest quoted rate on this line? */
   flipsVendor: boolean
+  /** §11 — the two sign-off triggers the data can evaluate */
+  aboveLastPurchase: Derived<boolean>
+  needsOwnerSignoff: Derived<boolean>
 }
 
 export interface SeedBundle {
@@ -109,7 +112,7 @@ export function buildRow(
     return {
       vendor, vendorItem: vi,
       rejectionAllowance: rej,
-      landedPerUnit: C.landedCostPerUnit(vi, rej.value),
+      landedPerUnit: C.landedCostPerUnit(vi, rej),
       leadTime: C.trailingLeadTimeDays(rcpts, vi.quotedLeadTimeDays),
       isRecommended: false, isLowestRate: false,
     }
@@ -140,7 +143,7 @@ export function buildRow(
   const earliestInboundEta = inboundSorted[0]?.promisedDate ?? null
   const status = C.buyerStatus(truePosition.value, reorderPoint.value, u, earliestInboundEta, stockoutDate.value)
   const reorderQty = C.reorderQty(
-    reorderPoint.value, policy.cycleDays, item.avgDailyConsumption,
+    reorderPoint.value, policy.cycleDays[item.itemClass], item.avgDailyConsumption,
     truePosition.value, item.moq, status.value === 'at_risk', uom,
   )
 
@@ -162,6 +165,28 @@ export function buildRow(
   const coverageAfterMonths = C.coverageAfterReceiptMonths(u, inTransitQty, openQty, q, item.avgDailyConsumption)
   const held = C.heldByGuardrail(q, coverageAfterMonths.value, policy.coverageCeiling[item.itemClass])
 
+  // §11 human sign-off triggers, from data the seed already carries.
+  const aboveLastPurchase: Derived<boolean> = {
+    value: chosen.vendorItem.rate > item.lastPurchaseRate,
+    label: 'Rate above last purchase price',
+    formula: 'chosen vendor rate > last_purchase_rate',
+    inputs: [
+      { name: 'chosen vendor rate', value: chosen.vendorItem.rate, unit: `₹/${uom}`, source: chosen.vendor.name },
+      { name: 'last_purchase_rate', value: item.lastPurchaseRate, unit: `₹/${uom}` },
+    ],
+    note: 'A rate above the last-bought price needs a person’s sign-off (§11). The system flags it; it does not refuse it.',
+  }
+  const needsOwnerSignoff: Derived<boolean> = {
+    value: q > 0 && landedTotal.value > policy.ownerApprovalThreshold,
+    label: 'Needs the owner’s sign-off',
+    formula: 'landed_total > owner_approval_threshold',
+    inputs: [
+      { name: 'landed_total', value: landedTotal.value, unit: '₹' },
+      { name: 'owner_approval_threshold', value: policy.ownerApprovalThreshold, unit: '₹', source: 'policy' },
+    ],
+    note: 'Any order above the owner’s threshold is the owner’s decision, not the buyer’s (§11).',
+  }
+
   const nonUsableValue = D(
     C.money(nu * item.lastPurchaseRate), 'Non-usable stock value',
     'non_usable_qty × last_purchase_rate',
@@ -178,7 +203,7 @@ export function buildRow(
     earliestInboundEta, inboundRefs: inboundSorted.map((l) => l.poNo),
     status, reorderQty, quotes, recommendedVendorId, chosenVendorId, chosen, premiumPerUnit,
     poCost, shipmentCost, otherCosts, landedTotal, estimatedArrival,
-    coverageAfterMonths, held, nonUsableValue, flipsVendor,
+    coverageAfterMonths, held, nonUsableValue, flipsVendor, aboveLastPurchase, needsOwnerSignoff,
   }
 }
 

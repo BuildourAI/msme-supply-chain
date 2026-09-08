@@ -44,6 +44,22 @@ export const reviewQueue: SupplierDocLine[] = [
   },
 ]
 
+/**
+ * §8.2 — "accepting writes an item_alias so that vendor's spelling resolves
+ * automatically from then on." This is the resolver the queue runs before it
+ * asks a person: a raw supplier string from a vendor with a confirmed alias
+ * never reaches the review queue again. Matching is case- and space-insensitive
+ * because supplier text arrives typed by hand.
+ */
+export function resolveAlias(
+  aliases: { itemId: string; vendorName: string; rawText: string }[],
+  vendorName: string, rawText: string,
+): string | null {
+  const norm = (s: string) => s.toLowerCase().replace(/[\s.\-_/]+/g, '')
+  const hit = aliases.find((a) => a.vendorName === vendorName && norm(a.rawText) === norm(rawText))
+  return hit ? hit.itemId : null
+}
+
 /** Already-confirmed mappings — what the queue produces over time. */
 export const seededAliases = [
   { itemId: 'EL-TUB-INC85', vendorName: 'Nirmal Alloy Tubes', rawText: 'INCOLOY-800 SHEATH TUBE 8.5MM', confirmedBy: 'A. Nandy · Buyer', confirmedAt: '2026-08-14' },

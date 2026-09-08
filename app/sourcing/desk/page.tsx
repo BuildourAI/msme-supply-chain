@@ -143,14 +143,50 @@ function PolicyTab() {
   const { state, setPolicy, kpis, rows } = useDesk()
   const p = state.policy
   const knobs = [
-    { k: 'cycleDays' as const, label: 'CYCLE_DAYS', help: 'Days of consumption a single order should cover beyond the reorder point. §13-3 flags 15 as a guess that should be set per item class.', min: 5, max: 45, step: 5 },
     { k: 'inboundQcDays' as const, label: 'INBOUND_QC_DAYS', help: 'Days between goods arriving and being issuable. Received is not the same as usable.', min: 0, max: 7, step: 1 },
-    { k: 'bufferDays' as const, label: 'BUFFER_DAYS', help: 'Slack built into the order-by date.', min: 0, max: 10, step: 1 },
+    { k: 'bufferDays' as const, label: 'BUFFER_DAYS', help: 'Slack built into the order-by date (§5 order_by_date). Shown on each line’s arrival inspector; it does not move a reorder quantity.', min: 0, max: 10, step: 1 },
   ]
+  const allCycle = new Set(Object.values(p.cycleDays)).size === 1 ? p.cycleDays.A : null
   return (
     <div className="grid gap-3 lg:grid-cols-2">
       <Card title="Policy" sub="Change a knob and every figure on the desk recomputes">
         <div className="space-y-4 p-4">
+          <div>
+            <div className="flex items-baseline justify-between">
+              <label htmlFor="cycleDays" className="mono text-[12px] font-medium">CYCLE_DAYS · all classes</label>
+              <span className="num text-[13px] font-semibold">{allCycle === null ? 'per class' : `${allCycle} days`}</span>
+            </div>
+            <input id="cycleDays" type="range" min={5} max={45} step={5} value={allCycle ?? 15}
+              onChange={(e) => { const v = Number(e.target.value); setPolicy({ cycleDays: { A: v, B: v, C: v } }) }}
+              className="mt-1.5 w-full accent-[var(--accent)]" />
+            <p className="mt-1 text-[11.5px] leading-snug text-ink-3">
+              Days of consumption a single order should cover beyond the reorder point. §5 says per item class;
+              §13-3 says 15 is a guess to agree with the client. Set them apart below.
+            </p>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              {(['A', 'B', 'C'] as const).map((c) => (
+                <label key={c} className="rounded-md border border-line bg-surface-2 p-2">
+                  <span className="mono block text-[11px] text-ink-3">Class {c}</span>
+                  <input type="number" min={5} max={60} step={5} value={p.cycleDays[c]}
+                    onChange={(e) => setPolicy({ cycleDays: { ...p.cycleDays, [c]: Number(e.target.value) } })}
+                    className="num mt-0.5 w-full bg-transparent text-[15px] font-medium outline-none" />
+                </label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="flex items-baseline justify-between">
+              <label htmlFor="ownerThreshold" className="mono text-[12px] font-medium">OWNER_APPROVAL_THRESHOLD</label>
+              <span className="num text-[13px] font-semibold">{lakh(p.ownerApprovalThreshold)}</span>
+            </div>
+            <input id="ownerThreshold" type="range" min={50_000} max={500_000} step={25_000} value={p.ownerApprovalThreshold}
+              onChange={(e) => setPolicy({ ownerApprovalThreshold: Number(e.target.value) })}
+              className="mt-1.5 w-full accent-[var(--accent)]" />
+            <p className="mt-1 text-[11.5px] leading-snug text-ink-3">
+              §11: any order above the owner’s threshold is the owner’s decision. Lines above it say so on the desk
+              and their draft is labelled for the owner’s sign-off.
+            </p>
+          </div>
           {knobs.map((n) => (
             <div key={n.k}>
               <div className="flex items-baseline justify-between">
@@ -205,10 +241,17 @@ function PolicyTab() {
             ))}
           </ul>
           <p className="pt-2 text-[11.5px] leading-snug text-ink-3">
-            Reset the sliders to 15 / 2 / 3 and the figures return to exactly what §9.1 states —
-            ₹4.55 L across 3 POs, 4 lines needing a decision. The seed reconciles; the policy is what
-            you are allowed to argue about.
+            Reset to 15 / 2 / 3 and the figures return to exactly what §9.1 states — ₹4.55 L across
+            3 POs, 4 lines needing a decision. Decided lines keep their figures whatever you do here.
           </p>
+          <div className="rounded-md border border-warn/30 bg-warn-soft/50 p-3">
+            <p className="mono text-[10px] uppercase tracking-wider text-warn">Known gaps, stated rather than hidden</p>
+            <ul className="mt-1 space-y-1 text-[11.5px] leading-snug text-ink-2">
+              <li>· <strong className="text-ink">Unit conversion (§13-6)</strong> — steel is bought in MT and issued in kg. No conversion factor is modelled yet; the two datasets hold CRCA in different units.</li>
+              <li>· <strong className="text-ink">One login per employee</strong> — every action here is logged against a single demo buyer. Real attribution needs the login (§12, §14 stack).</li>
+              <li>· <strong className="text-ink">Safety stock</strong> is a given per item, not recomputed monthly from variance as §5 describes — the seed’s values do not follow the 60% guideline, so deriving it would break every reorder point.</li>
+            </ul>
+          </div>
         </div>
       </Card>
     </div>

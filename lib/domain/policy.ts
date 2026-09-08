@@ -7,7 +7,10 @@
 import type { ItemClass } from './types'
 
 export interface Policy {
-  cycleDays: number
+  /** §5: "CYCLE_DAYS = 15 (configurable per item class)". §13-3 flags 15 as a guess. */
+  cycleDays: Record<ItemClass, number>
+  /** §11: any order above the owner's threshold needs the owner's sign-off, not just the buyer's. */
+  ownerApprovalThreshold: number
   inboundQcDays: number
   bufferDays: number
   /** months of cover a single order may create, per item class */
@@ -17,7 +20,8 @@ export interface Policy {
 }
 
 export const DEFAULT_POLICY: Policy = {
-  cycleDays: 15,
+  cycleDays: { A: 15, B: 15, C: 15 },
+  ownerApprovalThreshold: 200_000,
   inboundQcDays: 2,
   bufferDays: 3,
   coverageCeiling: { A: 2.0, B: 2.0, C: 2.0 },

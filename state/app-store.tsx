@@ -12,6 +12,8 @@ export interface AuditEntry {
   action: string
   detail: string
   reason?: string
+  before?: string
+  after?: string
 }
 
 export const ACTOR = 'A. Nandy · Buyer'
@@ -19,6 +21,8 @@ export const ACTOR = 'A. Nandy · Buyer'
 interface AppCtx {
   audit: AuditEntry[]
   log: (e: Omit<AuditEntry, 'id' | 'at' | 'actor'> & { actor?: string }) => void
+  /** Removes the newest entry for an entity — used when an action is reversed. */
+  undoLast: (entity: string, entityId: string) => void
   inspect: Derived<unknown> | null
   openInspect: (d: Derived<unknown>) => void
   closeInspect: () => void
@@ -39,8 +43,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const log = useCallback<AppCtx['log']>((e) => {
     // Client-only timestamp: the seed's `today` is fixed, but an audit entry
     // records when a person actually acted.
-    const at = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    // A full date-time: "when" has to survive more than one working day (§11).
+    const at = new Date().toLocaleString('en-IN', {
+      day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+    })
     setAudit((prev) => [{ id: ++seq, at, actor: ACTOR, ...e }, ...prev])
+  }, [])
+
+  const undoLast = useCallback((entity: string, entityId: string) => {
+    setAudit((prev) => {
+      const i = prev.findIndex((x) => x.entity === entity && x.entityId === entityId)
+      return i < 0 ? prev : [...prev.slice(0, i), ...prev.slice(i + 1)]
+    })
   }, [])
 
   const say = useCallback((m: string) => {
@@ -49,8 +63,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const value = useMemo(
-    () => ({ audit, log, inspect, openInspect: setInspect, closeInspect: () => setInspect(null), toast, say }),
-    [audit, log, inspect, toast, say],
+    () => ({ audit, log, undoLast, inspect, openInspect: setInspect, closeInspect: () => setInspect(null), toast, say }),
+    [audit, log, undoLast, inspect, toast, say],
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
