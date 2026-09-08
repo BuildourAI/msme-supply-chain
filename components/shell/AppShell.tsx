@@ -5,15 +5,16 @@ import { useTheme } from '@/state/theme-provider'
 import { Inspector } from '@/components/ui/Inspector'
 import { TopNav } from './TopNav'
 import { Segmented } from '@/components/ui/bits'
+import { crossfadeTheme } from '@/components/ui/motion'
 
 function ActivityDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { audit } = useApp()
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-[55] flex justify-end bg-ink/20" onClick={onClose}>
+    <div className="anim-backdrop fixed inset-0 z-[55] flex justify-end bg-ink/20" onClick={onClose}>
       <aside role="dialog" aria-modal="true" aria-label="Activity"
         onClick={(e) => e.stopPropagation()}
-        className="flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-line bg-surface shadow-2xl">
+        className="anim-sheet flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-line bg-surface shadow-2xl">
         <header className="sticky top-0 flex items-start gap-3 border-b border-line bg-surface px-4 py-3">
           <div>
             <p className="mono text-[10px] uppercase tracking-wider text-ink-3">Audit trail · §11</p>
@@ -30,8 +31,9 @@ function ActivityDrawer({ open, onClose }: { open: boolean; onClose: () => void 
             </p>
           ) : (
             <ol className="space-y-2.5">
-              {audit.map((e) => (
-                <li key={e.id} className="rounded-md border border-line bg-surface-2 p-2.5">
+              {audit.map((e, i) => (
+                <li key={e.id} style={{ '--i': Math.min(i, 6) } as React.CSSProperties}
+                    className="anim-fade-up rounded-md border border-line bg-surface-2 p-2.5">
                   <div className="flex items-baseline gap-2">
                     <span className="text-[12px] font-medium text-ink">{e.action}</span>
                     <span className="mono ml-auto text-[10px] text-ink-3">{e.at}</span>
@@ -60,7 +62,7 @@ function Toast() {
   if (!toast) return null
   return (
     <div role="status" aria-live="polite"
-      className="fixed bottom-5 left-1/2 z-[70] w-[min(30rem,calc(100vw-2rem))] -translate-x-1/2 rounded-lg border border-line bg-surface px-4 py-2.5 text-[13px] leading-snug shadow-xl">
+      className="anim-toast fixed bottom-5 left-1/2 z-[70] w-[min(30rem,calc(100vw-2rem))] rounded-lg border border-line bg-surface px-4 py-2.5 text-[13px] leading-snug shadow-xl">
       {toast}
     </div>
   )
@@ -90,7 +92,7 @@ function TopBar({ onActivity }: { onActivity: () => void }) {
             {audit.length}
           </span>
         </button>
-        <Segmented label="Theme" value={theme} onChange={setTheme}
+        <Segmented label="Theme" value={theme} onChange={(t) => crossfadeTheme(() => setTheme(t))}
           options={[{ id: 'system', label: 'Auto' }, { id: 'light', label: 'Light' }, { id: 'dark', label: 'Dark' }]} />
       </div>
     </div>

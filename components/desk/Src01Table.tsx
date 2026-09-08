@@ -30,7 +30,7 @@ function Th({ children, col, right, sticky }: {
 }
 
 const rowCls = (sel: boolean) =>
-  `cursor-pointer border-b border-line-soft transition-colors ${
+  `anim-fade-in cursor-pointer border-b border-line-soft transition-colors ${
     sel ? 'bg-accent-soft/45' : 'hover:bg-surface-2'}`
 
 /* --------------------------------------------------------------- summary -- */

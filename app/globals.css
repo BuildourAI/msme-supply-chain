@@ -207,5 +207,53 @@ button { font: inherit; color: inherit; }
 .scroll-x::-webkit-scrollbar-track { background: transparent; }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
+
+/* ================================================================ motion ====
+   Subtle, purposeful, and CSS-first so it is hydration-safe: keyframes run
+   when an element paints, with no client state that could disagree with the
+   server. Every animation honours prefers-reduced-motion via the rule above.
+   Stagger is a per-element --i custom property, never a JS timer.
+   ========================================================================== */
+
+@keyframes fade-up   { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+@keyframes fade-in   { from { opacity: 0 } to { opacity: 1 } }
+@keyframes reveal-x  { from { clip-path: inset(0 100% 0 0) } to { clip-path: inset(0 0 0 0) } }
+@keyframes draw      { from { stroke-dashoffset: 1 } to { stroke-dashoffset: 0 } }
+@keyframes sheet-in  { from { opacity: 0; transform: translateX(28px) } to { opacity: 1; transform: none } }
+@keyframes pop-in    { from { opacity: 0; transform: translateY(8px) scale(.985) } to { opacity: 1; transform: none } }
+@keyframes drop-in   { from { opacity: 0; transform: translateY(-5px) } to { opacity: 1; transform: none } }
+@keyframes toast-in  { from { opacity: 0; transform: translate(-50%, 10px) } to { opacity: 1; transform: translate(-50%, 0) } }
+@keyframes flash     { from { background-color: var(--accent-soft) } to { background-color: transparent } }
+@keyframes tick-in   { from { transform: scaleY(0) } to { transform: scaleY(1) } }
+@keyframes dot-in    { from { opacity: 0; transform: scale(.4) } to { opacity: 1; transform: none } }
+
+.anim-fade-up  { animation: fade-up 440ms cubic-bezier(.2,.7,.2,1) backwards; animation-delay: calc(var(--i, 0) * 45ms) }
+.anim-fade-in  { animation: fade-in 220ms ease-out backwards }
+.anim-reveal   { animation: reveal-x 680ms cubic-bezier(.2,.7,.2,1) backwards; animation-delay: calc(var(--i, 0) * 45ms + 140ms) }
+.anim-draw     { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 1000ms cubic-bezier(.4,0,.2,1) 160ms forwards }
+.anim-dot      { transform-origin: center; transform-box: fill-box; animation: dot-in 320ms cubic-bezier(.2,.7,.2,1) backwards; animation-delay: calc(360ms + var(--i, 0) * 110ms) }
+.anim-sheet    { animation: sheet-in 260ms cubic-bezier(.2,.7,.2,1) backwards }
+.anim-backdrop { animation: fade-in 200ms ease-out backwards }
+.anim-pop      { animation: pop-in 200ms cubic-bezier(.2,.7,.2,1) backwards }
+.anim-drop     { animation: drop-in 140ms ease-out backwards }
+.anim-toast    { animation: toast-in 240ms cubic-bezier(.2,.7,.2,1) both }
+.anim-tick     { transform-origin: bottom; animation: tick-in 300ms cubic-bezier(.2,.7,.2,1) 760ms backwards }
+.flash         { animation: flash 900ms ease-out }
+
+/* Theme cross-fade. Only ever applied for a moment around a toggle, never on
+   load, so the first paint is instant and the switch feels deliberate. */
+html.theme-fade, html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after {
+  transition: background-color .28s ease, color .28s ease, border-color .28s ease,
+              fill .28s ease, stroke .28s ease, box-shadow .28s ease !important;
+}
+
+/* A restrained lift for the tiles a hand naturally hovers over. */
+.lift { transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease }
+.lift:hover { transform: translateY(-1px); box-shadow: 0 6px 18px -8px rgb(0 0 0 / .22) }
+:root[data-theme="dark"] .lift:hover { box-shadow: 0 6px 18px -8px rgb(0 0 0 / .6) }

@@ -155,7 +155,7 @@ export default function Page() {
                     {items.map((c, i) => {
                       const good = eq(c)
                       return (
-                        <tr key={i} className="border-b border-line-soft last:border-0">
+                        <tr key={i} className="anim-fade-in border-b border-line-soft last:border-0">
                           <td className="px-3 py-1.5">
                             <span aria-label={good ? 'reconciles' : 'does not reconcile'}
                               className={`inline-block size-2 rounded-full ${good ? 'bg-good' : 'bg-critical'}`} />

@@ -12,12 +12,15 @@ import type { Derived } from '@/lib/domain/types'
  * HTML. It also muddled two different meanings of a click. Where a tile can
  * filter the table, that gets its own explicit control.
  */
-export function KpiTile({ label, d, format, caption, tone = 'neutral', onClick, actionLabel, active, suffix }: {
+export function KpiTile({ label, d, format, caption, tone = 'neutral', onClick, actionLabel, active, suffix, index = 0 }: {
   label: string; d: Derived<unknown>; format?: NumFormat; caption: string
   tone?: Tone; onClick?: () => void; actionLabel?: string; active?: boolean; suffix?: string
+  /** stagger position — tiles enter left to right */
+  index?: number
 }) {
   return (
-    <div className={`flex items-stretch gap-3 rounded-lg border bg-surface ${active ? 'border-accent' : 'border-line'}`}>
+    <div style={{ '--i': index } as React.CSSProperties}
+         className={`anim-fade-up lift flex items-stretch gap-3 rounded-lg border bg-surface ${active ? 'border-accent' : 'border-line'}`}>
       <span aria-hidden className={`w-[3px] shrink-0 rounded-l-lg ${TONE_BAR[tone]}`} />
       <div className="min-w-0 flex-1 py-3 pr-3">
         <span className="mono block text-[10px] uppercase tracking-wider text-ink-3">{label}</span>

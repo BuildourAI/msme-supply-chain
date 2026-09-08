@@ -65,20 +65,20 @@ export default function Page() {
         </>} />
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <KpiTile label="Lines needing a decision" d={kpis.linesNeedingDecision} format="int" tone="critical"
+        <KpiTile index={0} label="Lines needing a decision" d={kpis.linesNeedingDecision} format="int" tone="critical"
           caption="3 at risk · 1 late on timing · target zero surprises" />
-        <KpiTile label="Cash to release" d={kpis.toRelease} format="lakh" tone="accent"
+        <KpiTile index={1} label="Cash to release" d={kpis.toRelease} format="lakh" tone="accent"
           caption={`across ${kpis.draftPoCount} draft POs · ${kpis.heldCount} held by the guardrail`} />
-        <KpiTile label="Blocked capital" d={blockedD} format="lakh" tone="warn"
+        <KpiTile index={2} label="Blocked capital" d={blockedD} format="lakh" tone="warn"
           caption={`${blockedStock.length} lots · MOQ forced is the top cause`} />
-        <KpiTile label="Stock you cannot use" d={kpis.nonUsableValue} format="money" tone="warn"
+        <KpiTile index={3} label="Stock you cannot use" d={kpis.nonUsableValue} format="money" tone="warn"
           caption={`on hand, not issuable · at ${VALUATION_BASIS}`} />
-        <KpiTile label="Revenue at risk" d={revenueD} format="lakh" tone="critical"
+        <KpiTile index={4} label="Revenue at risk" d={revenueD} format="lakh" tone="critical"
           caption="3 customer orders behind short materials" />
       </div>
 
       <div className="mb-4 grid gap-3 lg:grid-cols-2">
-        <Card title="Actual delivery time, last six receipts" live
+        <Card index={5} title="Actual delivery time, last six receipts" live
           annotation="lead time is measured, never quoted"
           sub="§5 · the trailing average of six real receipts is what drives every reorder point">
           <div className="p-4">
@@ -94,7 +94,7 @@ export default function Page() {
           </div>
         </Card>
 
-        <Card title="Blocked capital by cause" live annotation={`${lakh(blockedTotal)} across ${blockedStock.length} lots`}
+        <Card index={6} title="Blocked capital by cause" live annotation={`${lakh(blockedTotal)} across ${blockedStock.length} lots`}
           sub="§8.4 · age tells you how bad it is, cause tells you what to do about it">
           <div className="p-4">
             <BarRows rows={causeRows} format="lakh" colorMode="categorical" />
@@ -107,7 +107,7 @@ export default function Page() {
       </div>
 
       <div className="grid gap-3 lg:grid-cols-3">
-        <Card title="What needs a decision today" sub="From the Sourcing Desk run R-0902">
+        <Card index={7} title="What needs a decision today" sub="From the Sourcing Desk run R-0902">
           <ul className="divide-y divide-line-soft">
             {decide.map((r) => (
               <li key={r.item.id} className="px-4 py-2.5">
@@ -129,7 +129,7 @@ export default function Page() {
           </div>
         </Card>
 
-        <Card title="On the floor" sub="Line Watch · Mon 7 September">
+        <Card index={8} title="On the floor" sub="Line Watch · Mon 7 September">
           <div className="space-y-2.5 p-4">
             <p className="text-[13px] leading-relaxed text-ink-2">
               The line runs for <strong className="text-ink">{lw.tiles.lineRunsFor.value.toFixed(1)} days</strong> before
@@ -154,7 +154,7 @@ export default function Page() {
           </div>
         </Card>
 
-        <Card title="Supplier intake" sub="SRC-02 · one inbox, one WhatsApp number">
+        <Card index={9} title="Supplier intake" sub="SRC-02 · one inbox, one WhatsApp number">
           <div className="p-4">
             <p className="figure text-[30px] leading-none">
               {supplierDocuments.length}<span className="text-[15px] font-normal text-ink-3"> documents</span>

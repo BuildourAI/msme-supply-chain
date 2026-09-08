@@ -25,8 +25,9 @@ export function StagePage({ stage, children }: { stage: Stage; children?: React.
       <p className="mb-4 max-w-3xl text-[13.5px] leading-relaxed text-ink-2">{stage.summary}</p>
 
       <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {stage.problems.map((p) => (
-          <div key={p.title} className="rounded-lg border border-line bg-surface p-3.5">
+        {stage.problems.map((p, i) => (
+          <div key={p.title} style={{ '--i': i } as React.CSSProperties}
+               className="anim-fade-up lift rounded-lg border border-line bg-surface p-3.5">
             <h3 className="text-[13.5px] leading-snug">{p.title}</h3>
             <p className="mt-1 text-[12px] leading-relaxed text-ink-2">{p.detail}</p>
             {p.answeredBy
@@ -39,7 +40,7 @@ export function StagePage({ stage, children }: { stage: Stage; children?: React.
       {children}
 
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
-        <Card title="Modules" sub="What you can open here, and what you cannot yet">
+        <Card index={6} title="Modules" sub="What you can open here, and what you cannot yet">
           <ul className="divide-y divide-line-soft">
             {live.map((m) => (
               <li key={m.label}>
@@ -69,7 +70,7 @@ export function StagePage({ stage, children }: { stage: Stage; children?: React.
           </ul>
         </Card>
 
-        <Card title="Where this sits in the build" sub="§14 · ship SRC-01 v2 first and it stalls">
+        <Card index={7} title="Where this sits in the build" sub="§14 · ship SRC-01 v2 first and it stalls">
           <ol className="divide-y divide-line-soft">
             {BUILD_SEQUENCE.map((s) => (
               <li key={s.phase} className="flex gap-3 px-4 py-2">

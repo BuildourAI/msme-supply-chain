@@ -94,7 +94,7 @@ export function TopNav() {
                 {item.children && expanded && (
                   <div role="menu" aria-label={item.label}
                     onMouseEnter={cancelClose} onMouseLeave={scheduleClose}
-                    className="absolute left-1 top-full z-40 w-[19rem] rounded-b-lg border border-t-0 border-line bg-surface py-1.5 shadow-xl">
+                    className="anim-drop absolute left-1 top-full z-40 w-[19rem] rounded-b-lg border border-t-0 border-line bg-surface py-1.5 shadow-xl">
                     {item.children.map((m) =>
                       m.href ? (
                         <Link key={m.label} href={m.href} role="menuitem"

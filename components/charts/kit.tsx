@@ -73,7 +73,7 @@ export function StackedBars({ rows, keys, format = 'money', max }: {
 
   return (
     <div className="space-y-3">
-      {rows.map((r) => {
+      {rows.map((r, ri) => {
         let x = 0
         return (
           <div key={r.label}>
@@ -88,8 +88,8 @@ export function StackedBars({ rows, keys, format = 'money', max }: {
               {r.sub && <span className="mono text-[10.5px] text-ink-3">{r.sub}</span>}
               <span className="num ml-auto text-[13px] font-semibold text-ink">{fmt(r.total)}</span>
             </div>
-            <div className="flex h-4 w-full overflow-hidden rounded-[4px] bg-surface-2"
-                 style={{ width: `${Math.max(4, (r.total / top) * 100)}%` }}>
+            <div className="anim-reveal flex h-4 w-full overflow-hidden rounded-[4px] bg-surface-2"
+                 style={{ width: `${Math.max(4, (r.total / top) * 100)}%`, '--i': ri } as React.CSSProperties}>
               {r.segments.map((s, i) => {
                 const w = r.total > 0 ? (s.value / r.total) * 100 : 0
                 x += w
@@ -155,11 +155,12 @@ export function BarRows({ rows, format = 'lakh', colorMode = 'sequential' }: {
         <li key={r.label} className="grid grid-cols-[minmax(6.5rem,1fr)_2.2fr_auto] items-center gap-2.5">
           <span className="truncate text-[12px] text-ink-2" title={r.label}>{r.label}</span>
           <span className="h-3.5 w-full rounded-[4px] bg-surface-2">
-            <span className="block h-full rounded-[4px]"
+            <span className="anim-reveal block h-full rounded-[4px]"
               style={{
                 width: `${Math.max(2, (r.value / top) * 100)}%`,
                 background: colorMode === 'categorical' ? CAT[i % CAT.length] : SEQ[Math.min(i, SEQ.length - 1)],
-              }} />
+                '--i': i,
+              } as React.CSSProperties} />
           </span>
           <span className="num text-right text-[12.5px] font-medium">{fmt(r.value)}</span>
         </li>
@@ -213,10 +214,13 @@ export function LineChart({ series, yLabel, reference, xLabels }: {
       ))}
       {series.map((s) => (
         <g key={s.label}>
+          {/* pathLength=1 lets one dash-offset keyframe draw any line left to right */}
           <polyline fill="none" stroke={s.color} strokeWidth="2" strokeLinecap="round"
-                    strokeLinejoin="round" points={s.points.map((p, i) => `${X(i)},${Y(p)}`).join(' ')} />
+                    strokeLinejoin="round" pathLength={1} className="anim-draw"
+                    points={s.points.map((p, i) => `${X(i)},${Y(p)}`).join(' ')} />
           {s.points.map((p, i) => (
-            <circle key={i} cx={X(i)} cy={Y(p)} r="4" fill={s.color}
+            <circle key={i} cx={X(i)} cy={Y(p)} r="4" fill={s.color} className="anim-dot"
+                    style={{ '--i': i } as React.CSSProperties}
                     stroke="var(--surface)" strokeWidth="2">
               <title>{`${s.label} · ${xLabels[i]}: ${p}`}</title>
             </circle>
@@ -243,7 +247,7 @@ export function StockBar({ segments, uom }: { segments: StockSeg[]; uom: string 
   const shown = segments.filter((s) => s.value > 0)
   return (
     <div>
-      <svg viewBox="0 0 100 6" preserveAspectRatio="none" className="h-4 w-full" role="img"
+      <svg viewBox="0 0 100 6" preserveAspectRatio="none" className="anim-reveal h-4 w-full" role="img"
            aria-label={shown.map((s) => `${s.label} ${s.value} ${uom}`).join(', ')}>
         <defs>
           {shown.filter((s) => s.hatched).map((s) => (
@@ -298,8 +302,8 @@ export function CoverBar({ coverDays, leadDays, tone }: {
   return (
     <div>
       <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-surface-3">
-        <div className="h-full rounded-full" style={{ width: `${cover}%`, background: bg }} />
-        <div aria-hidden className="absolute top-0 h-full w-[2px] bg-ink"
+        <div className="anim-reveal h-full rounded-full" style={{ width: `${cover}%`, background: bg }} />
+        <div aria-hidden className="anim-tick absolute top-0 h-full w-[2px] bg-ink"
              style={{ left: `${tick}%` }} />
       </div>
       <p className="mt-1 text-[11px] text-ink-3">

@@ -18,7 +18,7 @@ const JOB_TONE = { will_run: 'good', at_risk: 'warn', will_halt: 'critical' } as
 
 function WeekSchedule() {
   return (
-    <Card title="This week on the floor" live sub="Six working days from Monday 7 September">
+    <Card index={4} title="This week on the floor" live sub="Six working days from Monday 7 September">
       <div className="scroll-x overflow-x-auto p-4">
         <div className="grid min-w-[46rem] grid-cols-6 gap-2">
           {DAYS.map((d, i) => (
@@ -38,7 +38,8 @@ function WeekSchedule() {
                       : 'All materials cover this job'
                   return (
                     <div key={j.job.jobNo} title={`${j.job.jobNo} — ${short}`}
-                      className={`rounded-md border p-2 ${
+                      style={{ '--i': day + 2 } as React.CSSProperties}
+                      className={`anim-fade-up lift rounded-md border p-2 ${
                         tone === 'critical' ? 'border-critical/35 bg-critical-soft'
                         : tone === 'warn' ? 'border-warn/35 bg-warn-soft' : 'border-good/30 bg-good-soft'}`}>
                       <span className="mono block text-[10.5px] text-ink-3">{j.job.jobNo}</span>
@@ -68,7 +69,7 @@ function WeekSchedule() {
   )
 }
 
-function MaterialCard({ d }: { d: DerivedMaterial }) {
+function MaterialCard({ d, index = 0 }: { d: DerivedMaterial; index?: number }) {
   const { log, say } = useApp()
   const m = d.m
   const [supplier, setSupplier] = useState(m.suppliers.find((s) => s.preferred)!.name)
@@ -87,7 +88,7 @@ function MaterialCard({ d }: { d: DerivedMaterial }) {
   ]
 
   return (
-    <Card className={tone === 'critical' ? 'border-critical/35' : tone === 'warn' ? 'border-warn/35' : ''}>
+    <Card index={index} className={tone === 'critical' ? 'border-critical/35' : tone === 'warn' ? 'border-warn/35' : ''}>
       <div className="p-4">
         <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
           <div className="min-w-0">
@@ -247,13 +248,13 @@ export default function Page() {
       </p>
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiTile label="The line runs for" d={t.lineRunsFor} format="days" tone="critical" suffix=" days"
+        <KpiTile index={0} label="The line runs for" d={t.lineRunsFor} format="days" tone="critical" suffix=" days"
           caption="the shortest material sets the pace — concealed hinge" />
-        <KpiTile label="Jobs stopping this week" d={t.jobsStopping} format="int" tone="critical" suffix=" of 6"
+        <KpiTile index={1} label="Jobs stopping this week" d={t.jobsStopping} format="int" tone="critical" suffix=" of 6"
           caption="2 will halt · 1 at risk, of 6 scheduled" />
-        <KpiTile label="Cash needed for reorders" d={t.cashNeeded} format="lakh" tone="accent"
+        <KpiTile index={2} label="Cash needed for reorders" d={t.cashNeeded} format="lakh" tone="accent"
           caption="across the 5 materials needing attention" />
-        <KpiTile label="Stock you cannot use" d={t.unusableValue} format="money" tone="warn"
+        <KpiTile index={3} label="Stock you cannot use" d={t.unusableValue} format="money" tone="warn"
           caption={`across ${t.unusableLotCount} materials · QC hold, damaged and expired`} />
       </div>
 
@@ -262,10 +263,10 @@ export default function Page() {
       <h2 className="mb-2 text-[17px]">Materials needing attention</h2>
       <p className="mb-3 text-[12.5px] text-ink-3">Sorted by which one stops the line first.</p>
       <div className="mb-4 grid gap-3 xl:grid-cols-2">
-        {lw.needsAttention.map((d) => <MaterialCard key={d.m.id} d={d} />)}
+        {lw.needsAttention.map((d, i) => <MaterialCard key={d.m.id} d={d} index={5 + i} />)}
       </div>
 
-      <Card className="mb-4" title="Everything else is fine for now"
+      <Card index={10} className="mb-4" title="Everything else is fine for now"
         sub={`${lw.healthy.length} materials with more cover than they need`}
         actions={<Button size="sm" onClick={() => setShowHealthy((v) => !v)}>
           {showHealthy ? 'Collapse' : 'Show details'}
@@ -290,7 +291,7 @@ export default function Page() {
       </Card>
 
       <div className="grid gap-3 lg:grid-cols-2">
-        <Card title="Out with jobworkers" sub="Neither on the shelf nor consumed — and never counted as cover">
+        <Card index={11} title="Out with jobworkers" sub="Neither on the shelf nor consumed — and never counted as cover">
           <ul className="divide-y divide-line-soft">
             {lw.jobwork.map((j) => {
               const late = j.dueBack < lw.today
@@ -319,7 +320,7 @@ export default function Page() {
           </p>
         </Card>
 
-        <Card title="Offcuts and scrap" sub="Material already owned, and material being lost">
+        <Card index={12} title="Offcuts and scrap" sub="Material already owned, and material being lost">
           <div className="p-4">
             <p className="mono text-[10px] uppercase tracking-wider text-ink-3">Usable offcuts on the rack</p>
             <ul className="mt-1.5 space-y-1">

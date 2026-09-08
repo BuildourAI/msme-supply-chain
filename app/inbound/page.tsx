@@ -46,18 +46,18 @@ export default function Page() {
                 </div>
                 <div className="relative h-7 w-full rounded-md bg-surface-2">
                   {/* the day this material runs out */}
-                  <div aria-hidden className="absolute top-0 h-full w-[2px] bg-critical"
+                  <div aria-hidden className="anim-tick absolute top-0 h-full w-[2px] bg-critical"
                        style={{ left: `${(stockout / SPAN) * 100}%` }} />
                   {/* despatch → arrival, then hatched inbound QC: received is not usable */}
-                  <div className="absolute top-1.5 h-4 rounded-l-[3px] bg-accent"
+                  <div className="anim-reveal absolute top-1.5 h-4 rounded-l-[3px] bg-accent"
                        style={{ left: 0, width: `${(arrival / SPAN) * 100}%` }} />
-                  <div className="absolute top-1.5 h-4 rounded-r-[3px]"
-                       style={{
+                  <div className="anim-reveal absolute top-1.5 h-4 rounded-r-[3px]"
+                       style={{ '--i': 3,
                          left: `${(arrival / SPAN) * 100}%`,
                          width: `${((usable - arrival) / SPAN) * 100}%`,
                          background: 'repeating-linear-gradient(45deg, var(--accent) 0 2px, transparent 2px 5px)',
                          border: '1px solid var(--accent)',
-                       }} />
+                       } as React.CSSProperties} />
                 </div>
                 <p className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-ink-3">
                   <span>{l.status === 'in_transit' ? 'In transit' : 'Ordered, not despatched'} · arrives {shortDate(l.promisedDate)}</span>

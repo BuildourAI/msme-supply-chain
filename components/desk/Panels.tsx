@@ -42,7 +42,7 @@ export function LandedCostCompare() {
   const best = r.quotes[0], cheap = r.quotes.find((q) => q.isLowestRate)!
 
   return (
-    <Card id="compare" title="Landed-cost comparison" sub={`SRC-03 · ${r.item.code} · ${r.item.name}`}
+    <Card id="compare" index={5} title="Landed-cost comparison" sub={`SRC-03 · ${r.item.code} · ${r.item.name}`}
       actions={<Segmented label="Comparison basis" value={mode} onChange={setMode}
         options={[{ id: 'full', label: 'Full landed cost' }, { id: 'extras', label: 'Beyond the rate' }]} />}>
       <div className="p-4">
@@ -80,7 +80,7 @@ export function GuardrailPanel() {
   const scale = Math.max(cover, ceiling) * 1.15
 
   return (
-    <Card id="guardrail" title="Coverage guardrail" sub={`SRC-04 · before approval · ${r.item.code}`}>
+    <Card id="guardrail" index={6} title="Coverage guardrail" sub={`SRC-04 · before approval · ${r.item.code}`}>
       <div className="space-y-3.5 p-4">
         <dl className="grid grid-cols-3 gap-2.5">
           {[
@@ -103,9 +103,9 @@ export function GuardrailPanel() {
             </span>
           </div>
           <div className="relative mt-1.5 h-3 w-full overflow-hidden rounded-full bg-surface-3">
-            <div className={`h-full rounded-full ${over ? 'bg-critical' : 'bg-good'}`}
+            <div className={`anim-reveal h-full rounded-full ${over ? 'bg-critical' : 'bg-good'}`}
                  style={{ width: `${Math.min(100, (cover / scale) * 100)}%` }} />
-            <div aria-hidden className="absolute top-0 h-full w-[2px] bg-ink"
+            <div aria-hidden className="anim-tick absolute top-0 h-full w-[2px] bg-ink"
                  style={{ left: `${(ceiling / scale) * 100}%` }} />
           </div>
           <p className="mt-1 text-[11px] text-ink-3">
@@ -166,7 +166,7 @@ export function IntakeQueue() {
   const auto = supplierDocuments.length - pending.length
 
   return (
-    <Card id="intake" title="Supplier intake" sub="SRC-02 · one inbox, one WhatsApp number">
+    <Card id="intake" index={7} title="Supplier intake" sub="SRC-02 · one inbox, one WhatsApp number">
       <div className="p-4">
         <div className="mb-3 flex flex-wrap gap-2">
           <Pill tone="neutral">{supplierDocuments.length} documents</Pill>
@@ -188,7 +188,7 @@ export function IntakeQueue() {
                   <span className="ml-2 text-ink-3">confidence {(l.confidence * 100).toFixed(0)}%</span>
                 </p>
                 <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
-                  <div className="h-full rounded-full bg-accent" style={{ width: `${l.confidence * 100}%` }} />
+                  <div className="anim-reveal h-full rounded-full bg-accent" style={{ width: `${l.confidence * 100}%` }} />
                 </div>
                 <div className="mt-2.5 flex flex-wrap gap-2">
                   <Button size="sm" variant="primary" onClick={() => reviewIntake(l.id, 'confirmed')}>
@@ -246,7 +246,7 @@ export function BlockedCapital() {
   const rows = by === 'cause' ? group('cause', CAUSE_LABEL) : group('ageBucket', AGE_LABEL)
 
   return (
-    <Card id="blocked" title="Blocked capital" sub="SRC-04 · money stuck in the wrong material"
+    <Card id="blocked" index={8} title="Blocked capital" sub="SRC-04 · money stuck in the wrong material"
       actions={<Segmented label="Group by" value={by} onChange={setBy}
         options={[{ id: 'cause', label: 'By cause' }, { id: 'age', label: 'By age' }]} />}>
       <div className="p-4">

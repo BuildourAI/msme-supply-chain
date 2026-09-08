@@ -60,7 +60,7 @@ export function VendorSelect({ row, detail = false }: { row: DerivedRow; detail?
 
       {open && (
         <ul role="listbox" aria-label="Supplier"
-          className="absolute left-0 top-full z-30 mt-1 w-[19rem] overflow-hidden rounded-md border border-line bg-surface py-1 shadow-xl">
+          className="anim-drop absolute left-0 top-full z-30 mt-1 w-[19rem] overflow-hidden rounded-md border border-line bg-surface py-1 shadow-xl">
           {row.quotes.map((q) => {
             const sel = q.vendor.id === row.chosenVendorId
             const rec = q.vendor.id === row.recommendedVendorId

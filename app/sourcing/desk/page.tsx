@@ -54,27 +54,29 @@ function DeskTab() {
   return (
     <>
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiTile label="Lines needing a decision" d={kpis.linesNeedingDecision} format="int"
+        <KpiTile index={0} label="Lines needing a decision" d={kpis.linesNeedingDecision} format="int"
           tone="critical" active={state.statusFilter === 'needs_decision'}
           onClick={() => setFilter(state.statusFilter === 'needs_decision' ? 'all' : 'needs_decision')}
           actionLabel="Show only these"
           caption="3 at risk · 1 covered on quantity but late on timing" />
-        <KpiTile label="Cash to release" d={kpis.toRelease} format="lakh" tone="accent"
+        <KpiTile index={1} label="Cash to release" d={kpis.toRelease} format="lakh" tone="accent"
           caption={`across ${kpis.draftPoCount} draft POs · ${kpis.heldCount} held by the guardrail`} />
-        <KpiTile label="Blocked capital" d={{
+        <KpiTile index={2} label="Blocked capital" d={{
           value: blockedStock.reduce((a, b) => a + b.value, 0), label: 'Blocked capital',
           formula: 'Σ blocked_stock.value', unit: '₹',
           inputs: blockedStock.map((b) => ({ name: b.itemCode, value: b.value, unit: '₹' })),
           note: 'Usable material bought for the wrong job — a different population from non-usable stock.',
         }} format="lakh" tone="warn" caption={`${blockedStock.length} lots · MOQ forced is the top cause`} />
-        <KpiTile label="Non-usable stock" d={kpis.nonUsableValue} format="money" tone="warn"
+        <KpiTile index={3} label="Non-usable stock" d={kpis.nonUsableValue} format="money" tone="warn"
           caption={`on hand but not issuable · valued at ${VALUATION_BASIS}`} />
       </div>
 
-      <Card title="Reorder suggestions" sub="SRC-01 · every line, why it was raised, and what to do about it"
+      <Card index={4} title="Reorder suggestions" sub="SRC-01 · every line, why it was raised, and what to do about it"
         live className="mb-4">
         <Filters />
-        {state.view === 'summary' ? <SummaryTable /> : <DetailTable />}
+        <div key={state.view} className="anim-fade-in">
+          {state.view === 'summary' ? <SummaryTable /> : <DetailTable />}
+        </div>
         <p className="border-t border-line-soft px-4 py-2.5 text-[11.5px] leading-snug text-ink-3">
           Click any figure to see the formula that produced it. Selecting a row drives the two panels
           below — currently <span className="mono text-ink-2">{selected.item.code}</span>.
@@ -240,9 +242,11 @@ function Desk() {
         { id: 'policy', label: 'Policy & ceilings', sub: 'the knobs inside §5' },
       ]} />
 
-      {tab === 'desk' && <DeskTab />}
-      {tab === 'history' && <HistoryTab />}
-      {tab === 'policy' && <PolicyTab />}
+      <div key={tab} className="anim-fade-in">
+        {tab === 'desk' && <DeskTab />}
+        {tab === 'history' && <HistoryTab />}
+        {tab === 'policy' && <PolicyTab />}
+      </div>
     </>
   )
 }

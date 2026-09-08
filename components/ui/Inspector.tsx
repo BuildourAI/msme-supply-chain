@@ -23,10 +23,10 @@ export function Inspector() {
     : String(d.value)
 
   return (
-    <div className="fixed inset-0 z-[60] flex justify-end bg-ink/20" onClick={closeInspect}>
+    <div className="anim-backdrop fixed inset-0 z-[60] flex justify-end bg-ink/20" onClick={closeInspect}>
       <aside role="dialog" aria-modal="true" aria-label={`How ${d.label} is calculated`}
         onClick={(e) => e.stopPropagation()}
-        className="flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-line bg-surface shadow-2xl">
+        className="anim-sheet flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-line bg-surface shadow-2xl">
         <header className="sticky top-0 flex items-start gap-3 border-b border-line bg-surface px-4 py-3">
           <div>
             <p className="mono text-[10px] uppercase tracking-wider text-ink-3">How this is calculated</p>
