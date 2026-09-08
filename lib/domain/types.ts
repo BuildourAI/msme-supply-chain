@@ -224,3 +224,148 @@ export type OwnerStatus = 'stop' | 'watch' | 'fine'
 export type JobStatus = 'will_run' | 'at_risk' | 'will_halt'
 
 export type Decision = 'pending' | 'approved' | 'held' | 'overridden' | 'expedited' | 'deferred'
+
+/* ------------------------------------------------- INB-01 · goods receipt & QC */
+
+/**
+ * The inspection spec. Two to four checks per item with a tolerance — a vernier,
+ * a weighing scale and a certificate, which is what MSME inbound QC actually is.
+ * A check that fails names the bucket the material lands in, so a rejection can
+ * never be recorded without a reason from the enum (§9.1's eight reasons).
+ */
+export type CheckKind = 'measure' | 'document' | 'visual' | 'count'
+
+export interface SpecCheck {
+  id: string
+  itemId: string
+  label: string
+  kind: CheckKind
+  /** measure only — the tolerance band */
+  min?: number
+  max?: number
+  unit?: string
+  /** where the lot lands if this check fails */
+  failBucket: Usability
+  failReason: string
+  /** a mandatory check cannot be waived; the GRN will not close without it */
+  mandatory: boolean
+}
+
+export type CheckOutcome = 'pass' | 'fail' | 'not_checked'
+
+export interface CheckResult {
+  checkId: string
+  outcome: CheckOutcome
+  /** the reading, for a `measure` check */
+  measured?: number
+}
+
+/**
+ * A goods receipt. Nothing becomes usable stock without one: a GRN cannot close
+ * until every check is marked, and its outcome writes the lot's usability rather
+ * than a storeman's opinion. Closing one also files a Receipt, so the trailing
+ * lead time and the trailing rejection rate both move.
+ */
+export interface Grn {
+  id: string
+  grnNo: string
+  itemId: string
+  itemName: string
+  uom: string
+  vendorName: string
+  /** an inbound purchase receipt … */
+  poNo?: string
+  poLineId?: string
+  /** … or a jobwork return coming back through the same gate */
+  challanId?: string
+  receivedOn: string
+  qtyReceived: number
+  /** the PO revision the vendor actually shipped against — INB-02's evidence */
+  againstVersion?: number
+  /** ₹/uom, last purchase price ex-freight — the §13-1 valuation basis */
+  rate: number
+  status: 'open' | 'closed'
+  /** set on close */
+  results?: CheckResult[]
+  acceptedQty?: number
+  rejectedQty?: number
+  failedCheckIds?: string[]
+  inspector?: string
+  closedAt?: string
+  /** true when the item has no spec on file: received unchecked, never blocked */
+  noSpec?: boolean
+}
+
+/* ------------------------------------------------ INB-02 · order change sync */
+
+export type PoChangeKind = 'created' | 'qty' | 'date' | 'spec' | 'cancel'
+
+export interface PoRevision {
+  version: number
+  qty: number
+  promisedDate: string
+  changedOn: string
+  changedBy: string
+  kind: PoChangeKind
+  reason: string
+}
+
+/**
+ * A PO line and everything the vendor has been told about it. `ackedVersion` is
+ * the only quantity the inbound board and the cover maths are allowed to use —
+ * an internal change does not improve cover until the vendor has confirmed it.
+ */
+export interface PoSync {
+  poLineId: string
+  poNo: string
+  itemId: string
+  vendorName: string
+  /** whether the material has already left the vendor */
+  shipped: boolean
+  revisions: PoRevision[]
+  /** highest version the vendor has been sent a notice for */
+  notifiedVersion: number
+  /** highest version the vendor has confirmed back */
+  ackedVersion: number
+  notifiedOn?: string
+  ackedOn?: string
+  ackRef?: string
+}
+
+/* -------------------------------------------------- INB-03 · jobwork register */
+
+/**
+ * One challan out to a jobworker. Everything that left is accounted for as one
+ * of four things: back, at the vendor, allowed process loss, or unaccounted —
+ * and the last one carries a rupee value.
+ *
+ * There is deliberately no `returns` field: what came back is derived from the
+ * closed GRNs that carry this challan's id, so a return cannot be recorded
+ * without passing inspection first.
+ */
+export interface JobworkChallan {
+  id: string
+  challanNo: string
+  /** which floor's run date this challan is aged against */
+  floor: 'heaters' | 'fabrication'
+  asOf: string
+  itemId: string
+  itemName: string
+  uom: string
+  jobworkerName: string
+  process: string
+  qtySent: number
+  sentOn: string
+  dueBack: string
+  /**
+   * Expected return ÷ quantity sent. Below 1 for a cutting or machining process
+   * (the difference is allowed process loss); above 1 for galvanising, which adds
+   * zinc weight.
+   */
+  expectedYield: number
+  /** ₹/uom, last purchase price ex-freight (§13-1) */
+  rate: number
+  purpose?: string
+  status: 'out' | 'closed'
+  closedOn?: string
+}

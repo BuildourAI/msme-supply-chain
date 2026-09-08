@@ -17,6 +17,27 @@ export interface Policy {
   coverageCeiling: Record<ItemClass, number>
   /** §13-2 — a buyer optimises, an owner keeps a relationship. Stated, not accidental. */
   supplierDefault: 'lowest_landed_cost' | 'preferred'
+
+  /* ------------------------------------------------------- INB-01 · inbound QC */
+  /** Days a GRN may sit uninspected before it escalates. */
+  qcOverdueDays: number
+  /**
+   * A receipt whose rejection rate exceeds this multiple of the vendor's trailing
+   * rate is not a bad batch, it is a signal — so it escalates rather than filing.
+   */
+  rejectionSpikeMultiple: number
+
+  /* -------------------------------------------------- INB-02 · order change sync */
+  /** Working days a change notice may go unacknowledged before it escalates. */
+  ackChaseDays: number
+  /** Changes to one PO line within 30 days above which the vendor is being whipsawed. */
+  poChurnLimit: number
+
+  /* --------------------------------------------------- INB-03 · jobwork register */
+  /** Days past the promised return date before a challan escalates. */
+  jobworkGraceDays: number
+  /** ₹ any single jobworker may hold at once — a concentration limit. */
+  jobworkerExposureCeiling: number
 }
 
 export const DEFAULT_POLICY: Policy = {
@@ -26,6 +47,12 @@ export const DEFAULT_POLICY: Policy = {
   bufferDays: 3,
   coverageCeiling: { A: 2.0, B: 2.0, C: 2.0 },
   supplierDefault: 'lowest_landed_cost',
+  qcOverdueDays: 3,
+  rejectionSpikeMultiple: 2,
+  ackChaseDays: 2,
+  poChurnLimit: 2,
+  jobworkGraceDays: 0,
+  jobworkerExposureCeiling: 200_000,
 }
 
 /** Line Watch runs the same engine under a different, stated supplier policy. */

@@ -7,6 +7,8 @@ import { DEFAULT_POLICY } from '@/lib/domain/policy'
 import { blockedStock } from '@/lib/seed/blocked'
 import { reviewQueue, supplierDocuments } from '@/lib/seed/intake'
 import * as S from '@/lib/seed/sourcing'
+import * as I from '@/lib/domain/inbound'
+import { challans, checksFor, grns, poSync, TODAY_INBOUND } from '@/lib/seed/inbound'
 import { lakh, money, num } from '@/lib/domain/format'
 
 const seed: SeedBundle = {
@@ -21,6 +23,15 @@ const row = (c: string) => rows.find((r) => r.item.code === c)!
 interface Check { group: string; label: string; source: string; expected: string; actual: string }
 
 const eq = (c: Check) => c.expected === c.actual
+
+const openGrns = grns.filter((g) => g.status === 'open')
+const closedGrns = grns.filter((g) => g.status === 'closed')
+const sync = (id: string) => poSync.find((x) => x.poLineId === id)!
+const challan = (id: string) => challans.find((c) => c.id === id)!
+const item = (id: string) => S.items.find((i) => i.id === id)!
+const returnedFor = (id: string) => I.returnedQty(challan(id), grns).value
+const outOfSync = poSync.filter((x) => I.syncState(x) !== 'acknowledged')
+const jwRows = challans.map((c) => ({ challan: c, balance: I.balanceAtVendor(c, returnedFor(c.id)).value }))
 
 const blockedByAge = (b: string) =>
   blockedStock.filter((x) => x.ageBucket === b).reduce((a, x) => a + x.value, 0)
@@ -94,6 +105,69 @@ const CHECKS: Check[] = [
   { group: 'Blocked capital (§9.1)', label: 'By cause', source: 'MOQ · spec · over-buy · cancelled · wrong',
     expected: '₹5.80 L · ₹4.60 L · ₹3.90 L · ₹2.40 L · ₹1.70 L',
     actual: ['moq_forced', 'spec_change', 'over_buy', 'cancelled_order', 'wrong_purchase'].map((c) => lakh(blockedByCause(c))).join(' · ') },
+
+  // ---- INB-01 · goods receipt & inbound QC
+  { group: 'Inbound QC (INB-01)', label: 'Receipts at the gate', source: 'count(GRN where status = open)',
+    expected: '5', actual: String(openGrns.length) },
+  { group: 'Inbound QC (INB-01)', label: 'Value held in QC', source: 'Σ qty_received × last_purchase_rate',
+    expected: money(248528), actual: money(I.valueHeldInQc(openGrns).value) },
+  { group: 'Inbound QC (INB-01)', label: 'Past the QC window', source: `days_in_qc > ${DEFAULT_POLICY.qcOverdueDays}`,
+    expected: 'GRN-1189',
+    actual: openGrns.filter((g) => I.qcState(I.qcAgeDays(g.receivedOn, TODAY_INBOUND).value, DEFAULT_POLICY) === 'overdue')
+      .map((g) => g.grnNo).join(', ') || 'none' },
+  { group: 'Inbound QC (INB-01)', label: 'Trailing rejection, Nirmal Alloy Tubes', source: 'closed GRNs, not a stored constant',
+    expected: '1.8%', actual: `${I.trailingRejectionRate(closedGrns, 'Nirmal Alloy Tubes', 'EL-TUB-INC85').value}%` },
+  { group: 'Inbound QC (INB-01)', label: 'Trailing rejection, Krishna Ceramics', source: 'closed GRNs, not a stored constant',
+    expected: '1.7%', actual: `${I.trailingRejectionRate(closedGrns, 'Krishna Ceramics', 'CM-TRB-2W').value}%` },
+  { group: 'Inbound QC (INB-01)', label: 'Every §9.1 item has a spec', source: '2–4 checks per item',
+    expected: '9 of 9',
+    actual: `${S.items.filter((i) => checksFor(i.id).length >= 2 && checksFor(i.id).length <= 4).length} of ${S.items.length}` },
+
+  // ---- INB-02 · order change sync
+  { group: 'Order change sync (INB-02)', label: 'Acknowledged quantity IS §9.1’s open PO quantity', source: 'material arrives at the vendor’s number, not ours',
+    expected: '4 of 4',
+    actual: `${S.poLines.filter((l) => I.revisionAt(sync(l.id), sync(l.id).ackedVersion).qty === l.qty).length} of ${S.poLines.length}` },
+  { group: 'Order change sync (INB-02)', label: 'Lines out of sync', source: 'ack_version < latest_version',
+    expected: 'PO-2596, PO-2637, PO-2648', actual: outOfSync.map((x) => x.poNo).sort().join(', ') },
+  { group: 'Order change sync (INB-02)', label: 'Unacknowledged exposure', source: 'Σ |internal − vendor_known| × rate',
+    expected: money(135400),
+    actual: money(I.unacknowledgedExposure(outOfSync.map((x) => {
+      const it = item(x.itemId)
+      return { poNo: x.poNo, gap: I.quantityGap(x).value, rate: it.lastPurchaseRate, uom: it.uom }
+    })).value) },
+  { group: 'Order change sync (INB-02)', label: 'PO-2648 gap', source: 'we need 450, the vendor is making 300',
+    expected: '150 nos', actual: `${num(I.quantityGap(sync('POL-2')).value, 0)} nos` },
+  { group: 'Order change sync (INB-02)', label: 'Cover lost on the flange line', source: 'gap ÷ avg_daily_consumption',
+    expected: '16.7 days', actual: `${I.coverGapDays(I.quantityGap(sync('POL-2')).value, item('RM-FLG-304-2').avgDailyConsumption).value} days` },
+  { group: 'Order change sync (INB-02)', label: 'PO-2648 changes in 30 days', source: `whipsaw limit ${DEFAULT_POLICY.poChurnLimit}`,
+    expected: '3', actual: String(I.churn(sync('POL-2'), TODAY_INBOUND).value) },
+  { group: 'Order change sync (INB-02)', label: 'GRN-1187 arrived against a stale version', source: 'received v1 while internal sits at v2',
+    expected: 'received 500 of 650',
+    actual: `received ${num(grns.find((g) => g.grnNo === 'GRN-1187')!.qtyReceived, 0)} of ${num(I.latestRevision(sync('POL-H1')).qty, 0)}` },
+
+  // ---- INB-03 · jobwork register
+  { group: 'Jobwork register (INB-03)', label: 'Material out at jobworkers', source: 'Σ balance × last_purchase_rate',
+    expected: money(478702),
+    actual: money(Math.round(jwRows.filter((r) => r.challan.status === 'out')
+      .reduce((a, r) => a + r.balance * r.challan.rate, 0) * 100) / 100) },
+  { group: 'Jobwork register (INB-03)', label: 'Overdue challans', source: 'as_of > due_back, each against its own floor’s date',
+    expected: 'JC-2190 14d, JC-2198 6d, JC-3128 3d',
+    actual: challans.filter((c) => c.status === 'out' && I.daysLate(c).value > 0)
+      .map((c) => `${c.challanNo} ${I.daysLate(c).value}d`).join(', ') },
+  { group: 'Jobwork register (INB-03)', label: 'JC-2190 unaccounted', source: '(sent − returned) − allowed process loss',
+    expected: '130 nos · ₹4,654',
+    actual: (() => {
+      const c = challan('JC-2190'); const r = returnedFor('JC-2190')
+      const un = I.unaccountedQty(c, r, I.allowedLoss(c).value).value
+      return `${num(un, 0)} nos · ${money(un * c.rate)}`
+    })() },
+  { group: 'Jobwork register (INB-03)', label: 'Anand Galvanising concentration', source: `ceiling ${money(DEFAULT_POLICY.jobworkerExposureCeiling)}`,
+    expected: money(293920), actual: money(I.jobworkerExposure('Anand Galvanising', jwRows).value) },
+  { group: 'Jobwork register (INB-03)', label: 'Line Watch’s late-jobwork flag resolves to a challan', source: 'JW-03 · zinc at Anand Galvanising',
+    expected: 'JC-3128 · 3 days', actual: `${challan('JW-03').challanNo} · ${I.daysLate(challan('JW-03')).value} days` },
+  { group: 'Jobwork register (INB-03)', label: 'Every jobwork GRN names a challan in the register', source: 'returns are derived from GRNs, never stored on the challan',
+    expected: '5 of 5',
+    actual: `${grns.filter((g) => g.challanId && challans.some((c) => c.id === g.challanId)).length} of ${grns.filter((g) => g.challanId).length}` },
 
   // ---- §9.2 Line Watch
   { group: 'Line Watch (§9.2)', label: 'The line runs for', source: 'min(usable / floor_consumption_per_day)',

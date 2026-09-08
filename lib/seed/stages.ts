@@ -60,18 +60,28 @@ export const STAGES: Stage[] = [
   },
   {
     id: 'inbound', no: 2, label: 'Inbound & vendor/jobwork', navLabel: 'Inbound', href: '/inbound',
-    summary: 'Read-only in this build: the inbound board is live because §9.1 carries open orders, but nothing here can be actioned yet.',
+    summary: 'Three systems — INB-01 to INB-03 — covering what happens at the gate and after it: whether the material is any good, whether the vendor is even making the right quantity, and where material went once it left again.',
     problems: [
-      { title: 'Material sent to jobwork untracked', detail: 'Neither on the shelf nor consumed, and routinely counted as both.' },
-      { title: 'Vendors work off stale orders', detail: 'A quoted lead time that has not matched reality for six receipts.', answeredBy: 'Lead-time truth strip' },
-      { title: 'Inbound QC gaps', detail: 'Received is not the same as usable — there are two days between them.', answeredBy: 'Inbound board' },
-      { title: 'No vendor scorecard', detail: 'On-time and rejection history exist but never reach the buy decision.' },
+      { title: 'Inbound QC and inspection gaps',
+        detail: 'No consistent process for inspecting inward materials or documenting quality checks against specs.',
+        answeredBy: 'INB-01 · Goods receipt & inbound QC' },
+      { title: 'Vendors working off stale orders',
+        detail: 'When order quantities change internally, the update doesn’t reach the vendor, causing mismatched production.',
+        answeredBy: 'INB-02 · Order change sync' },
+      { title: 'No tracking of material sent to jobworkers',
+        detail: 'Once material leaves for jobwork, there is no visibility into balance material, status, or return timelines.',
+        answeredBy: 'INB-03 · Jobwork register' },
+      { title: 'Quoted lead times that have never matched reality',
+        detail: 'The figure the vendor promises and the figure six receipts prove are different numbers.',
+        answeredBy: 'INB-01 · Lead-time truth' },
     ],
     modules: [
-      { label: 'Inbound board', href: '/inbound', note: 'live — 4 open inbound lines' },
-      { label: 'Jobwork register', lock: { phase: '§14 Phase 6', needs: 'The jobwork_out table: what went out, to whom, when it is due back.' } },
-      { label: 'Goods receipt & inbound QC', lock: { phase: 'Track 0', needs: 'A GRN step that records usability, not just quantity.' } },
-      { label: 'Vendor scorecard', lock: { phase: 'Excluded', needs: '', excludedReason: 'Deliberately not a screen (§12). The score feeds ranking silently.' } },
+      { label: 'Receiving & QC', href: '/inbound/receiving', note: 'INB-01 · inspection against spec, GRN, rejection buckets' },
+      { label: 'Open orders', href: '/inbound/orders', note: 'INB-02 · PO versions, change notices, acknowledgements' },
+      { label: 'Jobwork register', href: '/inbound/jobwork', note: 'INB-03 · challans, balance, returns, unaccounted' },
+      { label: 'Inspection specs', href: '/inbound/receiving#specs', note: 'what “inspected” means, written down once' },
+      { label: 'Vendor portal for acknowledgements', lock: { phase: 'Excluded', needs: '', excludedReason: 'A vendor who answers on WhatsApp will never open a portal. The buyer records the acknowledgement against a reply they can point to — a link can come later, once the vendors ask for one (§12).' } },
+      { label: 'Vendor scorecard', lock: { phase: 'Excluded', needs: '', excludedReason: 'Deliberately not a screen (§12). On-time and rejection history feed ranking silently, and the rejection history now comes from closed GRNs rather than a stored constant.' } },
     ],
   },
   {
@@ -138,6 +148,9 @@ export const BUILD_SEQUENCE = [
   { phase: 'Phase 4', what: 'SRC-03 landed-cost comparison', note: 'Needs 3 months of SRC-02 quotes.' },
   { phase: 'Phase 5', what: 'SRC-01 v2 — computed reorder points', note: 'Needs 90 days of consumption history.' },
   { phase: 'Phase 6', what: 'Line Watch — the owner’s view over the same data', note: '' },
+  { phase: 'Track 0b', what: 'INB-01 goods receipt & inbound QC', note: 'The event the other two write into. Needs an inspection spec per item — 2–4 checks, not a QMS.' },
+  { phase: 'Phase 6b', what: 'INB-03 jobwork register', note: 'Reuses INB-01 for returns, so nothing bypasses the gate.' },
+  { phase: 'Phase 6c', what: 'INB-02 order change sync', note: 'Largest schema change — PO versioning — and it touches the SRC-04 hand-off.' },
 ]
 
 export const GUARDRAILS = [
@@ -147,4 +160,6 @@ export const GUARDRAILS = [
   'Errors surface, never silently resolve. Every automated action is reversible and logged.',
   'A rate change never alters a past suggestion or an approved PO.',
   'Non-usable stock is always displayed and never counted as cover. Same for material with a jobworker.',
+  'Cover is computed on the quantity the vendor has acknowledged, never on an internal revision the vendor has not seen.',
+  'Nothing becomes usable stock without a closed goods receipt — a jobwork return included.',
 ]
