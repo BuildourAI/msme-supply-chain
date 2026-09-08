@@ -336,8 +336,9 @@ export interface PoSync {
 
 /**
  * One challan out to a jobworker. Everything that left is accounted for as one
- * of four things: back, at the vendor, allowed process loss, or unaccounted —
- * and the last one carries a rupee value.
+ * of five things: back in stock, back and waiting on inspection, still at the
+ * jobworker, allowed process loss, or unaccounted — and the five always sum to
+ * the quantity sent. Only the last carries a write-off.
  *
  * There is deliberately no `returns` field: what came back is derived from the
  * closed GRNs that carry this challan's id, so a return cannot be recorded

@@ -3,7 +3,7 @@
  *
  * INB-01 · goods receipt & inbound QC — nothing becomes usable without a GRN
  * INB-02 · order change sync        — the vendor's version is the one that arrives
- * INB-03 · jobwork register         — everything that left is one of four things
+ * INB-03 · jobwork register         — everything that left is one of five things
  *
  * Same contract as calc.ts: every function is pure and returns a Derived<T>
  * carrying the formula and the substituted inputs, so every figure on the three
@@ -336,7 +336,7 @@ export function changeNoticeDraft(s: PoSync, itemName: string, uom: string): str
 /* INB-03 · jobwork register                                                  */
 /* ========================================================================== */
 
-/** What came back — derived from closed GRNs, so nothing returns without inspection. */
+/** What came back and was inspected — closed GRNs only. */
 export function returnedQty(challan: JobworkChallan, grns: Grn[]): Derived {
   const mine = grns.filter((g) => g.challanId === challan.id && g.status === 'closed')
   const v = mine.reduce((a, g) => a + (g.acceptedQty ?? 0), 0)
@@ -348,6 +348,21 @@ export function returnedQty(challan: JobworkChallan, grns: Grn[]): Derived {
       ? mine.map((g) => ({ name: g.grnNo, value: g.acceptedQty ?? 0, unit: challan.uom, source: `received ${g.receivedOn}` }))
       : [{ name: 'returns', value: 0, source: 'nothing has come back yet' }],
     { unit: challan.uom, note: 'A jobwork return passes the same inspection as a purchase. Nothing bypasses QC because it is ours.' },
+  )
+}
+
+/** Come back, but sitting at the gate: off the jobworker’s hands and not yet usable. */
+export function inQcQty(challan: JobworkChallan, grns: Grn[]): Derived {
+  const mine = grns.filter((g) => g.challanId === challan.id && g.status === 'open')
+  const v = mine.reduce((a, g) => a + g.qtyReceived, 0)
+  return D(
+    round(v, 3),
+    'Back, waiting on inspection',
+    'Σ qty_received over open GRNs against this challan',
+    mine.length
+      ? mine.map((g) => ({ name: g.grnNo, value: g.qtyReceived, unit: challan.uom, source: `received ${g.receivedOn}, GRN still open` }))
+      : [{ name: 'returns in QC', value: 0, source: 'nothing of this challan is at the gate' }],
+    { unit: challan.uom, note: 'Never counted as cover, and never counted as unaccounted — it is on the premises and a person can see it.' },
   )
 }
 
@@ -376,49 +391,8 @@ export function allowedLoss(challan: JobworkChallan): Derived {
       { name: 'expected_yield', value: `${round(challan.expectedYield * 100, 1)}%` },
     ],
     { unit: challan.uom, note: challan.expectedYield > 1
-      ? 'Negative: hot-dip galvanising adds zinc, so more weight should come back than went out.'
+      ? 'Negative: hot-dip galvanising adds zinc, so more weight should come back than went out. A shortfall is forgiven nothing.'
       : 'Skeleton, swarf and offcut the process is expected to consume.' },
-  )
-}
-
-export function balanceAtVendor(challan: JobworkChallan, returned: number): Derived {
-  return D(
-    round(challan.qtySent - returned, 3),
-    'Balance still with the jobworker',
-    'qty_sent − returned',
-    [
-      { name: 'qty_sent', value: challan.qtySent, unit: challan.uom, source: `challan ${challan.challanNo}, ${challan.sentOn}` },
-      { name: 'returned', value: returned, unit: challan.uom },
-    ],
-    { unit: challan.uom, note: 'Neither on the shelf nor consumed. Never counted as cover (§11).' },
-  )
-}
-
-/** The number nobody can currently answer: material that is neither back nor allowed. */
-export function unaccountedQty(challan: JobworkChallan, returned: number, allowed: number): Derived {
-  const shortfall = challan.qtySent - returned
-  return D(
-    round(Math.max(0, shortfall - allowed), 3),
-    'Unaccounted',
-    'max(0, (qty_sent − returned) − allowed_process_loss)',
-    [
-      { name: 'qty_sent − returned', value: round(shortfall, 3), unit: challan.uom },
-      { name: 'allowed_process_loss', value: round(allowed, 3), unit: challan.uom },
-    ],
-    { unit: challan.uom, note: 'Material that left and is neither back nor explained by the process. This is the figure a jobwork register exists to produce.' },
-  )
-}
-
-export function valueAt(qty: number, rate: number, uom: string, label: string): Derived {
-  return D(
-    round(qty * rate, 2),
-    label,
-    'qty × last_purchase_rate',
-    [
-      { name: 'qty', value: qty, unit: uom },
-      { name: 'last_purchase_rate', value: rate, unit: `₹/${uom}`, source: 'last purchase price, ex-freight (§13-1)' },
-    ],
-    { unit: '₹' },
   )
 }
 
@@ -435,20 +409,127 @@ export function daysLate(challan: JobworkChallan): Derived {
   )
 }
 
-export function actualYield(challan: JobworkChallan, returned: number): Derived {
+/**
+ * When a shortfall stops being "still out" and becomes "missing".
+ *
+ * A challan inside its promised date, or wholly out with nothing back, is not a
+ * discrepancy — it is material at a jobworker, and the honest answer is the due
+ * date or the overdue flag. Calling it unaccounted would be a lie that inflates
+ * the headline. It becomes a discrepancy in exactly two cases:
+ *
+ *   · the challan is CLOSED — the write-off moment; or
+ *   · it is OVERDUE and the jobworker has already started returning against it,
+ *     so they have declared the job substantially done and the remainder needs
+ *     an answer rather than a chase.
+ *
+ * Anything else and the balance is at the jobworker, in full.
+ */
+export function isSettling(challan: JobworkChallan, back: number, policy: Policy): boolean {
+  if (challan.status === 'closed') return true
+  return daysLate(challan).value > policy.jobworkGraceDays && back > 0
+}
+
+export interface Accounting {
+  /** back, inspected, in usable stock */
+  returned: Derived
+  /** back, at the gate, not usable yet */
+  inQc: Derived
+  /** still physically with the jobworker */
+  atVendor: Derived
+  /** consumed by the process, within what was agreed */
+  processLoss: Derived
+  /** neither back nor explained — the figure the register exists to produce */
+  unaccounted: Derived
+  settling: boolean
+}
+
+/**
+ * Everything that left the gate, split five ways. The five always sum to
+ * qty_sent — which is what makes the bar readable and makes "everything that
+ * left is exactly one of these" a property rather than a slogan.
+ */
+export function challanAccounting(challan: JobworkChallan, grns: Grn[], policy: Policy): Accounting {
+  const returned = returnedQty(challan, grns)
+  const inQc = inQcQty(challan, grns)
+  const allowed = allowedLoss(challan).value
+  const outstanding = round(challan.qtySent - returned.value - inQc.value, 3)
+  const settling = isSettling(challan, returned.value + inQc.value, policy)
+
+  // A negative allowance (galvanising gains weight) forgives nothing.
+  const forgiveable = Math.max(0, allowed)
+  const loss = settling ? round(Math.min(forgiveable, Math.max(0, outstanding)), 3) : 0
+  const missing = settling ? round(Math.max(0, outstanding - forgiveable), 3) : 0
+  const atVendor = round(outstanding - loss - missing, 3)
+
+  const shared: DerivationInput[] = [
+    { name: 'qty_sent', value: challan.qtySent, unit: challan.uom, source: `challan ${challan.challanNo}, ${challan.sentOn}` },
+    { name: 'returned', value: returned.value, unit: challan.uom, source: 'closed GRNs' },
+    { name: 'in inbound QC', value: inQc.value, unit: challan.uom, source: 'open GRNs — back, not yet usable' },
+  ]
+
+  return {
+    returned, inQc, settling,
+    atVendor: D(
+      atVendor, 'Still with the jobworker',
+      settling
+        ? 'qty_sent − returned − in_qc − allowed_process_loss − unaccounted'
+        : 'qty_sent − returned − in_qc',
+      shared,
+      { unit: challan.uom, note: 'Neither on the shelf nor consumed. Never counted as cover (§11).' },
+    ),
+    processLoss: D(
+      loss, 'Allowed process loss',
+      settling
+        ? 'min(max(0, qty_sent × (1 − expected_yield)), outstanding)'
+        : 'nothing is written off as process loss until the challan settles',
+      [...shared, { name: 'allowed_process_loss', value: round(allowed, 3), unit: challan.uom,
+        source: `${round(challan.expectedYield * 100, 1)}% expected yield on ${challan.process.toLowerCase()}` }],
+      { unit: challan.uom },
+    ),
+    unaccounted: D(
+      missing, 'Unaccounted',
+      settling
+        ? 'max(0, (qty_sent − returned − in_qc) − allowed_process_loss)'
+        : 'nothing is unaccounted while the challan is inside its date, or wholly out with nothing back',
+      [...shared,
+        { name: 'allowed_process_loss', value: round(forgiveable, 3), unit: challan.uom },
+        { name: 'settled?', value: settling ? 'yes' : 'no',
+          source: settling
+            ? (challan.status === 'closed' ? 'the challan is closed' : 'overdue, and the jobworker has started returning against it')
+            : 'still inside its promised date, or nothing has come back yet' }],
+      { unit: challan.uom, note: 'Material that left and is neither back, at the jobworker, nor explained by the process. This is the figure a jobwork register exists to produce.' },
+    ),
+  }
+}
+
+
+export function valueAt(qty: number, rate: number, uom: string, label: string): Derived {
   return D(
-    challan.qtySent === 0 ? 0 : round((returned / challan.qtySent) * 100, 1),
-    'Actual yield',
-    'returned ÷ qty_sent × 100',
+    round(qty * rate, 2),
+    label,
+    'qty × last_purchase_rate',
     [
-      { name: 'returned', value: returned, unit: challan.uom },
-      { name: 'qty_sent', value: challan.qtySent, unit: challan.uom },
+      { name: 'qty', value: qty, unit: uom },
+      { name: 'last_purchase_rate', value: rate, unit: `₹/${uom}`, source: 'last purchase price, ex-freight (§13-1)' },
     ],
-    { unit: '%', note: `Expected ${round(challan.expectedYield * 100, 1)}% for ${challan.process.toLowerCase()}.` },
+    { unit: '₹' },
   )
 }
 
-/** ₹ one jobworker is holding across every open challan — the concentration limit. */
+/** Yield counts everything that has physically come back, inspected or not. */
+export function actualYield(challan: JobworkChallan, backTotal: number): Derived {
+  return D(
+    challan.qtySent === 0 ? 0 : round((backTotal / challan.qtySent) * 100, 1),
+    'Actual yield so far',
+    '(returned + in_qc) ÷ qty_sent × 100',
+    [
+      { name: 'returned + in_qc', value: round(backTotal, 3), unit: challan.uom },
+      { name: 'qty_sent', value: challan.qtySent, unit: challan.uom },
+    ],
+    { unit: '%', note: `Expected ${round(challan.expectedYield * 100, 1)}% for ${challan.process.toLowerCase()}. Only final once the challan closes.` },
+  )
+}
+
 export function jobworkerExposure(
   name: string, rows: { challan: JobworkChallan; balance: number }[],
 ): Derived {

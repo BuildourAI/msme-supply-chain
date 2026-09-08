@@ -199,37 +199,102 @@ describe('INB-02 · the vendor’s version is the one that arrives', () => {
 
 /* ------------------------------------------------------------------ INB-03 */
 
-describe('INB-03 · everything that left is one of four things', () => {
+describe('INB-03 · everything that left is exactly one of five things', () => {
+  const acct = (id: string) => I.challanAccounting(challan(id), grns, P)
+
   it('returns are derived from closed GRNs, so nothing re-enters stock uninspected', () => {
-    expect(returnedFor('JC-2190')).toBe(1850)   // GRN-1168 + GRN-1173
-    expect(returnedFor('JC-2198')).toBe(0.62)   // GRN-1179
-    expect(returnedFor('JC-2186')).toBe(39.2)   // GRN-1162
-    expect(returnedFor('JC-2203')).toBe(0)
+    expect(acct('JC-2190').returned.value).toBe(1850)   // GRN-1168 + GRN-1173
+    expect(acct('JC-2198').returned.value).toBe(0.62)   // GRN-1179
+    expect(acct('JC-2186').returned.value).toBe(39.2)   // GRN-1162
+    expect(acct('JC-2203').returned.value).toBe(0)
   })
 
-  it('the plating challan is 130 nos short of what the process allows — ₹4,654', () => {
+  it('the five parts always sum to what was sent — on every challan', () => {
+    for (const c of challans) {
+      const a = acct(c.id)
+      const sum = a.returned.value + a.inQc.value + a.atVendor.value + a.processLoss.value + a.unaccounted.value
+      expect(sum).toBeCloseTo(c.qtySent, 6)
+    }
+  })
+
+  /* The rule that stops the register lying. Material sitting legitimately at a
+     jobworker before its date is AT THE JOBWORKER — reporting it as unaccounted
+     would make the headline larger than the total out. */
+  it('a challan inside its promised date has nothing unaccounted', () => {
+    for (const id of ['JC-2203', 'JC-2205', 'JW-01', 'JW-02']) {
+      expect(I.daysLate(challan(id)).value).toBeLessThanOrEqual(0)
+      expect(acct(id).unaccounted.value).toBe(0)
+      expect(acct(id).atVendor.value).toBe(challan(id).qtySent)
+    }
+  })
+
+  it('an overdue challan with nothing returned is a chase, not a write-off', () => {
+    expect(I.daysLate(challan('JW-03')).value).toBe(3)
+    expect(acct('JW-03').returned.value + acct('JW-03').inQc.value).toBe(0)
+    expect(acct('JW-03').settling).toBe(false)
+    expect(acct('JW-03').unaccounted.value).toBe(0)
+    expect(acct('JW-03').atVendor.value).toBe(1.1)
+  })
+
+  it('unaccounted never exceeds the material out — the headline cannot outrun the total', () => {
+    const out = challans.filter((c) => c.status === 'out')
+      .reduce((a, c) => a + acct(c.id).atVendor.value * c.rate, 0)
+    const lost = challans.reduce((a, c) => a + acct(c.id).unaccounted.value * c.rate, 0)
+    expect(lost).toBeLessThan(out)
+    expect(Math.round(out * 100) / 100).toBe(437720)
+    expect(Math.round(lost * 100) / 100).toBe(4654)
+  })
+
+  it('the plating challan IS settling — overdue and returning short — so 130 nos is missing', () => {
     const c = challan('JC-2190')
-    const returned = returnedFor('JC-2190')
-    const allowed = I.allowedLoss(c)
-    expect(allowed.value).toBe(20)                                   // 2000 × 1%
-    expect(I.balanceAtVendor(c, returned).value).toBe(150)
-    const un = I.unaccountedQty(c, returned, allowed.value)
-    expect(un.value).toBe(130)
-    expect(I.valueAt(un.value, c.rate, c.uom, 'x').value).toBe(4654)
+    const a = acct('JC-2190')
+    expect(I.daysLate(c).value).toBe(14)
+    expect(a.settling).toBe(true)
+    expect(I.allowedLoss(c).value).toBe(20)              // 2000 × 1%
+    expect(a.processLoss.value).toBe(20)
+    expect(a.unaccounted.value).toBe(130)
+    expect(a.atVendor.value).toBe(0)
+    expect(I.valueAt(a.unaccounted.value, c.rate, c.uom, 'x').value).toBe(4654)
+  })
+
+  it('a return sitting in inbound QC is never counted as missing', () => {
+    // GRN-1190 carries 0.52 MT of JC-2198 back, still open at the gate
+    const a = acct('JC-2198')
+    expect(a.inQc.value).toBe(0.52)
+    expect(a.returned.value).toBe(0.62)
+    expect(a.unaccounted.value).toBe(0)
+    expect(a.processLoss.value).toBeCloseTo(0.06, 6)     // 1.2 × 5%
+    expect(a.atVendor.value).toBe(0)
+  })
+
+  it('closing that GRN moves 0.52 MT from "in QC" to "back", and nothing goes missing', () => {
+    const closedToo = grns.map((g) =>
+      g.grnNo === 'GRN-1190' ? { ...g, status: 'closed' as const, acceptedQty: g.qtyReceived } : g)
+    const a = I.challanAccounting(challan('JC-2198'), closedToo, P)
+    expect(a.returned.value).toBeCloseTo(1.14, 6)
+    expect(a.inQc.value).toBe(0)
+    expect(a.unaccounted.value).toBe(0)
   })
 
   it('the wound-coil challan closed inside its allowance, so nothing is unaccounted', () => {
-    const c = challan('JC-2186')
-    const returned = returnedFor('JC-2186')
-    expect(I.allowedLoss(c).value).toBe(1.2)
-    expect(I.unaccountedQty(c, returned, I.allowedLoss(c).value).value).toBe(0)
+    const a = acct('JC-2186')
+    expect(challan('JC-2186').status).toBe('closed')
+    expect(I.allowedLoss(challan('JC-2186')).value).toBe(1.2)
+    expect(a.processLoss.value).toBe(0.8)
+    expect(a.unaccounted.value).toBe(0)
+    expect(a.atVendor.value).toBe(0)
   })
 
-  it('galvanising should return MORE than it took, so its allowed loss is negative', () => {
+  it('galvanising should return MORE than it took, so its allowance forgives nothing', () => {
     const c = challan('JW-03')
     expect(c.expectedYield).toBeGreaterThan(1)
     expect(I.allowedLoss(c).value).toBeCloseTo(-0.044, 6)
     expect(I.expectedReturn(c).value).toBeCloseTo(1.144, 6)
+    // once it settles, a negative allowance must not create a negative write-off
+    const settled = { ...c, status: 'closed' as const }
+    const a = I.challanAccounting(settled, grns, P)
+    expect(a.processLoss.value).toBe(0)
+    expect(a.unaccounted.value).toBe(1.1)
   })
 
   it('the overdue challans, and by how many days against their own floor’s date', () => {
@@ -240,43 +305,34 @@ describe('INB-03 · everything that left is one of four things', () => {
   })
 
   it('JW-03 being 3 days late is the same fact Line Watch already flags', () => {
-    const c = challan('JW-03')
-    expect(c.asOf).toBe('2026-09-07')
-    expect(I.daysLate(c).value).toBe(3)
+    expect(challan('JW-03').asOf).toBe('2026-09-07')
+    expect(I.daysLate(challan('JW-03')).value).toBe(3)
   })
 
   it('₹3,41,240 is standing on the fabrication floor’s jobworkers alone', () => {
-    const rows = challans.filter((c) => c.floor === 'fabrication' && c.status === 'out')
-    const v = rows.reduce((a, c) => a + I.balanceAtVendor(c, returnedFor(c.id)).value * c.rate, 0)
+    const v = challans.filter((c) => c.floor === 'fabrication' && c.status === 'out')
+      .reduce((a, c) => a + acct(c.id).atVendor.value * c.rate, 0)
     expect(Math.round(v * 100) / 100).toBe(341240)
   })
 
   it('Anand Galvanising alone is over the concentration ceiling', () => {
-    const rows = challans.map((c) => ({ challan: c, balance: I.balanceAtVendor(c, returnedFor(c.id)).value }))
+    const rows = challans.map((c) => ({ challan: c, balance: acct(c.id).atVendor.value }))
     const names = [...new Set(challans.filter((c) => c.status === 'out').map((c) => c.jobworkerName))]
     const over = names.filter((n) => I.jobworkerExposure(n, rows).value > P.jobworkerExposureCeiling)
     expect(over).toEqual(['Anand Galvanising'])
     expect(I.jobworkerExposure('Anand Galvanising', rows).value).toBe(293920)
   })
 
-  it('actual yield is measured against the process, not against zero', () => {
-    const c = challan('JC-2186')
-    expect(I.actualYield(c, returnedFor('JC-2186')).value).toBe(98)
-    expect(c.expectedYield * 100).toBe(97)
+  it('yield counts everything physically back, inspected or not', () => {
+    const a = acct('JC-2198')
+    expect(I.actualYield(challan('JC-2198'), a.returned.value + a.inQc.value).value).toBe(95)
+    expect(challan('JC-2198').expectedYield * 100).toBe(95)
   })
 
   it('a jobwork return in the queue carries the challan it belongs to', () => {
     const g = grn('GRN-1190')
     expect(g.challanId).toBe('JC-2198')
     expect(challan('JC-2198').itemId).toBe(g.itemId)
-  })
-
-  it('booking that return in would close JC-2198 with nothing unaccounted', () => {
-    const c = challan('JC-2198')
-    const after = returnedFor('JC-2198') + grn('GRN-1190').qtyReceived   // 0.62 + 0.52
-    expect(after).toBeCloseTo(1.14, 6)
-    expect(I.allowedLoss(c).value).toBeCloseTo(0.06, 6)
-    expect(I.unaccountedQty(c, after, I.allowedLoss(c).value).value).toBe(0)
   })
 })
 

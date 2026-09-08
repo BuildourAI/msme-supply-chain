@@ -162,11 +162,10 @@ export interface SyncRow {
 
 export interface ChallanRow {
   challan: JobworkChallan
-  returned: ReturnType<typeof I.returnedQty>
+  /** the five-way split; the parts always sum to qty_sent */
+  acct: I.Accounting
   expected: ReturnType<typeof I.expectedReturn>
   allowed: ReturnType<typeof I.allowedLoss>
-  balance: ReturnType<typeof I.balanceAtVendor>
-  unaccounted: ReturnType<typeof I.unaccountedQty>
   valueOut: ReturnType<typeof I.valueAt>
   valueLost: ReturnType<typeof I.valueAt>
   late: ReturnType<typeof I.daysLate>
@@ -186,7 +185,10 @@ interface Ctx {
   exposure: ReturnType<typeof I.unacknowledgedExposure>
   outOfSync: SyncRow[]
   challanRows: ChallanRow[]
-  jobworkers: { name: string; exposure: ReturnType<typeof I.jobworkerExposure>; over: boolean; oldest: number }[]
+  jobworkers: {
+    name: string; exposure: ReturnType<typeof I.jobworkerExposure>
+    unaccounted: number; over: boolean; oldest: number
+  }[]
   jobworkTotal: Derived
   unaccountedTotal: Derived
   openGrn: GrnRow | null
@@ -211,6 +213,7 @@ const InboundCtx = createContext<Ctx>(null!)
 export const useInbound = () => useContext(InboundCtx)
 
 const uomOf = (i?: Item) => (i ? (i.uom === 'm2' ? 'm²' : i.uom) : '')
+const round3 = (n: number) => Math.round(n * 1000) / 1000
 
 export function InboundProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initial)
@@ -345,21 +348,22 @@ export function InboundProvider({ children }: { children: React.ReactNode }) {
   /* -------------------------------------------------------------- INB-03 --- */
 
   const challanRows = useMemo<ChallanRow[]>(() => challans.map((c) => {
-    const returned = I.returnedQty(c, grns)
-    const allowed = I.allowedLoss(c)
-    const balance = I.balanceAtVendor(c, returned.value)
-    const unaccounted = I.unaccountedQty(c, returned.value, allowed.value)
+    const acct = I.challanAccounting(c, grns, policy)
     const late = I.daysLate(c)
+    const back = acct.returned.value + acct.inQc.value
     return {
-      challan: c, returned,
+      challan: c, acct,
       expected: I.expectedReturn(c),
-      allowed, balance, unaccounted,
-      valueOut: I.valueAt(balance.value, c.rate, c.uom, 'Value with the jobworker'),
-      valueLost: I.valueAt(unaccounted.value, c.rate, c.uom, 'Value unaccounted'),
+      allowed: I.allowedLoss(c),
+      valueOut: I.valueAt(acct.atVendor.value, c.rate, c.uom, 'Value with the jobworker'),
+      valueLost: I.valueAt(acct.unaccounted.value, c.rate, c.uom, 'Value unaccounted'),
       late,
-      yielded: I.actualYield(c, returned.value),
+      yielded: I.actualYield(c, back),
       overdue: c.status === 'out' && late.value > policy.jobworkGraceDays,
-      chase: I.chaseDraft(c, balance.value, late.value),
+      // A chase asks about everything that has not come back — including what
+      // the process would have been allowed to consume, since the jobworker has
+      // not declared that as scrap either.
+      chase: I.chaseDraft(c, round3(c.qtySent - back), late.value),
     }
   }), [challans, grns, policy])
 
@@ -367,9 +371,12 @@ export function InboundProvider({ children }: { children: React.ReactNode }) {
     const names = [...new Set(challanRows.filter((r) => r.challan.status === 'out').map((r) => r.challan.jobworkerName))]
     return names.map((name) => {
       const mine = challanRows.filter((r) => r.challan.jobworkerName === name && r.challan.status === 'out')
-      const exp = I.jobworkerExposure(name, challanRows.map((r) => ({ challan: r.challan, balance: r.balance.value })))
+      const exp = I.jobworkerExposure(name, challanRows.map((r) => ({ challan: r.challan, balance: r.acct.atVendor.value })))
+      const lost = challanRows.filter((r) => r.challan.jobworkerName === name)
+        .reduce((a, r) => a + r.valueLost.value, 0)
       return {
         name, exposure: exp,
+        unaccounted: Math.round(lost * 100) / 100,
         over: exp.value > policy.jobworkerExposureCeiling,
         oldest: Math.max(0, ...mine.map((r) => r.late.value)),
       }
@@ -384,7 +391,7 @@ export function InboundProvider({ children }: { children: React.ReactNode }) {
       formula: 'Σ (balance × last_purchase_rate) over open challans',
       inputs: open.map((r) => ({
         name: `${r.challan.challanNo} · ${r.challan.jobworkerName}`, value: r.valueOut.value, unit: '₹',
-        source: `${r.balance.value} ${r.challan.uom} × ₹${r.challan.rate}`,
+        source: `${r.acct.atVendor.value} ${r.challan.uom} × ₹${r.challan.rate}`,
       })),
       note: 'Neither on the shelf nor consumed. Never counted as cover (§11).',
       unit: '₹',
@@ -392,7 +399,7 @@ export function InboundProvider({ children }: { children: React.ReactNode }) {
   }, [challanRows])
 
   const unaccountedTotal = useMemo<Derived>(() => {
-    const rows = challanRows.filter((r) => r.unaccounted.value > 0)
+    const rows = challanRows.filter((r) => r.acct.unaccounted.value > 0)
     return {
       value: Math.round(rows.reduce((a, r) => a + r.valueLost.value, 0) * 100) / 100,
       label: 'Unaccounted at jobworkers',
@@ -400,7 +407,7 @@ export function InboundProvider({ children }: { children: React.ReactNode }) {
       inputs: rows.length
         ? rows.map((r) => ({
             name: `${r.challan.challanNo} · ${r.challan.jobworkerName}`, value: r.valueLost.value, unit: '₹',
-            source: `${r.unaccounted.value} ${r.challan.uom} beyond the allowed process loss`,
+            source: `${r.acct.unaccounted.value} ${r.challan.uom} beyond the allowed process loss`,
           }))
         : [{ name: 'unaccounted', value: 0, source: 'every challan is inside its allowed process loss' }],
       note: 'Material that left the gate and is neither back, at the vendor, nor explained by the process.',
@@ -501,7 +508,7 @@ export function InboundProvider({ children }: { children: React.ReactNode }) {
     log({
       entity: 'jobwork_challan', entityId: c.challanNo, action: 'Jobwork return booked in',
       detail: `${qtyText(qty, c.uom)} back from ${c.jobworkerName} · raised ${id} — it goes through inbound QC like any other receipt`,
-      before: `${qtyText(row.balance.value, c.uom)} with the jobworker`,
+      before: `${qtyText(row.acct.atVendor.value, c.uom)} with the jobworker`,
       after: `awaiting inspection on ${id}`,
     })
     say(`${id} raised for ${qtyText(qty, c.uom)}. It is not usable stock yet — it is in the receiving queue until a GRN closes on it.`)
@@ -509,17 +516,17 @@ export function InboundProvider({ children }: { children: React.ReactNode }) {
 
   const closeChallan = useCallback((row: ChallanRow, reason: string) => {
     const c = row.challan
-    dispatch({ t: 'challan', id: c.id, patch: { closed: true, closedOn: c.asOf, writtenOff: row.unaccounted.value } })
+    dispatch({ t: 'challan', id: c.id, patch: { closed: true, closedOn: c.asOf, writtenOff: row.acct.unaccounted.value } })
     log({
       entity: 'jobwork_challan', entityId: c.challanNo, action: 'Challan closed',
-      detail: row.unaccounted.value > 0
-        ? `${c.jobworkerName} · ${qtyText(row.unaccounted.value, c.uom)} written off as unaccounted — ${money(row.valueLost.value)}`
+      detail: row.acct.unaccounted.value > 0
+        ? `${c.jobworkerName} · ${qtyText(row.acct.unaccounted.value, c.uom)} written off as unaccounted — ${money(row.valueLost.value)}`
         : `${c.jobworkerName} · fully accounted, inside the allowed process loss`,
       reason,
-      before: `${qtyText(row.balance.value, c.uom)} outstanding`, after: 'closed',
+      before: `${qtyText(row.acct.atVendor.value, c.uom)} outstanding`, after: 'closed',
     })
-    say(row.unaccounted.value > 0
-      ? `${c.challanNo} closed with ${qtyText(row.unaccounted.value, c.uom)} unaccounted — ${money(row.valueLost.value)} against your name and your reason.`
+    say(row.acct.unaccounted.value > 0
+      ? `${c.challanNo} closed with ${qtyText(row.acct.unaccounted.value, c.uom)} unaccounted — ${money(row.valueLost.value)} against your name and your reason.`
       : `${c.challanNo} closed clean. Everything that left is back or inside the allowed process loss.`)
   }, [log, say])
 
@@ -528,7 +535,7 @@ export function InboundProvider({ children }: { children: React.ReactNode }) {
     dispatch({ t: 'challan', id: c.id, patch: { dueBack: date } })
     log({
       entity: 'jobwork_challan', entityId: c.challanNo, action: 'Return date re-agreed',
-      detail: `${c.jobworkerName} · ${qtyText(row.balance.value, c.uom)} still out`,
+      detail: `${c.jobworkerName} · ${qtyText(row.acct.atVendor.value, c.uom)} still out`,
       reason, before: `due ${c.dueBack}`, after: `due ${date}`,
     })
     say(`${c.challanNo} re-dated to ${date}. The old date stays on the record — a re-agreed date is not the same as an on-time return.`)

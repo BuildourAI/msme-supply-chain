@@ -8,22 +8,20 @@ import { money, num, qtyText, shortDate } from '@/lib/domain/format'
 import { useInbound, type ChallanRow } from './store'
 
 /**
- * The accounting bar. Everything that left the gate is exactly one of four
- * things, and the widths are the quantities — so "where is my material" is
+ * The accounting bar. Everything that left the gate is exactly one of five
+ * things, and the five sum to the quantity sent — so "where is my material" is
  * answered by looking, not by asking.
  */
 function AccountingBar({ row }: { row: ChallanRow }) {
   const sent = row.challan.qtySent
-  const returned = row.returned.value
-  const allowed = Math.max(0, Math.min(row.allowed.value, sent - returned))
-  const unaccounted = row.unaccounted.value
-  const atVendor = Math.max(0, sent - returned - allowed - unaccounted)
+  const a = row.acct
   const pct = (n: number) => (sent > 0 ? (n / sent) * 100 : 0)
   const segs = [
-    { label: 'Back', qty: returned, cls: 'bg-good' },
-    { label: 'At the jobworker', qty: atVendor, cls: 'bg-accent' },
-    { label: 'Allowed process loss', qty: allowed, cls: 'bg-ink-3/40' },
-    { label: 'Unaccounted', qty: unaccounted, cls: 'bg-critical' },
+    { label: 'Back, in stock', qty: a.returned.value, cls: 'bg-good' },
+    { label: 'Back, in inbound QC', qty: a.inQc.value, cls: 'bg-accent/50' },
+    { label: 'At the jobworker', qty: a.atVendor.value, cls: 'bg-accent' },
+    { label: 'Allowed process loss', qty: a.processLoss.value, cls: 'bg-ink-3/40' },
+    { label: 'Unaccounted', qty: a.unaccounted.value, cls: 'bg-critical' },
   ].filter((s) => s.qty > 0.0001)
 
   return (
@@ -52,14 +50,15 @@ function AccountingBar({ row }: { row: ChallanRow }) {
 function ReturnDialog({ row, onClose }: { row: ChallanRow | null; onClose: () => void }) {
   const { recordReturn } = useInbound()
   const [qty, setQty] = useState('')
-  useEffect(() => { if (row) setQty(String(row.balance.value)) }, [row])
+  useEffect(() => { if (row) setQty(String(row.acct.atVendor.value + row.acct.unaccounted.value)) }, [row])
   if (!row) return null
   const n = Number(qty)
   const ok = Number.isFinite(n) && n > 0
-  const over = n > row.balance.value
+  const outstanding = row.acct.atVendor.value + row.acct.unaccounted.value
+  const over = n > outstanding
   return (
     <Dialog open onClose={onClose} title={`Book in a return · ${row.challan.challanNo}`}
-      sub={`${row.challan.jobworkerName} · ${row.challan.process.toLowerCase()} · ${qtyText(row.balance.value, row.challan.uom)} still out`}>
+      sub={`${row.challan.jobworkerName} · ${row.challan.process.toLowerCase()} · ${qtyText(outstanding, row.challan.uom)} still out`}>
       <div className="space-y-3 px-4 py-4">
         <label className="block text-[12.5px]">
           <span className="block text-ink-2">Quantity coming back</span>
@@ -95,7 +94,7 @@ function CloseDialog({ row, onClose }: { row: ChallanRow | null; onClose: () => 
   const [reason, setReason] = useState('')
   useEffect(() => { setReason('') }, [row])
   if (!row) return null
-  const lost = row.unaccounted.value
+  const lost = row.acct.unaccounted.value
   return (
     <Dialog open onClose={onClose} title={`Close challan ${row.challan.challanNo}`}
       sub={`${row.challan.jobworkerName} · ${row.challan.process.toLowerCase()}`}>
@@ -143,7 +142,9 @@ function ExtendDialog({ row, onClose }: { row: ChallanRow | null; onClose: () =>
   const ok = date > row.challan.dueBack && reason.trim().length > 3
   return (
     <Dialog open onClose={onClose} title={`Re-agree the return date · ${row.challan.challanNo}`}
-      sub={`Promised ${shortDate(row.challan.dueBack)} · ${row.late.value > 0 ? `${row.late.value} days ago` : `${-row.late.value} days to go`}`}>
+      sub={`Promised ${shortDate(row.challan.dueBack)} · ${row.late.value > 0
+        ? `${row.late.value} day${row.late.value === 1 ? '' : 's'} ago`
+        : `${-row.late.value} day${row.late.value === -1 ? '' : 's'} to go`}`}>
       <div className="space-y-3 px-4 py-4">
         <label className="block text-[12.5px]">
           <span className="block text-ink-2">New date, agreed with {row.challan.jobworkerName}</span>
@@ -218,13 +219,13 @@ function ChallanCard({ row, onReturn, onClose, onExtend }: {
         <span className="mono text-[11px] text-ink-3">{qtyText(c.qtySent, c.uom)} sent</span>
         <span className="ml-auto">
           {closed ? (
-            <StatusPill tone={row.unaccounted.value > 0 ? 'warn' : 'good'}
-              label={row.unaccounted.value > 0 ? 'Closed — written off' : 'Closed — fully accounted'} />
+            <StatusPill tone={row.acct.unaccounted.value > 0 ? 'warn' : 'good'}
+              label={row.acct.unaccounted.value > 0 ? 'Closed — written off' : 'Closed — fully accounted'} />
           ) : (
-            <StatusPill tone={row.overdue ? 'critical' : row.returned.value > 0 ? 'accent' : 'neutral'}
+            <StatusPill tone={row.overdue ? 'critical' : row.acct.returned.value + row.acct.inQc.value > 0 ? 'accent' : 'neutral'}
               label={row.overdue
                 ? `Overdue by ${late} day${late === 1 ? '' : 's'}`
-                : row.returned.value > 0 ? 'Part returned' : `Due back ${shortDate(c.dueBack)}`}
+                : row.acct.returned.value + row.acct.inQc.value > 0 ? 'Part returned' : `Due back ${shortDate(c.dueBack)}`}
               explain={`Promised ${c.dueBack}, judged against ${c.asOf}.`} />
           )}
         </span>
@@ -241,26 +242,43 @@ function ChallanCard({ row, onReturn, onClose, onExtend }: {
       <AccountingBar row={row} />
 
       <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[12px]">
-        <span className="text-ink-3">Balance <Num d={row.balance} format="raw" dp={3} suffix={` ${c.uom}`} /></span>
-        <span className="text-ink-3">At the jobworker <Num d={row.valueOut} format="money" /></span>
         <span className="text-ink-3">
-          Yield <Num d={row.yielded} format="raw" dp={1} suffix="%" />
+          With the jobworker <Num d={row.acct.atVendor} format="raw" dp={3} suffix={` ${c.uom}`} />
+          {' · '}<Num d={row.valueOut} format="money" />
+        </span>
+        {row.acct.inQc.value > 0 && (
+          <span className="text-ink-3">
+            Back, in QC <Num d={row.acct.inQc} format="raw" dp={3} suffix={` ${c.uom}`} tone="accent" />
+          </span>
+        )}
+        <span className="text-ink-3">
+          Yield so far <Num d={row.yielded} format="raw" dp={1} suffix="%" />
           <span className="ml-1 text-[11px]">of {num(c.expectedYield * 100, 1)}% expected</span>
         </span>
-        {row.unaccounted.value > 0 && (
+        {row.acct.unaccounted.value > 0 && (
           <span className="text-ink-3">
-            Unaccounted <Num d={row.unaccounted} format="raw" dp={3} suffix={` ${c.uom}`} tone="critical" />
+            Unaccounted <Num d={row.acct.unaccounted} format="raw" dp={3} suffix={` ${c.uom}`} tone="critical" />
             {' · '}<Num d={row.valueLost} format="money" tone="critical" />
           </span>
         )}
       </div>
 
-      {row.unaccounted.value > 0 && !closed && (
+      {row.acct.unaccounted.value > 0 && !closed && (
         <p className="mt-2 rounded-md border border-critical/30 bg-critical-soft p-2.5 text-[12px] leading-relaxed text-ink-2">
-          <strong className="text-ink">{qtyText(row.unaccounted.value, c.uom)} is unaccounted.</strong>{' '}
-          {qtyText(c.qtySent, c.uom)} went out, {qtyText(row.returned.value, c.uom)} came back, and{' '}
-          {c.process.toLowerCase()} is only allowed {qtyText(Math.max(0, row.allowed.value), c.uom)}. Nobody at
-          this factory could have told you that before, because the challan book stops at “sent”.
+          <strong className="text-ink">{qtyText(row.acct.unaccounted.value, c.uom)} is unaccounted.</strong>{' '}
+          {qtyText(c.qtySent, c.uom)} went out, {qtyText(row.acct.returned.value + row.acct.inQc.value, c.uom)} has come
+          back, {c.process.toLowerCase()} accounts for {qtyText(row.acct.processLoss.value, c.uom)} — and{' '}
+          {c.jobworkerName} stopped returning {late} days past the date. Nobody at this factory could have
+          told you that before, because the challan book stops at “sent”.
+        </p>
+      )}
+
+      {row.overdue && !row.acct.settling && (
+        <p className="mt-2 rounded-md border border-warn/30 bg-warn-soft p-2.5 text-[12px] leading-relaxed text-ink-2">
+          <strong className="text-ink">Overdue, but nothing is missing yet.</strong> The whole{' '}
+          {qtyText(row.acct.atVendor.value, c.uom)} is still with {c.jobworkerName} and none of it has come
+          back, so this is a chase, not a write-off. It only becomes unaccounted once they start returning
+          short, or once you close the challan.
         </p>
       )}
 
@@ -269,7 +287,7 @@ function ChallanCard({ row, onReturn, onClose, onExtend }: {
           <Button size="sm" variant="primary" onClick={onReturn}>Book in a return</Button>
           {row.overdue && <Button size="sm" onClick={() => showChase(c.id)}>Draft a chase note</Button>}
           {row.overdue && <Button size="sm" onClick={onExtend}>Re-agree the date</Button>}
-          <Button size="sm" variant={row.unaccounted.value > 0 ? 'danger' : 'default'} onClick={onClose}>
+          <Button size="sm" variant={row.acct.unaccounted.value > 0 ? 'danger' : 'default'} onClick={onClose}>
             Close the challan
           </Button>
         </div>
@@ -305,7 +323,7 @@ export function JobworkRegister() {
   return (
     <>
       <Card index={1} title="Challan ledger" live
-        sub="INB-03 · everything that left the gate — back, at the jobworker, allowed process loss, or unaccounted"
+        sub="INB-03 · everything that left the gate, split five ways — and the five always sum to what went out"
         actions={<span className="flex flex-wrap gap-x-4 text-[12px] text-ink-3">
           <span>Out at jobworkers <Num d={jobworkTotal} format="money" /></span>
           <span>Unaccounted <Num d={unaccountedTotal} format="money"
@@ -320,6 +338,8 @@ export function JobworkRegister() {
               </strong>{' '}
               — {overdue.map((r) => `${r.challan.challanNo} (${r.late.value}d)`).join(', ')}. That material
               is neither on the shelf nor consumed, so it counts as neither, and none of it is cover (§11).
+              Overdue is not the same as missing: a challan only reports material unaccounted once it closes,
+              or once the jobworker starts returning short.
             </p>
           )}
 
@@ -347,7 +367,7 @@ export function JobworkRegister() {
           <table className="w-full min-w-[38rem] border-collapse text-[12.5px]">
             <thead className="bg-surface-2">
               <tr className="text-[11px] uppercase tracking-wide text-ink-3">
-                {['Jobworker', 'Open challans', 'Value held', 'Oldest overdue', 'Concentration'].map((h) => (
+                {['Jobworker', 'Open challans', 'Value held', 'Unaccounted', 'Oldest overdue', 'Concentration'].map((h) => (
                   <th key={h} className="whitespace-nowrap border-b border-line px-3 py-2 text-left font-medium">{h}</th>
                 ))}
               </tr>
@@ -362,6 +382,9 @@ export function JobworkRegister() {
                       {mine.length} · {mine.map((r) => r.challan.process.toLowerCase()).join(', ')}
                     </td>
                     <td className="num px-3 py-2"><Num d={j.exposure} format="money" /></td>
+                    <td className={`num px-3 py-2 ${j.unaccounted > 0 ? 'text-critical' : 'text-ink-3'}`}>
+                      {j.unaccounted > 0 ? money(j.unaccounted) : '—'}
+                    </td>
                     <td className={`num px-3 py-2 ${j.oldest > 0 ? 'text-critical' : 'text-ink-3'}`}>
                       {j.oldest > 0 ? `${j.oldest} days` : 'nothing overdue'}
                     </td>

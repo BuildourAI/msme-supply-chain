@@ -29,9 +29,9 @@ const closedGrns = grns.filter((g) => g.status === 'closed')
 const sync = (id: string) => poSync.find((x) => x.poLineId === id)!
 const challan = (id: string) => challans.find((c) => c.id === id)!
 const item = (id: string) => S.items.find((i) => i.id === id)!
-const returnedFor = (id: string) => I.returnedQty(challan(id), grns).value
+const acctFor = (id: string) => I.challanAccounting(challan(id), grns, DEFAULT_POLICY)
 const outOfSync = poSync.filter((x) => I.syncState(x) !== 'acknowledged')
-const jwRows = challans.map((c) => ({ challan: c, balance: I.balanceAtVendor(c, returnedFor(c.id)).value }))
+const jwRows = challans.map((c) => ({ challan: c, balance: acctFor(c.id).atVendor.value }))
 
 const blockedByAge = (b: string) =>
   blockedStock.filter((x) => x.ageBucket === b).reduce((a, x) => a + x.value, 0)
@@ -146,21 +146,38 @@ const CHECKS: Check[] = [
     actual: `received ${num(grns.find((g) => g.grnNo === 'GRN-1187')!.qtyReceived, 0)} of ${num(I.latestRevision(sync('POL-H1')).qty, 0)}` },
 
   // ---- INB-03 · jobwork register
-  { group: 'Jobwork register (INB-03)', label: 'Material out at jobworkers', source: 'Σ balance × last_purchase_rate',
-    expected: money(478702),
+  { group: 'Jobwork register (INB-03)', label: 'Material out at jobworkers', source: 'Σ at_vendor × last_purchase_rate over open challans',
+    expected: money(437720),
     actual: money(Math.round(jwRows.filter((r) => r.challan.status === 'out')
       .reduce((a, r) => a + r.balance * r.challan.rate, 0) * 100) / 100) },
+  { group: 'Jobwork register (INB-03)', label: 'Every challan’s five parts sum to what was sent', source: 'returned + in_qc + at_vendor + process_loss + unaccounted',
+    expected: `${challans.length} of ${challans.length}`,
+    actual: (() => {
+      const ok = challans.filter((c) => {
+        const a = acctFor(c.id)
+        const sum = a.returned.value + a.inQc.value + a.atVendor.value + a.processLoss.value + a.unaccounted.value
+        return Math.abs(sum - c.qtySent) < 1e-6
+      }).length
+      return `${ok} of ${challans.length}`
+    })() },
+  { group: 'Jobwork register (INB-03)', label: 'Unaccounted, across every challan', source: 'only a closed challan, or an overdue one returning short',
+    expected: money(4654),
+    actual: money(Math.round(challans.reduce((a, c) => a + acctFor(c.id).unaccounted.value * c.rate, 0) * 100) / 100) },
   { group: 'Jobwork register (INB-03)', label: 'Overdue challans', source: 'as_of > due_back, each against its own floor’s date',
     expected: 'JC-2190 14d, JC-2198 6d, JC-3128 3d',
     actual: challans.filter((c) => c.status === 'out' && I.daysLate(c).value > 0)
       .map((c) => `${c.challanNo} ${I.daysLate(c).value}d`).join(', ') },
-  { group: 'Jobwork register (INB-03)', label: 'JC-2190 unaccounted', source: '(sent − returned) − allowed process loss',
+  { group: 'Jobwork register (INB-03)', label: 'JC-2190 unaccounted', source: 'overdue AND returning short — 1,850 of 2,000 back, 20 allowed',
     expected: '130 nos · ₹4,654',
     actual: (() => {
-      const c = challan('JC-2190'); const r = returnedFor('JC-2190')
-      const un = I.unaccountedQty(c, r, I.allowedLoss(c).value).value
-      return `${num(un, 0)} nos · ${money(un * c.rate)}`
-    })() },
+      const un = acctFor('JC-2190').unaccounted.value
+      return `${num(un, 0)} nos · ${money(un * challan('JC-2190').rate)}` })() },
+  { group: 'Jobwork register (INB-03)', label: 'A challan inside its date reports nothing missing', source: 'JC-2203, due 4 Sep, 180 m out',
+    expected: '0 m unaccounted · 180 m at the jobworker',
+    actual: `${num(acctFor('JC-2203').unaccounted.value, 0)} m unaccounted · ${num(acctFor('JC-2203').atVendor.value, 0)} m at the jobworker` },
+  { group: 'Jobwork register (INB-03)', label: 'An overdue challan with nothing back is a chase, not a write-off', source: 'JW-03, 3 days late, 1.1 MT out',
+    expected: '0 MT unaccounted',
+    actual: `${num(acctFor('JW-03').unaccounted.value, 0)} MT unaccounted` },
   { group: 'Jobwork register (INB-03)', label: 'Anand Galvanising concentration', source: `ceiling ${money(DEFAULT_POLICY.jobworkerExposureCeiling)}`,
     expected: money(293920), actual: money(I.jobworkerExposure('Anand Galvanising', jwRows).value) },
   { group: 'Jobwork register (INB-03)', label: 'Line Watch’s late-jobwork flag resolves to a challan', source: 'JW-03 · zinc at Anand Galvanising',
