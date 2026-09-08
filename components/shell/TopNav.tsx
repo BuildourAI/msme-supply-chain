@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { STAGES, type ModuleEntry } from '@/lib/seed/stages'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/bits'
@@ -22,6 +22,18 @@ const Caret = () => (
 
 interface NavGroup { label: string; href: string; children?: ModuleEntry[] }
 
+const PAINKILLERS = 'Painkillers solved'
+const PANEL_W = 320
+
+/** modules you can open first, then the painkiller brief, then everything not built */
+const rank = (m: ModuleEntry) => (m.href ? (m.label === PAINKILLERS ? 1 : 0) : 2)
+
+const MenuRule = ({ label }: { label: string }) => (
+  <p className="mono mt-1 border-t border-line-soft px-3.5 pb-0.5 pt-1.5 text-[9.5px] uppercase tracking-wider text-ink-3">
+    {label}
+  </p>
+)
+
 const NAV: NavGroup[] = [
   { label: 'Overview', href: '/' },
   { label: 'Reports', href: '/reports' },
@@ -31,15 +43,38 @@ const NAV: NavGroup[] = [
 export function TopNav() {
   const pathname = usePathname()
   const [open, setOpen] = useState<string | null>(null)
+  const [left, setLeft] = useState(0)
   const [lock, setLock] = useState<{ label: string; lock: NonNullable<ModuleEntry['lock']> } | null>(null)
   const closeTimer = useRef<number | undefined>(undefined)
   const navRef = useRef<HTMLElement>(null)
+  const listRef = useRef<HTMLUListElement>(null)
+  const triggers = useRef(new Map<string, HTMLLIElement>())
 
   const cancelClose = () => window.clearTimeout(closeTimer.current)
   const scheduleClose = useCallback(() => {
     cancelClose()
     closeTimer.current = window.setTimeout(() => setOpen(null), 220)
   }, [])
+
+  /**
+   * The panel is a child of <nav>, not of the <li> that opens it — and that is
+   * load-bearing rather than a style choice. The <li>s live in a horizontally
+   * scrolling <ul>, and `overflow-x: auto` computes `overflow-y` to `auto` as
+   * well, so anything hanging below the strip is clipped out of existence. A
+   * menu positioned inside that box is in the DOM, has a real bounding box, and
+   * paints nothing. So it hangs off <nav>, which has no overflow, and takes its
+   * x from the trigger it belongs to.
+   */
+  useLayoutEffect(() => {
+    if (!open || !navRef.current) return
+    const li = triggers.current.get(open)
+    if (!li) return
+    const nav = navRef.current.getBoundingClientRect()
+    const t = li.getBoundingClientRect()
+    // clamp so the rightmost stage does not open off the edge of the window
+    const max = Math.max(4, nav.width - PANEL_W - 8)
+    setLeft(Math.min(Math.max(4, t.left - nav.left), max))
+  }, [open])
 
   useEffect(() => { setOpen(null) }, [pathname])
 
@@ -48,23 +83,35 @@ export function TopNav() {
     const onClick = (e: MouseEvent) => {
       if (navRef.current && !navRef.current.contains(e.target as Node)) setOpen(null)
     }
+    // scrolling the strip would leave the panel pointing at the wrong item
+    const list = listRef.current
+    const onScroll = () => setOpen(null)
     document.addEventListener('keydown', onKey)
     document.addEventListener('mousedown', onClick)
-    return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('mousedown', onClick) }
+    list?.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('mousedown', onClick)
+      list?.removeEventListener('scroll', onScroll)
+    }
   }, [])
 
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' : pathname.startsWith(href)
 
+  const openItem = NAV.find((n) => n.label === open)
+  const entries = openItem?.children ? [...openItem.children].sort((a, b) => rank(a) - rank(b)) : []
+
   return (
     <>
       <nav ref={navRef} aria-label="Main" className="relative border-b border-line bg-surface">
-        <ul className="scroll-x flex items-stretch overflow-x-auto px-2">
+        <ul ref={listRef} className="scroll-x flex items-stretch overflow-x-auto px-2">
           {NAV.map((item) => {
             const active = isActive(item.href)
             const expanded = open === item.label
             return (
-              <li key={item.label} className="relative shrink-0"
+              <li key={item.label} className="shrink-0"
+                  ref={(el) => { if (el) triggers.current.set(item.label, el) }}
                   onMouseEnter={() => { if (item.children) { cancelClose(); setOpen(item.label) } }}
                   onMouseLeave={() => { if (item.children) scheduleClose() }}>
                 <div className="flex items-stretch">
@@ -90,44 +137,55 @@ export function TopNav() {
                     </button>
                   )}
                 </div>
-
-                {item.children && expanded && (
-                  <div role="menu" aria-label={item.label}
-                    onMouseEnter={cancelClose} onMouseLeave={scheduleClose}
-                    className="anim-drop absolute left-1 top-full z-40 w-[19rem] rounded-b-lg border border-t-0 border-line bg-surface py-1.5 shadow-xl">
-                    {item.children.map((m) =>
-                      m.href ? (
-                        <Link key={m.label} href={m.href} role="menuitem"
-                          onClick={() => setOpen(null)}
-                          className="block px-3.5 py-2 hover:bg-surface-2">
-                          <span className="text-[13px] font-medium text-ink">{m.label}</span>
-                          {m.note && <span className="mt-0.5 block text-[11px] text-ink-3">{m.note}</span>}
-                        </Link>
-                      ) : (
-                        // Not `disabled`, and deliberately not aria-disabled either: this
-                        // entry IS interactive — it opens an explanation of why the module
-                        // is not built and what it needs first. Saying otherwise to a screen
-                        // reader would be a lie, and a dead-click is what we are avoiding.
-                        <button key={m.label} type="button" role="menuitem"
-                          aria-label={`${m.label} — not available yet, opens an explanation`}
-                          onClick={() => { setOpen(null); setLock({ label: m.label, lock: m.lock! }) }}
-                          className="flex w-full items-center gap-2 px-3.5 py-2 text-left hover:bg-surface-2">
-                          <span className="text-[13px] text-ink-3">{m.label}</span>
-                          <span className="ml-auto flex items-center gap-1.5 text-ink-3">
-                            <span className="mono text-[10px] uppercase tracking-wide">
-                              {m.lock!.excludedReason ? 'excluded' : m.lock!.phase}
-                            </span>
-                            <LockGlyph />
-                          </span>
-                        </button>
-                      ),
-                    )}
-                  </div>
-                )}
               </li>
             )
           })}
         </ul>
+
+        {openItem && entries.length > 0 && (
+          <div role="menu" aria-label={openItem.label}
+            onMouseEnter={cancelClose} onMouseLeave={scheduleClose}
+            style={{ left, width: PANEL_W }}
+            className="anim-drop absolute top-full z-40 rounded-b-lg border border-t-0 border-line bg-surface py-1.5 shadow-xl">
+            {entries.map((m, i, all) =>
+              m.href ? (
+                <div key={m.label}>
+                  {/* the painkiller brief is a different kind of thing from a
+                      module, and the locked list is a third — label the seams */}
+                  {m.label === PAINKILLERS && <MenuRule label="what it solves" />}
+                  <Link href={m.href} role="menuitem"
+                    onClick={() => setOpen(null)}
+                    className="block px-3.5 py-2 hover:bg-surface-2">
+                    <span className={`text-[13px] font-medium ${
+                      m.label === PAINKILLERS ? 'text-accent' : 'text-ink'}`}>{m.label}</span>
+                    {m.note && <span className="mt-0.5 block text-[11px] leading-snug text-ink-3">{m.note}</span>}
+                  </Link>
+                  {all[i + 1] && !all[i + 1].href && <MenuRule label="not built yet" />}
+                </div>
+              ) : (
+                // Not `disabled`, and deliberately not aria-disabled either: this
+                // entry IS interactive — it opens an explanation of why the module
+                // is not built and what it needs first. Saying otherwise to a screen
+                // reader would be a lie, and a dead-click is what we are avoiding.
+                <div key={m.label}>
+                  {i === 0 && <MenuRule label="not built yet" />}
+                  <button type="button" role="menuitem"
+                    aria-label={`${m.label} — not available yet, opens an explanation`}
+                    onClick={() => { setOpen(null); setLock({ label: m.label, lock: m.lock! }) }}
+                    className="flex w-full items-center gap-2 px-3.5 py-1.5 text-left hover:bg-surface-2">
+                    <span className="text-[13px] text-ink-3">{m.label}</span>
+                    <span className="ml-auto flex items-center gap-1.5 text-ink-3">
+                      <span className="mono text-[10px] uppercase tracking-wide">
+                        {m.lock!.excludedReason ? 'excluded' : m.lock!.phase}
+                      </span>
+                      <LockGlyph />
+                    </span>
+                  </button>
+                </div>
+              ),
+            )}
+          </div>
+        )}
       </nav>
 
       <Dialog open={!!lock} onClose={() => setLock(null)}

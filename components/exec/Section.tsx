@@ -48,8 +48,9 @@ const PROVENANCE_TITLE: Record<Provenance, string> = {
 export function HeadlineStrip({ cells }: {
   cells: { label: string; d: Derived<unknown>; format?: NumFormat; tone: Tone; caption: string }[]
 }) {
+  const wide = cells.length >= 5 ? 'xl:grid-cols-5' : 'lg:grid-cols-4'
   return (
-    <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+    <div className={`mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 ${wide}`}>
       {cells.map((c, i) => (
         <div key={c.label} style={{ '--i': i } as React.CSSProperties}
              className="anim-fade-up lift flex items-stretch gap-2.5 rounded-lg border border-line bg-surface py-2 pr-2.5">
