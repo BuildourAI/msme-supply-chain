@@ -14,6 +14,9 @@ export function StagePage({ stage, children }: { stage: Stage; children?: React.
   const [lock, setLock] = useState<Stage['modules'][number] | null>(null)
   const live = stage.modules.filter((m) => m.href)
   const notBuilt = stage.modules.filter((m) => !m.href)
+  // Follow the number of problems rather than assuming four, so a stage with
+  // three does not leave a hole in the row.
+  const problemCols = stage.problems.length % 3 === 0 ? 'xl:grid-cols-3' : 'xl:grid-cols-4'
 
   return (
     <>
@@ -24,7 +27,7 @@ export function StagePage({ stage, children }: { stage: Stage; children?: React.
 
       <p className="mb-4 max-w-3xl text-[13.5px] leading-relaxed text-ink-2">{stage.summary}</p>
 
-      <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className={`mb-4 grid gap-3 md:grid-cols-2 ${problemCols}`}>
         {stage.problems.map((p, i) => (
           <div key={p.title} style={{ '--i': i } as React.CSSProperties}
                className="anim-fade-up lift rounded-lg border border-line bg-surface p-3.5">
