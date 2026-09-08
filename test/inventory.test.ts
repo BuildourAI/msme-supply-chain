@@ -295,6 +295,81 @@ describe('INV-03 · every loss has a cause and a rupee value', () => {
   })
 })
 
+/* ------------------------------------------- INV-02 → SRC-01 · the approval */
+
+describe('what a remnant does to an order the desk is about to raise', () => {
+  const tube = item('EL-TUB-INC85')
+  // §9.1's at-risk line: ROP 620, avg 42/day, position 340, MOQ 500 → 1,000 m
+  const eff = (cycleDays: number, offcut: number, ordered: number) =>
+    V.offcutEffect(620, cycleDays, tube.avgDailyConsumption, 340, tube.moq, ordered, offcut, 'm')
+
+  it('a remnant is netted off the ORDER, never added to cover', () => {
+    const e = eff(15, 62, 1000)
+    // true position is unchanged in the derivation's own inputs
+    expect(e.rawNeed.inputs.find((i) => i.name === 'true_position')!.value).toBe(340)
+    expect(e.rawNeed.inputs.find((i) => i.name === 'true_position')!.source)
+      .toContain('remnants are NOT in this')
+  })
+
+  it('at CYCLE_DAYS 15 the MOQ swallows the whole remnant', () => {
+    const e = eff(15, 62, 1000)
+    expect(e.rawNeed.value).toBe(910)      // 620 + 15×42 − 340
+    expect(e.netNeed.value).toBe(848)      // less 62 m on the rack
+    expect(e.revisedQty.value).toBe(1000)  // still rounds up to 2 × MOQ 500
+    expect(e.reducedBy).toBe(0)
+    expect(e.absorbedByMoq).toBe(true)
+  })
+
+  it('at CYCLE_DAYS 30 the same remnant crosses an MOQ boundary', () => {
+    const e = eff(30, 62, 2000)
+    expect(e.rawNeed.value).toBe(1540)
+    expect(e.netNeed.value).toBe(1478)
+    expect(e.revisedQty.value).toBe(1500)
+    expect(e.reducedBy).toBe(500)
+    expect(e.absorbedByMoq).toBe(false)
+  })
+
+  /* The whole point of showing the arithmetic: whether it saves anything is a
+     property of where the need happens to sit against the MOQ, not of the
+     remnant. Most of the reachable policy settings save nothing. */
+  it('across the policy range, the saving is the exception rather than the rule', () => {
+    const settings = [5, 10, 15, 20, 25, 30, 35, 40, 45]
+    const bites = settings.filter((c) => {
+      const raw = 620 + c * 42 - 340
+      const ordered = Math.ceil(raw / 500) * 500
+      return eff(c, 62, ordered).reducedBy > 0
+    })
+    expect(bites).toEqual([30])
+  })
+
+  it('no remnant means no change, and it is not reported as absorbed', () => {
+    const e = eff(15, 0, 1000)
+    expect(e.netNeed.value).toBe(e.rawNeed.value)
+    expect(e.revisedQty.value).toBe(1000)
+    expect(e.absorbedByMoq).toBe(false)
+  })
+
+  it('a remnant larger than the whole need cannot drive the order negative', () => {
+    const e = eff(15, 5000, 1000)
+    expect(e.netNeed.value).toBe(0)
+    expect(e.revisedQty.value).toBe(0)
+    expect(e.reducedBy).toBe(1000)
+  })
+
+  it('the revised quantity is always a whole multiple of the MOQ', () => {
+    for (const c of [5, 10, 15, 20, 25, 30, 35, 40, 45]) {
+      const raw = 620 + c * 42 - 340
+      const e = eff(c, 62, Math.ceil(raw / 500) * 500)
+      expect(e.revisedQty.value % tube.moq).toBe(0)
+    }
+  })
+
+  it('only the three items with offcut bands can ever be affected', () => {
+    const banded = new Set(offcutBands.map((b) => b.itemId))
+    expect([...banded].sort()).toEqual(['EL-TUB-INC85', 'RM-CRC-120', 'RM-FLG-304-2'])
+  })
+})
+
 /* --------------------------------------------------------------- the loop */
 
 describe('one ledger, three readings', () => {

@@ -6,6 +6,7 @@ import * as S from '@/lib/seed/sourcing'
 import { reviewQueue, seededAliases, supplierDocuments } from '@/lib/seed/intake'
 import { useApp } from '@/state/app-store'
 import { money } from '@/lib/domain/format'
+import * as C from '@/lib/domain/calc'
 import type { BuyerStatus, Decision } from '@/lib/domain/types'
 
 export const SEED: SeedBundle = {
@@ -28,6 +29,16 @@ export type RowSnapshot = Pick<DerivedRow,
 
 export interface DecisionRecord {
   decision: Decision; reason?: string; vendorName: string; decidedAt: string; snapshot: RowSnapshot
+  /** INV-02 — remnants the buyer netted off this order at the approval */
+  offcutApplied?: number
+}
+
+/** What an approval may change about the order before it is frozen (§7). */
+export interface ApprovalAdjustment {
+  /** the revised order quantity, after remnants and MOQ re-rounding */
+  qty: number
+  /** remnants netted off to get there */
+  offcutApplied: number
 }
 
 interface State {
@@ -107,7 +118,7 @@ interface Ctx {
   kpis: ReturnType<typeof deskKpis>
   select: (id: string) => void
   chooseVendor: (row: DerivedRow, vendorId: string) => void
-  decide: (row: DerivedRow, decision: Decision, reason?: string) => void
+  decide: (row: DerivedRow, decision: Decision, reason?: string, adjust?: ApprovalAdjustment) => void
   /** §11 — every automated action reversible. Reverses a decision and says so in the log. */
   undo: (row: DerivedRow) => void
   setView: (v: ViewMode) => void
@@ -196,16 +207,44 @@ export function DeskProvider({ children }: { children: React.ReactNode }) {
     say(`Supplier for ${row.item.code} set to ${to.vendor.name}. The line has been re-priced and the choice logged against you.`)
   }, [log, say])
 
-  const decide = useCallback((row: DerivedRow, decision: Decision, reason?: string) => {
+  const decide = useCallback((row: DerivedRow, decision: Decision, reason?: string, adjust?: ApprovalAdjustment) => {
+    // §7 — the decision freezes the figures it was taken on. Where the buyer
+    // netted remnants off at the approval, the frozen figures are the REVISED
+    // ones: the order is smaller, so its cost and its cover must be too.
+    const uom = row.item.uom === 'm2' ? 'm²' : row.item.uom
+    const q = adjust ? adjust.qty : row.reorderQty.value
+    const frozen = adjust
+      ? (() => {
+          const po = C.poCost(q, row.chosen.vendorItem)
+          const ship = C.shipmentCost(q, row.chosen.vendorItem)
+          const other = C.otherCosts(q, row.chosen.vendorItem, row.chosen.rejectionAllowance.value)
+          return {
+            reorderQty: {
+              ...row.reorderQty, value: q,
+              formula: 'ceil((net_need − remnants on the rack) / moq) × moq',
+              note: `Revised at approval: ${row.reorderQty.value} ${uom} before netting off ` +
+                `${adjust.offcutApplied} ${uom} of remnants already on the rack (INV-02).`,
+            },
+            poCost: po, shipmentCost: ship, otherCosts: other,
+            landedTotal: C.landedTotal(po.value, ship.value, other.value),
+            coverageAfterMonths: C.coverageAfterReceiptMonths(
+              row.usable.value, row.inTransit.value, row.openPoQty.value, q, row.item.avgDailyConsumption),
+          }
+        })()
+      : {
+          reorderQty: row.reorderQty, poCost: row.poCost, shipmentCost: row.shipmentCost,
+          otherCosts: row.otherCosts, landedTotal: row.landedTotal,
+          coverageAfterMonths: row.coverageAfterMonths,
+        }
     const snapshot: RowSnapshot = {
-      reorderQty: row.reorderQty, poCost: row.poCost, shipmentCost: row.shipmentCost,
-      otherCosts: row.otherCosts, landedTotal: row.landedTotal,
-      coverageAfterMonths: row.coverageAfterMonths, held: row.held, chosen: row.chosen,
+      ...frozen,
+      held: row.held, chosen: row.chosen,
       chosenVendorId: row.chosenVendorId, estimatedArrival: row.estimatedArrival, orderBy: row.orderBy,
     }
     dispatch({ t: 'decide', id: row.item.id, record: {
       decision, reason, vendorName: row.chosen.vendor.name,
       decidedAt: new Date().toISOString(), snapshot,
+      offcutApplied: adjust?.offcutApplied,
     } })
     const verb: Record<string, string> = {
       approved: 'Draft PO raised', held: 'Held', overridden: 'Guardrail overridden',
@@ -218,11 +257,19 @@ export function DeskProvider({ children }: { children: React.ReactNode }) {
     log({
       entity: 'reorder_suggestion', entityId: row.item.code,
       action: verb[decision] ?? decision, reason,
-      detail: `${row.item.code} · ${row.chosen.vendor.name} · ${money(row.landedTotal.value)}${flags ? ' · ' + flags : ''}`,
-      before: 'pending', after: decision,
+      detail: `${row.item.code} · ${row.chosen.vendor.name} · ${money(snapshot.landedTotal.value)}` +
+        (adjust && adjust.offcutApplied > 0
+          ? ` · ${adjust.offcutApplied} ${uom} of remnants netted off, order cut from ` +
+            `${row.reorderQty.value} to ${adjust.qty} ${uom} — ${money(row.landedTotal.value - snapshot.landedTotal.value)} not spent`
+          : '') +
+        (flags ? ' · ' + flags : ''),
+      before: adjust && adjust.offcutApplied > 0 ? `${row.reorderQty.value} ${uom} · ${money(row.landedTotal.value)}` : 'pending',
+      after: adjust && adjust.offcutApplied > 0 ? `${adjust.qty} ${uom} · ${money(snapshot.landedTotal.value)}` : decision,
     })
     const msg: Record<string, string> = {
-      approved: `Draft PO prepared for ${row.chosen.vendor.name}. Nothing has been sent — the system never places an order.`,
+      approved: adjust && adjust.offcutApplied > 0
+        ? `Draft PO cut to ${adjust.qty} ${uom} after netting off ${adjust.offcutApplied} ${uom} already on the rack — ${money(row.landedTotal.value - snapshot.landedTotal.value)} not spent. Nothing has been sent; the system never places an order.`
+        : `Draft PO prepared for ${row.chosen.vendor.name}. Nothing has been sent — the system never places an order.`,
       held: `${row.item.code} held. It stays on the desk until someone releases it.`,
       overridden: `Override recorded against you, with your reason. ${row.item.code} is released past the coverage ceiling.`,
       expedited: `Expedite drafted for ${row.inboundRefs[0] ?? 'the open order'}. This is a timing problem, so no new purchase was raised.`,

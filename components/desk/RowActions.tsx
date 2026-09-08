@@ -3,9 +3,113 @@ import { useState } from 'react'
 import type { DerivedRow } from '@/lib/domain/derive'
 import { Button } from '@/components/ui/bits'
 import { Dialog } from '@/components/ui/Dialog'
+import { Num } from '@/components/ui/Num'
 import { useApp } from '@/state/app-store'
-import { money, num } from '@/lib/domain/format'
+import { money, num, qtyText } from '@/lib/domain/format'
+import { offcutEffect } from '@/lib/domain/inventory'
+import { useInventory } from '@/components/inventory/store'
 import { useDesk } from './store'
+
+/**
+ * INV-02 → SRC-01. The offcut register is not a screen the buyer visits, so the
+ * check belongs at the moment the money is committed: the approval. It reads the
+ * LIVE band balance, so using a remnant on the floor moves what the desk sees.
+ *
+ * It offers, it does not net off silently. A short remnant is not a full length,
+ * and an automatic reduction would quietly under-buy.
+ */
+function ApproveDialog({ row, open, onClose }: {
+  row: DerivedRow; open: boolean; onClose: () => void
+}) {
+  const { decide, state } = useDesk()
+  const { offcutRows, issueRemnantToOrder } = useInventory()
+  if (!open) return null
+
+  const band = offcutRows.find((r) => r.item.id === row.item.id)
+  const onRack = band?.balance.value ?? 0
+  const uom = row.item.uom === 'm2' ? 'm²' : row.item.uom
+  const eff = offcutEffect(
+    row.reorderPoint.value, state.policy.cycleDays[row.item.itemClass],
+    row.item.avgDailyConsumption, row.truePosition.value,
+    row.item.moq, row.reorderQty.value, onRack, uom,
+  )
+  const saved = eff.reducedBy > 0
+    ? row.landedTotal.value - eff.revisedQty.value * row.chosen.landedPerUnit.value : 0
+  const poRef = `draft PO · ${row.item.code}`
+
+  const approve = (adjust?: { qty: number; offcutApplied: number }) => {
+    if (adjust) issueRemnantToOrder(row.item.id, adjust.offcutApplied, poRef)
+    decide(row, 'approved', undefined, adjust)
+    onClose()
+  }
+
+  return (
+    <Dialog open wide onClose={onClose}
+      title={`Approve the draft PO · ${row.item.code}`}
+      sub={`${row.chosen.vendor.name} · ${qtyText(row.reorderQty.value, uom)} · ${money(row.landedTotal.value)}`}>
+      <div className="space-y-3 px-4 py-4">
+        <div className="rounded-md border border-accent/30 bg-accent-soft p-3">
+          <p className="text-[12.5px] leading-relaxed text-ink-2">
+            <strong className="text-ink">
+              {qtyText(onRack, uom)} of this is already on {band?.band?.location}.
+            </strong>{' '}
+            {band?.band?.spec} — worth {money(onRack * row.item.lastPurchaseRate)}. It is not counted as
+            cover, because a short remnant is not a full length. It is netted off this order instead,
+            and only if you say so.
+          </p>
+          <table className="mono mt-2.5 w-full text-[11.5px]">
+            <tbody className="text-ink-2">
+              <tr><td className="py-0.5">Need before the remnant</td>
+                  <td className="py-0.5 text-right"><Num d={eff.rawNeed} format="raw" dp={0} suffix={` ${uom}`} /></td></tr>
+              <tr><td className="py-0.5">Less remnants on the rack</td>
+                  <td className="py-0.5 text-right">− {num(onRack, 3)} {uom}</td></tr>
+              <tr className="border-t border-accent/25"><td className="py-0.5">Need after</td>
+                  <td className="py-0.5 text-right"><Num d={eff.netNeed} format="raw" dp={0} suffix={` ${uom}`} /></td></tr>
+              <tr><td className="py-0.5">Rounded up to the {num(row.item.moq, 0)} {uom} MOQ</td>
+                  <td className="py-0.5 text-right font-medium text-ink">
+                    <Num d={eff.revisedQty} format="raw" dp={0} suffix={` ${uom}`} /></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        {eff.absorbedByMoq ? (
+          <p className="rounded-md border border-warn/30 bg-warn-soft p-3 text-[12.5px] leading-relaxed text-ink-2">
+            <strong className="text-ink">The MOQ swallows it — this order does not change.</strong>{' '}
+            {num(eff.netNeed.value, 0)} {uom} still rounds up to {num(eff.revisedQty.value, 0)} {uom} at a
+            minimum of {num(row.item.moq, 0)}. Quoting a saving here would be a lie. What the remnant is
+            worth is <em>sequencing</em>: issue it to this batch first and the next reorder falls about{' '}
+            {num(onRack / row.item.avgDailyConsumption, 1)} days later.
+          </p>
+        ) : (
+          <p className="rounded-md border border-good/30 bg-good-soft p-3 text-[12.5px] leading-relaxed text-ink-2">
+            <strong className="text-ink">
+              The remnant crosses an MOQ boundary — the order drops by {qtyText(eff.reducedBy, uom)}.
+            </strong>{' '}
+            That is {money(saved)} not spent on material this factory already owns and has already paid
+            for.
+          </p>
+        )}
+
+        <div className="flex flex-wrap justify-end gap-2 pt-1">
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => approve()}>
+            Order the full {num(row.reorderQty.value, 0)} {uom}
+          </Button>
+          <Button variant="primary" onClick={() => approve({ qty: eff.revisedQty.value, offcutApplied: onRack })}>
+            {eff.absorbedByMoq
+              ? `Approve, and issue the ${num(onRack, 3)} ${uom} to this batch`
+              : `Approve at ${num(eff.revisedQty.value, 0)} ${uom} — save ${money(saved)}`}
+          </Button>
+        </div>
+        <p className="text-[11px] leading-relaxed text-ink-3">
+          Either way nothing is sent. Taking the remnants moves them off{' '}
+          {band?.band?.location} on the INV-02 register with this order as the reference, so the next
+          person to look at the rack sees them spoken for.
+        </p>
+      </div>
+    </Dialog>
+  )
+}
 
 /**
  * §11 — the system raises, holds and drafts. Nothing here places an order or
@@ -13,10 +117,15 @@ import { useDesk } from './store'
  */
 export function RowActions({ row, size = 'sm' }: { row: DerivedRow; size?: 'sm' | 'md' }) {
   const { decide, undo, state } = useDesk()
+  const { offcutRows } = useInventory()
   const { log, say } = useApp()
   const [reasonOpen, setReasonOpen] = useState(false)
+  const [approveOpen, setApproveOpen] = useState(false)
   const [reason, setReason] = useState('')
   const decided = state.decisions[row.item.id]
+  // Only interrupt the approval where there is genuinely something to see.
+  const onRack = offcutRows.find((r) => r.item.id === row.item.id)?.balance.value ?? 0
+  const hasRemnants = onRack > 0 && row.reorderQty.value > 0
 
   if (decided) {
     const label: Record<string, string> = {
@@ -29,6 +138,12 @@ export function RowActions({ row, size = 'sm' }: { row: DerivedRow; size?: 'sm' 
         <span aria-hidden className="size-1.5 rounded-full bg-good" />
         {label[decided.decision] ?? decided.decision}
         <span className="mono text-[10px] text-ink-3">· figures frozen</span>
+        {decided.offcutApplied != null && decided.offcutApplied > 0 && (
+          <span className="text-[10.5px] text-accent"
+                title="Remnants already on the rack were netted off this order at the approval (INV-02).">
+            · {num(decided.offcutApplied, 3)} {row.item.uom === 'm2' ? 'm²' : row.item.uom} off the rack
+          </span>
+        )}
         <button type="button" onClick={() => undo(row)}
           className="ml-1 text-[11px] font-medium text-accent hover:underline"
           title="Every automated action is reversible (§11). Nothing was sent, so nothing needs recalling.">
@@ -75,9 +190,16 @@ export function RowActions({ row, size = 'sm' }: { row: DerivedRow; size?: 'sm' 
         </>
       ) : row.status.value === 'at_risk' ? (
         <>
-          <Button size={size} variant="primary" onClick={() => decide(row, 'approved')}>
+          <Button size={size} variant="primary"
+            onClick={() => (hasRemnants ? setApproveOpen(true) : decide(row, 'approved'))}>
             {row.needsOwnerSignoff.value ? 'Draft PO for owner sign-off' : 'Approve draft PO'}
           </Button>
+          {hasRemnants && (
+            <span className="basis-full text-[10.5px] leading-tight text-accent"
+                  title="The offcut register holds material for this item. The approval will show it.">
+              {num(onRack, 3)} {row.item.uom === 'm2' ? 'm²' : row.item.uom} already on the rack
+            </span>
+          )}
           <Button size={size} variant="ghost" onClick={() => decide(row, 'deferred')}>Not now</Button>
         </>
       ) : row.status.value === 'at_risk_late' ? (
@@ -95,6 +217,8 @@ export function RowActions({ row, size = 'sm' }: { row: DerivedRow; size?: 'sm' 
           say(`${row.item.code} marked reviewed. No purchase was raised; this line does not need one.`)
         }}>Mark reviewed</Button>
       )}
+
+      <ApproveDialog row={row} open={approveOpen} onClose={() => setApproveOpen(false)} />
 
       <Dialog open={reasonOpen} onClose={() => setReasonOpen(false)}
         title="Release past the coverage ceiling"

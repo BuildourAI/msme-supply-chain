@@ -397,3 +397,73 @@ export function unrealisedRecovery(
       : 'Money you are owed by the scrap dealer, not money you have.' },
   )
 }
+
+/* ========================================================================== */
+/* INV-02 → SRC-01 · what a remnant does to an order the desk is about to raise */
+/* ========================================================================== */
+
+export interface OffcutEffect {
+  /** the need before the remnant is considered, before MOQ rounding */
+  rawNeed: Derived
+  /** the need with the remnant netted off, before MOQ rounding */
+  netNeed: Derived
+  /** what the order becomes once MOQ rounding is re-applied */
+  revisedQty: Derived
+  /** units the order actually drops by — often zero, because MOQ eats it */
+  reducedBy: number
+  /** true when there is a remnant and the order still does not move */
+  absorbedByMoq: boolean
+}
+
+/**
+ * The honest arithmetic of "we already own some of this".
+ *
+ * A remnant does NOT reduce true position — 62 m of 1.2–1.8 m offcuts is not 62 m
+ * of full lengths, and counting it as cover would quietly under-buy. What it does
+ * is reduce the NEED on this particular order, and then MOQ rounding is applied
+ * again. Very often the MOQ swallows the whole remnant and the order does not
+ * move at all; saying so is more useful than quoting a saving that is not real.
+ * Where it does not, the order genuinely drops.
+ */
+export function offcutEffect(
+  rop: number, cycleDays: number, avgDaily: number, truePos: number,
+  moq: number, orderedQty: number, offcut: number, unit?: string,
+): OffcutEffect {
+  const raw = round(rop + cycleDays * avgDaily - truePos, 3)
+  const net = round(Math.max(0, raw - offcut), 3)
+  const revised = net > 0 ? q(Math.ceil(net / moq) * moq) : 0
+  const reducedBy = round(Math.max(0, orderedQty - revised), 3)
+  return {
+    rawNeed: D(
+      raw, 'Net need before the remnant', 'reorder_point + CYCLE_DAYS × avg_daily_consumption − true_position',
+      [
+        { name: 'reorder_point', value: rop, unit },
+        { name: 'CYCLE_DAYS', value: cycleDays, unit: 'days', source: 'policy' },
+        { name: 'avg_daily_consumption', value: avgDaily, unit: unit && `${unit}/day` },
+        { name: 'true_position', value: truePos, unit, source: 'usable + in transit + open PO — remnants are NOT in this' },
+      ],
+      { unit },
+    ),
+    netNeed: D(
+      net, 'Need with the remnant netted off', 'max(0, net_need − remnants on the rack)',
+      [
+        { name: 'net_need', value: raw, unit },
+        { name: 'remnants on the rack', value: q(offcut), unit, source: 'the INV-02 register, live' },
+      ],
+      { unit, note: 'Netted off the order, not added to cover: a short remnant is not a full length, and treating it as cover would under-buy.' },
+    ),
+    revisedQty: D(
+      revised, 'Order after the remnant', 'ceil((net_need − remnants) / moq) × moq',
+      [
+        { name: 'need after remnants', value: net, unit },
+        { name: 'moq', value: moq, unit, source: 'the supplier’s minimum order quantity' },
+        { name: 'order as it stands', value: orderedQty, unit },
+      ],
+      { unit, note: reducedBy > 0
+        ? 'The remnant crosses an MOQ boundary, so the order genuinely drops.'
+        : 'The MOQ rounds back up to the same figure, so this order does not change. The remnant’s value is in sequencing — use it first and the next order comes later.' },
+    ),
+    reducedBy,
+    absorbedByMoq: offcut > 0 && reducedBy === 0,
+  }
+}

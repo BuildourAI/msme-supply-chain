@@ -176,6 +176,8 @@ interface Ctx {
   recordCut: (itemId: string, lotId: string, input: number, parts: number, kerf: number,
               remnantSize: number, remnantPieces: number, workOrder: string) => void
   useRemnant: (row: LotRow, qty: number, workOrder: string) => void
+  /** INV-02 → SRC-01: remnants taken off the rack against an order at its approval. */
+  issueRemnantToOrder: (itemId: string, qty: number, poRef: string) => void
   sellScrap: (row: LossRow) => void
   reset: () => void
 }
@@ -486,6 +488,25 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     say(`${qtyText(qty, row.uom)} taken off ${row.band?.location}. That is ${money(qty * row.item.lastPurchaseRate)} of material already owned, used instead of bought.`)
   }, [log, say, today])
 
+  const issueRemnantToOrder = useCallback((itemId: string, qty: number, poRef: string) => {
+    const band = offcutBands.find((b) => b.itemId === itemId)
+    if (!band || qty <= 0) return
+    const item = itemById(itemId)
+    const uom = uomOf(item)
+    dispatch({ t: 'useRemnant', movement: {
+      id: nextId('MV'), lotId: band.lotId, itemId, on: today, kind: 'offcut_issue', qty: -qty,
+      source: 'job', sourceRef: poRef,
+      note: 'Netted off at the approval — cut from remnants instead of ordering it again',
+      actor: STOREKEEPER,
+    } })
+    log({
+      entity: 'stock_lot', entityId: band.batchNo, action: 'Remnants committed to an order',
+      detail: `${item.code} · ${qtyText(qty, uom)} off ${band.location} against ${poRef} · ` +
+        `${money(qty * item.lastPurchaseRate)} of material the desk will not buy again`,
+      before: 'on the rack, invisible to the buyer', after: `committed to ${poRef}`,
+    })
+  }, [log, today])
+
   const sellScrap = useCallback((row: LossRow) => {
     dispatch({ t: 'sell', lossId: row.loss.id, on: today })
     log({
@@ -510,7 +531,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     accuracy, staleValue, offcutValue, netLoss, unrealised, byCause, selected, counting,
     select: (id) => dispatch({ t: 'select', id }),
     startCount: (id) => dispatch({ t: 'counting', id }),
-    recordCount, writeOff, recordLoss, recordCut, useRemnant, sellScrap,
+    recordCount, writeOff, recordLoss, recordCut, useRemnant, issueRemnantToOrder, sellScrap,
     reset: () => { dispatch({ t: 'reset' }); say('Inventory reset to the state the ledger seed describes.') },
   }
   return <InvCtx.Provider value={value}>{children}</InvCtx.Provider>
