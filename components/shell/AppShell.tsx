@@ -8,6 +8,7 @@ import { Segmented } from '@/components/ui/bits'
 import { crossfadeTheme } from '@/components/ui/motion'
 import { DeskProvider } from '@/components/desk/store'
 import { InboundProvider } from '@/components/inbound/store'
+import { InventoryProvider } from '@/components/inventory/store'
 
 function ActivityDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { audit } = useApp()
@@ -132,14 +133,16 @@ function Chrome({ children }: { children: React.ReactNode }) {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  // The desk's and Inbound's state live at the shell so a decision, a supplier
-  // choice, a confirmed alias or a closed GRN survives moving between pages —
+  // Every store lives at the shell so a decision, a supplier choice, a confirmed
+  // alias, a closed GRN or a posted cycle count survives moving between pages —
   // "from then on" has to mean from then on, not until the next click on the nav.
   return (
     <AppProvider>
       <DeskProvider>
         <InboundProvider>
-          <Chrome>{children}</Chrome>
+          <InventoryProvider>
+            <Chrome>{children}</Chrome>
+          </InventoryProvider>
         </InboundProvider>
       </DeskProvider>
     </AppProvider>

@@ -38,6 +38,26 @@ export interface Policy {
   jobworkGraceDays: number
   /** ₹ any single jobworker may hold at once — a concentration limit. */
   jobworkerExposureCeiling: number
+
+  /* ------------------------------------------------- INV-01 · the stock ledger */
+  /** How often a lot of each class must be physically counted. */
+  countCadenceDays: Record<ItemClass, number>
+  /** Variance above which a count escalates rather than simply posting. */
+  countTolerancePct: Record<ItemClass, number>
+
+  /* ----------------------------------------------- INV-02 · cutting & offcuts */
+  /** Days a remnant may sit unused before it is offered up for scrap or downgrade. */
+  remnantAgeDays: number
+  /** Actual cutting yield may fall this far below the nest plan before it escalates. */
+  yieldTolerancePct: number
+
+  /* --------------------------------------------------- INV-03 · the loss ledger */
+  /** Scrap as a share of material issued, per item class. §13-5 wants this agreed. */
+  scrapTargetPct: Record<ItemClass, number>
+  /** How far above target a week may run before it escalates. */
+  scrapTolerancePct: number
+  /** Days scrap may sit unsold before the recovery is treated as not coming. */
+  scrapUnrealisedDays: number
 }
 
 export const DEFAULT_POLICY: Policy = {
@@ -53,6 +73,13 @@ export const DEFAULT_POLICY: Policy = {
   poChurnLimit: 2,
   jobworkGraceDays: 0,
   jobworkerExposureCeiling: 200_000,
+  countCadenceDays: { A: 7, B: 14, C: 30 },
+  countTolerancePct: { A: 1, B: 2, C: 5 },
+  remnantAgeDays: 90,
+  yieldTolerancePct: 2,
+  scrapTargetPct: { A: 3, B: 4, C: 5 },
+  scrapTolerancePct: 1,
+  scrapUnrealisedDays: 90,
 }
 
 /** Line Watch runs the same engine under a different, stated supplier policy. */

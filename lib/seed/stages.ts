@@ -86,18 +86,27 @@ export const STAGES: Stage[] = [
   },
   {
     id: 'inventory', no: 4, label: 'Inventory & warehousing', navLabel: 'Inventory', href: '/inventory',
-    summary: 'The stock-truth read this build depends on. Every lot, what state it is in, and what that state costs.',
+    summary: 'Three systems — INV-01 to INV-03 — over one ledger. A quantity is a balance rather than a stored number, a remnant is stock rather than a list, and a loss has a cause rather than a shrug.',
     problems: [
-      { title: 'No live stock visibility', detail: 'The number in the system and the number on the rack have never agreed.', answeredBy: 'Stock truth' },
-      { title: 'Offcuts untracked and re-bought', detail: 'A usable remnant already owned, bought again at full price.', answeredBy: 'Offcut check on approval' },
-      { title: 'Wastage never measured', detail: 'Scrap has no target, so it has no trend.' },
-      { title: 'No unified view across locations', detail: 'Two racks, three entities, one spreadsheet each.' },
+      { title: 'No live or accurate stock visibility',
+        detail: 'The number in the system and the number on the rack have never agreed.',
+        answeredBy: 'INV-01 · Stock ledger & cycle count' },
+      { title: 'No cutting-yield or offcut tracking',
+        detail: 'Leftover raw material isn’t tracked as usable stock, leading to unnecessary repurchase.',
+        answeredBy: 'INV-02 · Cutting yield & offcuts' },
+      { title: 'No wastage or material-loss tracking',
+        detail: 'Material spoilage or wastage during production isn’t measured or reported.',
+        answeredBy: 'INV-03 · Wastage & loss ledger' },
+      { title: 'Money stuck in wrong-make material',
+        detail: 'Usable stock bought for a job that no longer exists — a different population from non-usable stock.',
+        answeredBy: 'SRC-04 · Blocked capital' },
     ],
     modules: [
-      { label: 'Stock truth', href: '/inventory', note: 'live — every lot, valued' },
+      { label: 'Stock ledger', href: '/inventory/ledger', note: 'INV-01 · balances, movements, cycle counts' },
+      { label: 'Cutting & offcuts', href: '/inventory/offcuts', note: 'INV-02 · cut records, yield, the remnant register' },
+      { label: 'Wastage & loss', href: '/inventory/wastage', note: 'INV-03 · seven causes, net of recovery' },
       { label: 'Blocked capital', href: '/sourcing/desk#blocked', note: '₹18.4 L by age and by cause' },
-      { label: 'Offcut register', lock: { phase: '§14 Phase 6', needs: 'Offcuts recorded at the cutting step rather than swept up.' } },
-      { label: 'Wastage & scrap vs target', lock: { phase: '§14 Phase 6', needs: 'A scrap target per item class, agreed with the client.' } },
+      { label: 'Barcode or RFID picking', lock: { phase: 'Excluded', needs: '', excludedReason: 'A ledger that reconciles is what makes stock accurate; scanning only makes an accurate ledger faster to update. Nobody in the source set needs it before they have the ledger (§12).' } },
       { label: 'Multi-location stock', lock: { phase: 'Excluded', needs: '', excludedReason: 'Only relevant with more than one factory. Some clients need it eventually; nobody needs it first (§12).' } },
     ],
   },
@@ -151,6 +160,9 @@ export const BUILD_SEQUENCE = [
   { phase: 'Track 0b', what: 'INB-01 goods receipt & inbound QC', note: 'The event the other two write into. Needs an inspection spec per item — 2–4 checks, not a QMS.' },
   { phase: 'Phase 6b', what: 'INB-03 jobwork register', note: 'Reuses INB-01 for returns, so nothing bypasses the gate.' },
   { phase: 'Phase 6c', what: 'INB-02 order change sync', note: 'Largest schema change — PO versioning — and it touches the SRC-04 hand-off.' },
+  { phase: 'Track 0d', what: 'INV-01 stock ledger & cycle count', note: 'The ledger everything else posts into. Nothing above is accurate without it.' },
+  { phase: 'Phase 6d', what: 'INV-03 wastage & loss ledger', note: 'Six of its seven causes already exist as events, so it is cheap once the ledger is there.' },
+  { phase: 'Phase 6e', what: 'INV-02 cutting yield & offcut register', note: 'Needs a new capture point at the saw, and it touches the SRC-04 approve dialog.' },
 ]
 
 export const GUARDRAILS = [
@@ -162,4 +174,6 @@ export const GUARDRAILS = [
   'Non-usable stock is always displayed and never counted as cover. Same for material with a jobworker.',
   'Cover is computed on the quantity the vendor has acknowledged, never on an internal revision the vendor has not seen.',
   'Nothing becomes usable stock without a closed goods receipt — a jobwork return included.',
+  'A stock quantity is the sum of its movements, and every movement names a document. There is no adjustment without a reason.',
+  'A count variance is posted as its own movement, never written over the balance. The book was wrong, and the record says so.',
 ]

@@ -1,6 +1,15 @@
 /** Indian number formatting. ₹4,55,100 — not ₹455,100. */
 
-const inrN = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 })
+/**
+ * Quantities drop trailing zeros but must be able to SHOW the precision asked
+ * for: a 0.003 MT kerf is not "0". One formatter per dp, capped at that dp.
+ */
+const upto = new Map<number, Intl.NumberFormat>()
+const maxAt = (dp: number) => {
+  let f = upto.get(dp)
+  if (!f) { f = new Intl.NumberFormat('en-IN', { maximumFractionDigits: dp }); upto.set(dp, f) }
+  return f
+}
 // Money keeps its trailing zeros: a landed rate is ₹224.40, never ₹224.4.
 const fixed = new Map<number, Intl.NumberFormat>()
 const at = (dp: number) => {
@@ -24,7 +33,7 @@ export function lakh(n: number): string {
 /** Quantities drop trailing zeros — 340, not 340.00. Money does not. */
 export const num = (n: number, dp = 2): string => {
   if (!Number.isFinite(n)) return '—'
-  return inrN.format(Math.round(n * 10 ** dp) / 10 ** dp)
+  return maxAt(dp).format(Math.round(n * 10 ** dp) / 10 ** dp)
 }
 
 /** Quantities keep the precision the unit actually needs — MT wants decimals. */

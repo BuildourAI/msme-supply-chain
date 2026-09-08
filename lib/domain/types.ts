@@ -370,3 +370,127 @@ export interface JobworkChallan {
   status: 'out' | 'closed'
   closedOn?: string
 }
+
+/* ================================================== INV-01 · the stock ledger */
+
+/**
+ * Every quantity in this build becomes a balance, not a stored number:
+ * lot.qty = Σ movement.qty. A movement can only exist against a source document
+ * — there is no movement kind meaning "adjustment, no reason".
+ */
+export type MovementKind =
+  | 'opening'         // the balance when the ledger window opens
+  | 'receipt'         // an INB-01 GRN closed
+  | 'issue'           // to a job, or to a cut
+  | 'jobwork_out'     // an INB-03 challan raised
+  | 'jobwork_return'  // an INB-03 return, through a GRN
+  | 'offcut_in'       // INV-02 · a remnant added to the register
+  | 'offcut_issue'    // INV-02 · a remnant used instead of full stock
+  | 'write_off'       // INV-03 · spoilage or scrapping, quantity leaves
+  | 'count_adjust'    // INV-01 · a cycle count variance, signed
+
+export type MovementSource = 'opening' | 'grn' | 'job' | 'cut' | 'challan' | 'count' | 'loss'
+
+export interface StockMovement {
+  id: string
+  lotId: string
+  itemId: string
+  on: string
+  kind: MovementKind
+  /** signed, in the item's uom: receipts positive, issues negative */
+  qty: number
+  /** the document behind it. A movement without one cannot be recorded. */
+  source: MovementSource
+  sourceRef: string
+  note?: string
+  actor: string
+}
+
+/**
+ * A cycle count. The variance is never overwritten onto the balance — it posts a
+ * signed count_adjust movement, so the history says the book was wrong and by how
+ * much. Counting accuracy is then a measurable thing rather than a feeling.
+ */
+export interface CycleCount {
+  id: string
+  lotId: string
+  itemId: string
+  on: string
+  /** what was on the rack */
+  countedQty: number
+  /** what the ledger said at that moment — a snapshot, since the ledger moves on */
+  bookQty: number
+  counter: string
+  note?: string
+}
+
+/* ============================================ INV-02 · cutting & the offcuts */
+
+/** A remnant that did not make the minimum usable size is scrap at the cut. */
+export interface Remnant {
+  /** the piece size, in the item's uom */
+  size: number
+  pieces: number
+  spec: string
+}
+
+/**
+ * One cutting, nesting or blanking operation. The identity that makes it
+ * trustworthy: input = parts + kerf + Σ remnants, asserted on every record.
+ */
+export interface CutRecord {
+  id: string
+  cutNo: string
+  on: string
+  itemId: string
+  /** the lot the material was drawn from */
+  lotId: string
+  workOrder: string
+  inputQty: number
+  /** what the nest plan said should come out as parts */
+  plannedPartsQty: number
+  /** what actually came out as parts */
+  partsQty: number
+  partsCount: number
+  /** blade / torch width consumed — a real loss, not a rounding */
+  kerfQty: number
+  remnants: Remnant[]
+  operator: string
+}
+
+/* ================================================ INV-03 · the loss ledger */
+
+export type LossCause =
+  | 'cut_kerf'
+  | 'cut_offcut_scrap'
+  | 'process_scrap'
+  | 'store_spoilage'
+  | 'jobwork_loss'
+  | 'count_shortage'
+  | 'grn_rejection'
+
+/**
+ * The loss ledger owns "why, and what it cost". The stock ledger owns quantity.
+ * A loss either carries its own write_off / count_adjust movement, or is a named
+ * component of a movement already posted (the kerf inside a cut's issue, the
+ * spoilage inside an issue to a job) — so the two ledgers never double-count.
+ */
+export interface LossRecord {
+  id: string
+  on: string
+  itemId: string
+  lotId?: string
+  qty: number
+  cause: LossCause
+  source: MovementSource
+  sourceRef: string
+  workOrder?: string
+  /**
+   * ₹ per uom this scrap actually sells for. Zero where nothing is recoverable —
+   * fired ceramic and mineral wool are dead loss; steel, brass and zinc are not.
+   */
+  recoveryRate: number
+  /** set when the scrap was actually sold, not when it was expected to be */
+  soldOn?: string
+  actor: string
+}

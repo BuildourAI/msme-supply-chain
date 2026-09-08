@@ -9,6 +9,11 @@ import { reviewQueue, supplierDocuments } from '@/lib/seed/intake'
 import * as S from '@/lib/seed/sourcing'
 import * as I from '@/lib/domain/inbound'
 import { challans, checksFor, grns, poSync, TODAY_INBOUND } from '@/lib/seed/inbound'
+import * as V from '@/lib/domain/inventory'
+import {
+  classOf, cuts as invCuts, cycleCounts, losses as invLosses, ledgerLots,
+  movements as invMovements, offcutBands, scrapRemnantQty, TODAY_INVENTORY, usableRemnantQty,
+} from '@/lib/seed/inventory'
 import { lakh, money, num } from '@/lib/domain/format'
 
 const seed: SeedBundle = {
@@ -32,6 +37,9 @@ const item = (id: string) => S.items.find((i) => i.id === id)!
 const acctFor = (id: string) => I.challanAccounting(challan(id), grns, DEFAULT_POLICY)
 const outOfSync = poSync.filter((x) => I.syncState(x) !== 'acknowledged')
 const jwRows = challans.map((c) => ({ challan: c, balance: acctFor(c.id).atVendor.value }))
+
+const lotBal = (id: string) => Math.round(invMovements.filter((m) => m.lotId === id).reduce((a, m) => a + m.qty, 0) * 1e6) / 1e6
+const invRates = invLosses.map((l) => ({ loss: l, rate: item(l.itemId).lastPurchaseRate }))
 
 const blockedByAge = (b: string) =>
   blockedStock.filter((x) => x.ageBucket === b).reduce((a, x) => a + x.value, 0)
@@ -185,6 +193,63 @@ const CHECKS: Check[] = [
   { group: 'Jobwork register (INB-03)', label: 'Every jobwork GRN names a challan in the register', source: 'returns are derived from GRNs, never stored on the challan',
     expected: '5 of 5',
     actual: `${grns.filter((g) => g.challanId && challans.some((c) => c.id === g.challanId)).length} of ${grns.filter((g) => g.challanId).length}` },
+
+  // ---- INV-01 · the stock ledger
+  { group: 'Stock ledger (INV-01)', label: 'Every §9.1 lot closes at §9.1’s quantity', source: 'opening + Σ movements, per lot',
+    expected: `${S.stockLots.length} of ${S.stockLots.length}`,
+    actual: `${S.stockLots.filter((l) => lotBal(l.id) === l.qty).length} of ${S.stockLots.length}` },
+  { group: 'Stock ledger (INV-01)', label: 'Every offcut band closes at §9.1’s quantity', source: 'opening + Σ movements, per band',
+    expected: `${S.offcuts.length} of ${S.offcuts.length}`,
+    actual: `${S.offcuts.filter((o) => lotBal(offcutBands.find((b) => b.itemId === o.itemId)!.lotId) === o.qty).length} of ${S.offcuts.length}` },
+  { group: 'Stock ledger (INV-01)', label: 'No opening balance is negative', source: 'an impossible invented history would fail here',
+    expected: '0 negative',
+    actual: `${ledgerLots.filter((l) => invMovements.find((m) => m.lotId === l.id && m.kind === 'opening')!.qty < 0).length} negative` },
+  { group: 'Stock ledger (INV-01)', label: 'Movements on the ledger', source: 'every one naming a document',
+    expected: `${invMovements.length} · 0 without a source`,
+    actual: `${invMovements.length} · ${invMovements.filter((m) => !m.sourceRef).length} without a source` },
+  { group: 'Stock ledger (INV-01)', label: 'Record accuracy', source: 'counts inside class tolerance ÷ counts taken',
+    expected: '87.5%',
+    actual: `${V.recordAccuracy(cycleCounts.map((c) => ({ count: c, cls: classOf(c.itemId) })), DEFAULT_POLICY).value}%` },
+  { group: 'Stock ledger (INV-01)', label: 'Counts outside class tolerance', source: 'the ones that escalate as well as post',
+    expected: 'CC-01',
+    actual: cycleCounts.filter((c) => V.isCountOverTolerance(c, classOf(c.itemId), DEFAULT_POLICY)).map((c) => c.id).join(', ') || 'none' },
+
+  // ---- INV-02 · cutting yield & offcuts
+  { group: 'Cutting & offcuts (INV-02)', label: 'Every cut balances', source: 'input = parts + kerf + Σ remnants',
+    expected: `${invCuts.length} of ${invCuts.length}`,
+    actual: `${invCuts.filter(V.cutBalances).length} of ${invCuts.length}` },
+  { group: 'Cutting & offcuts (INV-02)', label: 'Usable remnants reach the register', source: 'each cut’s usable remnants = the offcut_in it posted',
+    expected: `${invCuts.length} of ${invCuts.length}`,
+    actual: `${invCuts.filter((c) => Math.abs(invMovements.filter((m) => m.kind === 'offcut_in' && m.sourceRef === c.id).reduce((a, m) => a + m.qty, 0) - usableRemnantQty(c)) < 1e-6).length} of ${invCuts.length}` },
+  { group: 'Cutting & offcuts (INV-02)', label: 'Value of remnants on the racks', source: 'Σ (band balance × last_purchase_rate)',
+    expected: money(27086),
+    actual: money(Math.round(S.offcuts.reduce((a, o) => a + o.qty * item(o.itemId).lastPurchaseRate, 0) * 100) / 100) },
+  { group: 'Cutting & offcuts (INV-02)', label: 'Repurchase avoided on the element tube', source: 'min(reorder qty, remnants) × rate',
+    expected: money(13144),
+    actual: money(V.remnantMatch(row('EL-TUB-INC85').reorderQty.value, lotBal('OC-TUB-A'), item('EL-TUB-INC85').lastPurchaseRate, 'm').value) },
+  { group: 'Cutting & offcuts (INV-02)', label: 'Cuts below the nest plan', source: `shortfall > ${DEFAULT_POLICY.yieldTolerancePct} points`,
+    expected: 'CUT-2143, CUT-2151',
+    actual: invCuts.filter((c) => V.yieldShortfall(c).value > DEFAULT_POLICY.yieldTolerancePct).map((c) => c.cutNo).sort().join(', ') || 'none' },
+
+  // ---- INV-03 · wastage & loss
+  { group: 'Wastage & loss (INV-03)', label: 'The two marginals agree', source: 'Σ by cause vs Σ by item — the same records, split twice',
+    expected: money(V.netLoss(invRates).value),
+    actual: money(Math.round(V.lossByCause(invRates).reduce((a, c) => a + c.net, 0) * 100) / 100) },
+  { group: 'Wastage & loss (INV-03)', label: 'Net loss is below gross', source: 'steel, brass and nichrome come back as money',
+    expected: 'net < gross',
+    actual: V.netLoss(invRates).value < Math.round(invRates.reduce((a, r) => a + r.loss.qty * r.rate, 0) * 100) / 100 ? 'net < gross' : 'net = gross' },
+  { group: 'Wastage & loss (INV-03)', label: 'Terminal-block scrap, derived', source: 'Σ loss ÷ Σ issued × 100 — §9.2 stored this as a constant',
+    expected: '2.01%',
+    actual: `${V.scrapPct(
+      invLosses.filter((l) => l.itemId === 'CM-TRB-2W').reduce((a, l) => a + l.qty, 0),
+      invMovements.filter((m) => m.itemId === 'CM-TRB-2W' && (m.kind === 'issue' || m.kind === 'jobwork_out')).reduce((a, m) => a + Math.abs(m.qty), 0),
+      'nos').value}%` },
+  { group: 'Wastage & loss (INV-03)', label: 'The loss ledger changes no stock balance', source: 'a loss carries its own movement or names one already posted',
+    expected: `${S.stockLots.length} of ${S.stockLots.length} still reconcile`,
+    actual: `${S.stockLots.filter((l) => lotBal(l.id) === l.qty).length} of ${S.stockLots.length} still reconcile` },
+  { group: 'Wastage & loss (INV-03)', label: 'Losses with no cause', source: 'there is no “miscellaneous”',
+    expected: '0',
+    actual: String(invLosses.filter((l) => !V.LOSS_LABEL[l.cause]).length) },
 
   // ---- §9.2 Line Watch
   { group: 'Line Watch (§9.2)', label: 'The line runs for', source: 'min(usable / floor_consumption_per_day)',
