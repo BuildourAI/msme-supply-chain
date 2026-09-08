@@ -6,19 +6,27 @@ import { KpiTile } from '@/components/desk/KpiRow'
 import { Num } from '@/components/ui/Num'
 import { CoverBar, StockBar, type StockSeg } from '@/components/charts/kit'
 import { buildLineWatch, type DerivedMaterial } from '@/lib/domain/linewatch'
-import { lakh, longDate, money, num, qtyText, shortDate, STATUS_LABEL, STATUS_TONE } from '@/lib/domain/format'
+import { lakh, longDate, money, num, qtyText, shortDate, STATUS_LABEL } from '@/lib/domain/format'
 import { OWNER_POLICY } from '@/lib/domain/policy'
 import { useApp } from '@/state/app-store'
 import { daysBetween } from '@/lib/domain/calc'
 
 const lw = buildLineWatch()
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const HALTING = lw.jobs.filter((j) => j.status.value === 'will_halt').length
+const AT_RISK = lw.jobs.filter((j) => j.status.value === 'at_risk').length
+const PACE = [...lw.materials].sort((a, b) => a.coverDays.value - b.coverDays.value)[0]
+const OVERDUE = lw.jobwork.filter((j) => j.dueBack < lw.today)
+const jobworkFor = (itemId: string) => lw.jobwork.find((j) => j.itemId === itemId)
+/** the material whose scrap is furthest over its target — worth a conversation */
+const WORST_SCRAP = [...lw.materials].sort((a, b) =>
+  (b.m.scrapPct - b.m.scrapTargetPct) - (a.m.scrapPct - a.m.scrapTargetPct))[0]
 
 const JOB_TONE = { will_run: 'good', at_risk: 'warn', will_halt: 'critical' } as const
 
 function WeekSchedule() {
   return (
-    <Card index={4} title="This week on the floor" live sub="Six working days from Monday 7 September">
+    <Card index={4} title="This week on the floor" live sub={`Six working days from ${longDate(lw.today)}`}>
       <div className="scroll-x overflow-x-auto p-4">
         <div className="grid min-w-[46rem] grid-cols-6 gap-2">
           {DAYS.map((d, i) => (
@@ -31,11 +39,14 @@ function WeekSchedule() {
               {lw.jobs.filter((j) => day >= j.job.startOffset && day < j.job.startOffset + j.job.durationDays)
                 .map((j) => {
                   const tone = JOB_TONE[j.status.value]
+                  const lateNames = j.status.lateJw.map((name) => {
+                    const mat = lw.materials.find((m) => m.m.name === name)
+                    const jw = mat && jobworkFor(mat.m.id)
+                    return jw ? `${name} is with ${jw.vendorName} for ${jw.process.toLowerCase()} and overdue` : `${name} is overdue at a jobworker`
+                  })
                   const short = j.status.blocking.length
                     ? `Short of ${j.status.blocking.join(' and ')}`
-                    : j.status.lateJw.length
-                      ? `${j.status.lateJw.join(', ')} is with a jobworker and overdue`
-                      : 'All materials cover this job'
+                    : lateNames.length ? lateNames.join('; ') : 'All materials cover this job'
                   return (
                     <div key={j.job.jobNo} title={`${j.job.jobNo} — ${short}`}
                       style={{ '--i': day + 2 } as React.CSSProperties}
@@ -60,7 +71,11 @@ function WeekSchedule() {
               <strong className="text-ink">{j.job.jobNo}</strong> ({j.job.product}) —{' '}
               {j.status.blocking.length
                 ? <>will halt. Short of <strong className="text-ink">{j.status.blocking.join(' and ')}</strong>.</>
-                : <>at risk. <strong className="text-ink">{j.status.lateJw.join(', ')}</strong> is at the galvaniser and overdue.</>}
+                : <>at risk. {j.status.lateJw.map((name) => {
+                    const mat = lw.materials.find((m) => m.m.name === name)
+                    const jw = mat && jobworkFor(mat.m.id)
+                    return <span key={name}><strong className="text-ink">{name}</strong> is with {jw?.vendorName ?? 'a jobworker'}{jw ? ` for ${jw.process.toLowerCase()}` : ''} and overdue.</span>
+                  })}</>}
             </li>
           ))}
         </ul>
@@ -195,11 +210,17 @@ function MaterialCard({ d, index = 0 }: { d: DerivedMaterial; index?: number }) 
           </label>
           <div>
             <span className="block text-[11px] text-ink-3">Order</span>
-            <span className="num text-[13px] font-medium">{qtyText(m.reorderQty, m.uom)}</span>
+            <span className="text-[13px] font-medium">
+              <Num d={{ value: m.reorderQty, label: 'Reorder quantity', formula: 'reorder_qty (hand-set min/max, §14 Phase 2)',
+                inputs: [{ name: 'reorder_qty', value: m.reorderQty, unit: m.uom, source: 'set per material until 90 days of consumption exist' }], unit: m.uom }} suffix={` ${m.uom}`} />
+            </span>
           </div>
           <div>
             <span className="block text-[11px] text-ink-3">Cost</span>
-            <span className="num text-[13px] font-medium">{money(cost)}</span>
+            <span className="text-[13px] font-medium">
+              <Num d={{ value: cost, label: 'Cost to reorder', formula: 'reorder_qty × rate + freight',
+                inputs: [{ name: 'reorder_qty', value: m.reorderQty, unit: m.uom }, { name: 'rate', value: chosen.rate, unit: `₹/${m.uom}`, source: chosen.name }, { name: 'freight', value: m.freight, unit: '₹' }], unit: '₹' }} format="money" />
+            </span>
           </div>
           <div className="ml-auto flex gap-2">
             {done ? (
@@ -249,11 +270,11 @@ export default function Page() {
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiTile index={0} label="The line runs for" d={t.lineRunsFor} format="days" tone="critical" suffix=" days"
-          caption="the shortest material sets the pace — concealed hinge" />
-        <KpiTile index={1} label="Jobs stopping this week" d={t.jobsStopping} format="int" tone="critical" suffix=" of 6"
-          caption="2 will halt · 1 at risk, of 6 scheduled" />
+          caption={`the shortest material sets the pace — ${PACE.m.name.toLowerCase()}`} />
+        <KpiTile index={1} label="Jobs stopping this week" d={t.jobsStopping} format="int" tone="critical" suffix={` of ${lw.jobs.length}`}
+          caption={`${HALTING} will halt · ${AT_RISK} at risk, of ${lw.jobs.length} scheduled`} />
         <KpiTile index={2} label="Cash needed for reorders" d={t.cashNeeded} format="lakh" tone="accent"
-          caption="across the 5 materials needing attention" />
+          caption={`across the ${lw.needsAttention.length} materials needing attention`} />
         <KpiTile index={3} label="Stock you cannot use" d={t.unusableValue} format="money" tone="warn"
           caption={`across ${t.unusableLotCount} materials · QC hold, damaged and expired`} />
       </div>
@@ -315,8 +336,11 @@ export default function Page() {
             })}
           </ul>
           <p className="border-t border-line-soft px-4 py-3 text-[12px] leading-relaxed text-ink-3">
-            A job halting because a jobworker is three days late is a different problem from a job
-            halting because stock ran out — JOB-4482 is the first kind, and the schedule says so.
+            A job halting because a jobworker is late is a different problem from a job halting
+            because stock ran out.{' '}
+            {OVERDUE.length > 0 && lw.jobs.some((j) => j.status.value === 'at_risk')
+              ? <>{lw.jobs.filter((j) => j.status.value === 'at_risk').map((j) => j.job.jobNo).join(', ')} is the first kind — {OVERDUE.map((j) => `${j.vendorName} is ${daysBetween(j.dueBack, lw.today)} days late`).join(', ')} — and the schedule says so.</>
+              : 'Nothing is late at a jobworker this week.'}
           </p>
         </Card>
 
@@ -350,8 +374,9 @@ export default function Page() {
                 })}
             </ul>
             <p className="mt-3 text-[12px] leading-relaxed text-ink-3">
-              Powder coat is running at {num(11.4, 1)}% against an 8% target — the biggest single gap
-              on the floor, and the one worth a conversation this week.
+              {WORST_SCRAP.m.name} is running at {num(WORST_SCRAP.m.scrapPct, 1)}% against a{' '}
+              {num(WORST_SCRAP.m.scrapTargetPct, 1)}% target — the biggest single gap on the floor, and
+              the one worth a conversation this week.
             </p>
           </div>
         </Card>

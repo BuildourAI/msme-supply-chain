@@ -10,6 +10,15 @@ import type {
 /** §9.1 fixes the run date. The seed only reconciles against it. */
 export const TODAY_SOURCING = '2026-09-02'
 
+/*
+ * Two things §9.1 does not give, and how they were filled in:
+ *  - floorConsumptionPerDay. §9.1 lists only avg/d, so the floor rate is set equal
+ *    to it for every item. §4 warns the two are not the same number in real data;
+ *    here they collapse only because the spec supplies one of them.
+ *  - The two in-transit lines have no PO numbers in §9.1. PO-2637 and PO-2641 are
+ *    invented identifiers so the lines can be referred to; the quantities and ETAs
+ *    are verbatim.
+ */
 export const items: Item[] = [
   {
     id: 'EL-TUB-INC85', code: 'EL-TUB-INC85', name: 'Incoloy 800 sheathed element tube Ø8.5', uom: 'm', itemClass: 'A',
@@ -97,7 +106,12 @@ export const vendors: Vendor[] = [
   { id: 'V-DECCANINSULATI', name: 'Deccan Insulations', paymentTermsDays: 30 },
 ]
 
-/** Landed cost is DERIVED from these five components, never stored (§7). */
+/**
+ * Landed cost is DERIVED from these five components, never stored (§7).
+ * quotedLeadTimeDays is what the vendor promises; trailingLeadTimeDays is what
+ * §9.1's Lead column states and what the receipts below average to. The gap is
+ * the point of §5's rule — vendors with a weaker on-time record over-promise more.
+ */
 export const vendorItems: VendorItem[] = [
   {
     vendorId: 'V-NIRMALALLOYTUB', itemId: 'EL-TUB-INC85',
@@ -111,7 +125,7 @@ export const vendorItems: VendorItem[] = [
     vendorId: 'V-SANGHVISPECIAL', itemId: 'EL-TUB-INC85',
     rate: 206, freightPerUnit: 11, nonCreditableGst: 2.1,
     paymentTermCost: 5.2, rejectionAllowance: 8.4,
-    quotedLeadTimeDays: 12, trailingLeadTimeDays: 12, trailingRejectionRate: 4.1,
+    quotedLeadTimeDays: 9, trailingLeadTimeDays: 12, trailingRejectionRate: 4.1,
     onTimePct: 81, score: 76,
     quoteValidUntil: '2026-11-30',
   },
@@ -119,7 +133,7 @@ export const vendorItems: VendorItem[] = [
     vendorId: 'V-DECCANTUBEALLO', itemId: 'EL-TUB-INC85',
     rate: 219, freightPerUnit: 4, nonCreditableGst: 0,
     paymentTermCost: 1.1, rejectionAllowance: 2,
-    quotedLeadTimeDays: 10, trailingLeadTimeDays: 10, trailingRejectionRate: 0.9,
+    quotedLeadTimeDays: 8, trailingLeadTimeDays: 10, trailingRejectionRate: 0.9,
     onTimePct: 92, score: 88,
     quoteValidUntil: '2026-11-30',
   },
@@ -135,7 +149,7 @@ export const vendorItems: VendorItem[] = [
     vendorId: 'V-KRISHNAMETALS', itemId: 'RM-CRC-120',
     rate: 60200, freightPerUnit: 2400, nonCreditableGst: 640,
     paymentTermCost: 1540, rejectionAllowance: 2300,
-    quotedLeadTimeDays: 9, trailingLeadTimeDays: 9, trailingRejectionRate: 3.8,
+    quotedLeadTimeDays: 5, trailingLeadTimeDays: 9, trailingRejectionRate: 3.8,
     onTimePct: 79, score: 74,
     quoteValidUntil: '2026-11-30',
   },
@@ -143,7 +157,7 @@ export const vendorItems: VendorItem[] = [
     vendorId: 'V-GUJARATSHEETCO', itemId: 'RM-CRC-120',
     rate: 62800, freightPerUnit: 1200, nonCreditableGst: 0,
     paymentTermCost: 380, rejectionAllowance: 610,
-    quotedLeadTimeDays: 8, trailingLeadTimeDays: 8, trailingRejectionRate: 1,
+    quotedLeadTimeDays: 6, trailingLeadTimeDays: 8, trailingRejectionRate: 1,
     onTimePct: 93, score: 90,
     quoteValidUntil: '2026-11-30',
   },
@@ -151,7 +165,7 @@ export const vendorItems: VendorItem[] = [
     vendorId: 'V-NIRMALMINERALS', itemId: 'RM-MGO-EG',
     rate: 142, freightPerUnit: 5, nonCreditableGst: 0,
     paymentTermCost: 1.8, rejectionAllowance: 2.4,
-    quotedLeadTimeDays: 12, trailingLeadTimeDays: 12, trailingRejectionRate: 1.6,
+    quotedLeadTimeDays: 10, trailingLeadTimeDays: 12, trailingRejectionRate: 1.6,
     onTimePct: 91, score: 89, isPreferred: true,
     quoteValidUntil: '2026-11-30',
   },
@@ -167,7 +181,7 @@ export const vendorItems: VendorItem[] = [
     vendorId: 'V-DECCANCERAMICS', itemId: 'RM-MGO-EG',
     rate: 139, freightPerUnit: 9, nonCreditableGst: 1.4,
     paymentTermCost: 3.1, rejectionAllowance: 5.2,
-    quotedLeadTimeDays: 15, trailingLeadTimeDays: 15, trailingRejectionRate: 3.7,
+    quotedLeadTimeDays: 11, trailingLeadTimeDays: 15, trailingRejectionRate: 3.7,
     onTimePct: 74, score: 71,
     quoteValidUntil: '2026-11-30',
   },
@@ -183,7 +197,7 @@ export const vendorItems: VendorItem[] = [
     vendorId: 'V-SANGHVIALLOYS', itemId: 'RM-NCR-8020',
     rate: 1240, freightPerUnit: 15, nonCreditableGst: 0,
     paymentTermCost: 9, rejectionAllowance: 12,
-    quotedLeadTimeDays: 10, trailingLeadTimeDays: 10, trailingRejectionRate: 1,
+    quotedLeadTimeDays: 8, trailingLeadTimeDays: 10, trailingRejectionRate: 1,
     onTimePct: 92, score: 90,
     quoteValidUntil: '2026-11-30',
   },
@@ -191,7 +205,7 @@ export const vendorItems: VendorItem[] = [
     vendorId: 'V-PRECISIONWIREC', itemId: 'RM-NCR-8020',
     rate: 1215, freightPerUnit: 38, nonCreditableGst: 26,
     paymentTermCost: 31, rejectionAllowance: 62,
-    quotedLeadTimeDays: 16, trailingLeadTimeDays: 16, trailingRejectionRate: 5.1,
+    quotedLeadTimeDays: 12, trailingLeadTimeDays: 16, trailingRejectionRate: 5.1,
     onTimePct: 71, score: 68,
     quoteValidUntil: '2026-11-30',
   },
@@ -199,7 +213,7 @@ export const vendorItems: VendorItem[] = [
     vendorId: 'V-KRISHNAELECTRI', itemId: 'HW-GLD-M20',
     rate: 35.8, freightPerUnit: 0.9, nonCreditableGst: 0,
     paymentTermCost: 0.4, rejectionAllowance: 0.5,
-    quotedLeadTimeDays: 8, trailingLeadTimeDays: 8, trailingRejectionRate: 1.3,
+    quotedLeadTimeDays: 6, trailingLeadTimeDays: 8, trailingRejectionRate: 1.3,
     onTimePct: 93, score: 91, isPreferred: true,
     quoteValidUntil: '2026-11-30',
   },
@@ -207,7 +221,7 @@ export const vendorItems: VendorItem[] = [
     vendorId: 'V-GUJARATHARDWAR', itemId: 'HW-GLD-M20',
     rate: 36.5, freightPerUnit: 1.4, nonCreditableGst: 0,
     paymentTermCost: 0.7, rejectionAllowance: 1.1,
-    quotedLeadTimeDays: 7, trailingLeadTimeDays: 7, trailingRejectionRate: 2.9,
+    quotedLeadTimeDays: 4, trailingLeadTimeDays: 7, trailingRejectionRate: 2.9,
     onTimePct: 87, score: 84,
     quoteValidUntil: '2026-11-30',
   },
@@ -223,7 +237,7 @@ export const vendorItems: VendorItem[] = [
     vendorId: 'V-KRISHNACERAMIC', itemId: 'CM-TRB-2W',
     rate: 19.8, freightPerUnit: 0.6, nonCreditableGst: 0,
     paymentTermCost: 0.3, rejectionAllowance: 0.4,
-    quotedLeadTimeDays: 10, trailingLeadTimeDays: 10, trailingRejectionRate: 1.7,
+    quotedLeadTimeDays: 8, trailingLeadTimeDays: 10, trailingRejectionRate: 1.7,
     onTimePct: 90, score: 87, isPreferred: true,
     quoteValidUntil: '2026-11-30',
   },
@@ -231,7 +245,7 @@ export const vendorItems: VendorItem[] = [
     vendorId: 'V-DECCANINSULATO', itemId: 'CM-TRB-2W',
     rate: 21.2, freightPerUnit: 0.4, nonCreditableGst: 0,
     paymentTermCost: 0.2, rejectionAllowance: 0.3,
-    quotedLeadTimeDays: 9, trailingLeadTimeDays: 9, trailingRejectionRate: 1.2,
+    quotedLeadTimeDays: 7, trailingLeadTimeDays: 9, trailingRejectionRate: 1.2,
     onTimePct: 93, score: 90,
     quoteValidUntil: '2026-11-30',
   },
@@ -239,7 +253,7 @@ export const vendorItems: VendorItem[] = [
     vendorId: 'V-BHARATCERAMICW', itemId: 'CM-TRB-2W',
     rate: 20.4, freightPerUnit: 1.2, nonCreditableGst: 0,
     paymentTermCost: 0.6, rejectionAllowance: 1,
-    quotedLeadTimeDays: 13, trailingLeadTimeDays: 13, trailingRejectionRate: 4.4,
+    quotedLeadTimeDays: 9, trailingLeadTimeDays: 13, trailingRejectionRate: 4.4,
     onTimePct: 76, score: 72,
     quoteValidUntil: '2026-11-30',
   },
@@ -255,7 +269,7 @@ export const vendorItems: VendorItem[] = [
     vendorId: 'V-KRISHNAINSTRUM', itemId: 'SN-RTD-6150',
     rate: 404, freightPerUnit: 7, nonCreditableGst: 0,
     paymentTermCost: 3.4, rejectionAllowance: 8.9,
-    quotedLeadTimeDays: 8, trailingLeadTimeDays: 8, trailingRejectionRate: 2.2,
+    quotedLeadTimeDays: 6, trailingLeadTimeDays: 8, trailingRejectionRate: 2.2,
     onTimePct: 89, score: 86,
     quoteValidUntil: '2026-11-30',
   },
@@ -263,7 +277,7 @@ export const vendorItems: VendorItem[] = [
     vendorId: 'V-DECCANCONTROLS', itemId: 'SN-RTD-6150',
     rate: 428, freightPerUnit: 5, nonCreditableGst: 0,
     paymentTermCost: 2.6, rejectionAllowance: 12,
-    quotedLeadTimeDays: 7, trailingLeadTimeDays: 7, trailingRejectionRate: 2.8,
+    quotedLeadTimeDays: 4, trailingLeadTimeDays: 7, trailingRejectionRate: 2.8,
     onTimePct: 84, score: 81,
     quoteValidUntil: '2026-11-30',
   },
@@ -271,7 +285,7 @@ export const vendorItems: VendorItem[] = [
     vendorId: 'V-SANGHVIFORGING', itemId: 'RM-FLG-304-2',
     rate: 486, freightPerUnit: 9, nonCreditableGst: 0,
     paymentTermCost: 4.2, rejectionAllowance: 5.3,
-    quotedLeadTimeDays: 14, trailingLeadTimeDays: 14, trailingRejectionRate: 1.1,
+    quotedLeadTimeDays: 12, trailingLeadTimeDays: 14, trailingRejectionRate: 1.1,
     onTimePct: 92, score: 90, isPreferred: true,
     quoteValidUntil: '2026-11-30',
   },
@@ -279,7 +293,7 @@ export const vendorItems: VendorItem[] = [
     vendorId: 'V-GUJARATFLANGEW', itemId: 'RM-FLG-304-2',
     rate: 472, freightPerUnit: 16, nonCreditableGst: 0,
     paymentTermCost: 7.8, rejectionAllowance: 14.2,
-    quotedLeadTimeDays: 18, trailingLeadTimeDays: 18, trailingRejectionRate: 3,
+    quotedLeadTimeDays: 15, trailingLeadTimeDays: 18, trailingRejectionRate: 3,
     onTimePct: 86, score: 83,
     quoteValidUntil: '2026-11-30',
   },
@@ -287,7 +301,7 @@ export const vendorItems: VendorItem[] = [
     vendorId: 'V-NIRMALFORGE', itemId: 'RM-FLG-304-2',
     rate: 494, freightPerUnit: 7, nonCreditableGst: 0,
     paymentTermCost: 3.1, rejectionAllowance: 7.4,
-    quotedLeadTimeDays: 12, trailingLeadTimeDays: 12, trailingRejectionRate: 1.5,
+    quotedLeadTimeDays: 10, trailingLeadTimeDays: 12, trailingRejectionRate: 1.5,
     onTimePct: 91, score: 88,
     quoteValidUntil: '2026-11-30',
   },
@@ -295,7 +309,7 @@ export const vendorItems: VendorItem[] = [
     vendorId: 'V-BHARATINSULATI', itemId: 'IN-MWL-050',
     rate: 164, freightPerUnit: 3, nonCreditableGst: 0,
     paymentTermCost: 1.4, rejectionAllowance: 2,
-    quotedLeadTimeDays: 9, trailingLeadTimeDays: 9, trailingRejectionRate: 1.2,
+    quotedLeadTimeDays: 7, trailingLeadTimeDays: 9, trailingRejectionRate: 1.2,
     onTimePct: 92, score: 89, isPreferred: true,
     quoteValidUntil: '2026-11-30',
   },
@@ -303,7 +317,7 @@ export const vendorItems: VendorItem[] = [
     vendorId: 'V-KRISHNATHERMAL', itemId: 'IN-MWL-050',
     rate: 159, freightPerUnit: 6, nonCreditableGst: 0,
     paymentTermCost: 2.7, rejectionAllowance: 3.3,
-    quotedLeadTimeDays: 11, trailingLeadTimeDays: 11, trailingRejectionRate: 2.1,
+    quotedLeadTimeDays: 9, trailingLeadTimeDays: 11, trailingRejectionRate: 2.1,
     onTimePct: 88, score: 85,
     quoteValidUntil: '2026-11-30',
   },
@@ -311,7 +325,7 @@ export const vendorItems: VendorItem[] = [
     vendorId: 'V-DECCANINSULATI', itemId: 'IN-MWL-050',
     rate: 171, freightPerUnit: 2, nonCreditableGst: 0,
     paymentTermCost: 1, rejectionAllowance: 2.7,
-    quotedLeadTimeDays: 10, trailingLeadTimeDays: 10, trailingRejectionRate: 1.6,
+    quotedLeadTimeDays: 8, trailingLeadTimeDays: 10, trailingRejectionRate: 1.6,
     onTimePct: 90, score: 87,
     quoteValidUntil: '2026-11-30',
   },
@@ -363,7 +377,8 @@ export const offcuts: Offcut[] = [
  * The six spans for a vendor quoting L days are [L−1, L+1, L, L−2, L+2, L],
  * which sum to exactly 6L — so the trailing mean is L by construction, not by
  * luck, and the reorder points still reconcile with the Lead column in §9.1.
- * Receipts are spaced roughly monthly back from the run date.
+ * Receipts are spaced roughly monthly back from the run date, and are built on the
+ * trailing figure — never the quoted one — so the two can legitimately differ.
  */
 const SPANS = (lead: number) => [lead - 1, lead + 1, lead, lead - 2, lead + 2, lead]
 
@@ -374,7 +389,7 @@ const shiftDays = (iso: string, n: number): string => {
 }
 
 export const receipts: Receipt[] = vendorItems.flatMap((vi) =>
-  SPANS(vi.quotedLeadTimeDays).map((span, i) => {
+  SPANS(vi.trailingLeadTimeDays).map((span, i) => {
     const orderedOn = shiftDays(TODAY_SOURCING, -((6 - i) * 27 + span + 4))
     return {
       id: `RC-${vi.itemId}-${vi.vendorId}-${i + 1}`,

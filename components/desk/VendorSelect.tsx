@@ -75,10 +75,14 @@ export function VendorSelect({ row, detail = false }: { row: DerivedRow; detail?
                       {q.vendor.name}
                       {rec && <span className="font-normal text-accent"> · recommended</span>}
                     </span>
-                    <span className="mono block text-[10px] text-ink-3">
-                      score {q.vendorItem.score} · {q.vendorItem.onTimePct}% on time
-                      · {q.leadTime.value}d lead · {q.vendorItem.trailingRejectionRate}% reject
-                    </span>
+                    {detail ? (
+                      <span className="mono block text-[10px] text-ink-3">
+                        score {q.vendorItem.score} · {q.vendorItem.onTimePct}% on time
+                        · {q.leadTime.value}d lead · {q.vendorItem.trailingRejectionRate}% reject
+                      </span>
+                    ) : (
+                      <span className="mono block text-[10px] text-ink-3">{q.leadTime.value}d lead</span>
+                    )}
                   </span>
                   <span className="shrink-0 text-right">
                     <span className="num block text-[12px] font-semibold">

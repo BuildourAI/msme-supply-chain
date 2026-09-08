@@ -13,6 +13,7 @@ import * as S from '@/lib/seed/sourcing'
 import { daysBetween } from '@/lib/domain/calc'
 import { lakh, longDate, STATUS_LABEL, STATUS_TONE } from '@/lib/domain/format'
 import type { Derived } from '@/lib/domain/types'
+import { useDesk } from '@/components/desk/store'
 
 const seed: SeedBundle = {
   today: S.TODAY_SOURCING, items: S.items, vendors: S.vendors, vendorItems: S.vendorItems,
@@ -56,6 +57,11 @@ const causeRows = (() => {
 
 export default function Page() {
   const decide = rows.filter(needsDecision)
+  const { intakeCounts: ic } = useDesk()
+  const halting = lw.jobs.filter((j) => j.status.value === 'will_halt').length
+  const risky = lw.jobs.filter((j) => j.status.value === 'at_risk').length
+  const pace = [...lw.materials].sort((a, b) => a.coverDays.value - b.coverDays.value)[0]
+  const overdue = lw.jobwork.filter((j) => j.dueBack < lw.today)
   return (
     <>
       <PageHeader eyebrow="Level 1 · end-to-end material view" title="Executive Dashboard"
@@ -133,8 +139,9 @@ export default function Page() {
           <div className="space-y-2.5 p-4">
             <p className="text-[13px] leading-relaxed text-ink-2">
               The line runs for <strong className="text-ink">{lw.tiles.lineRunsFor.value.toFixed(1)} days</strong> before
-              the concealed hinge stops it. Three of six jobs this week will not run as scheduled — two
-              short of material, one waiting on a galvaniser who is three days late.
+              the {pace.m.name.toLowerCase()} stops it. {halting + risky} of {lw.jobs.length} jobs this week will not run
+              as scheduled — {halting} short of material, {risky} waiting on{' '}
+              {overdue.map((j) => `${j.vendorName}, ${daysBetween(j.dueBack, lw.today)} days late`).join('; ')}.
             </p>
             <ul className="space-y-1">
               {lw.jobs.filter((j) => j.status.value !== 'will_run').map((j) => (
@@ -157,11 +164,12 @@ export default function Page() {
         <Card index={9} title="Supplier intake" sub="SRC-02 · one inbox, one WhatsApp number">
           <div className="p-4">
             <p className="figure text-[30px] leading-none">
-              {supplierDocuments.length}<span className="text-[15px] font-normal text-ink-3"> documents</span>
+              {ic.total}<span className="text-[15px] font-normal text-ink-3"> documents</span>
             </p>
-            <div className="mt-2 flex gap-2">
-              <Pill tone="good">{supplierDocuments.length - reviewQueue.length} auto-filed</Pill>
-              <Pill tone="warn">{reviewQueue.length} in review</Pill>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Pill tone="good">{ic.auto} auto-filed</Pill>
+              <Pill tone={ic.review ? 'warn' : 'good'}>{ic.review} in review</Pill>
+              {ic.escalated > 0 && <Pill tone="critical">{ic.escalated} escalated</Pill>}
             </div>
             <p className="mt-3 text-[12.5px] leading-relaxed text-ink-2">
               Ships first, because it needs no historical data and no ERP — only an inbox — and it

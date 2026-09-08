@@ -24,9 +24,11 @@ export function RowActions({ row, size = 'sm' }: { row: DerivedRow; size?: 'sm' 
       expedited: 'Expedite drafted', deferred: 'Set aside',
     }
     return (
-      <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11.5px] text-ink-2">
+      <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11.5px] text-ink-2"
+            title="Decided lines keep the figures they were decided on — a later rate or policy change never alters them (§7).">
         <span aria-hidden className="size-1.5 rounded-full bg-good" />
         {label[decided.decision] ?? decided.decision}
+        <span className="mono text-[10px] text-ink-3">· figures frozen</span>
       </span>
     )
   }

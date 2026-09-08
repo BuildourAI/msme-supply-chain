@@ -6,6 +6,7 @@ import { Inspector } from '@/components/ui/Inspector'
 import { TopNav } from './TopNav'
 import { Segmented } from '@/components/ui/bits'
 import { crossfadeTheme } from '@/components/ui/motion'
+import { DeskProvider } from '@/components/desk/store'
 
 function ActivityDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { audit } = useApp()
@@ -119,5 +120,8 @@ function Chrome({ children }: { children: React.ReactNode }) {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  return <AppProvider><Chrome>{children}</Chrome></AppProvider>
+  // The desk's state lives at the shell so a decision, a supplier choice or a
+  // confirmed alias survives moving between pages — "from then on" has to mean
+  // from then on, not until the next click on the nav.
+  return <AppProvider><DeskProvider><Chrome>{children}</Chrome></DeskProvider></AppProvider>
 }

@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { PageHeader, TabStrip } from '@/components/shell/PageHeader'
 import { Button, Card, Pill, Segmented, StatusPill } from '@/components/ui/bits'
 import { Num } from '@/components/ui/Num'
-import { DeskProvider, useDesk } from '@/components/desk/store'
+import { useDesk } from '@/components/desk/store'
 import { KpiTile } from '@/components/desk/KpiRow'
 import { DetailTable, SummaryTable } from '@/components/desk/Src01Table'
 import { BlockedCapital, GuardrailPanel, IntakeQueue, LandedCostCompare } from '@/components/desk/Panels'
@@ -252,5 +252,5 @@ function Desk() {
 }
 
 export default function Page() {
-  return <DeskProvider><Desk /></DeskProvider>
+  return <Desk />
 }

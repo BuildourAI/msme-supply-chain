@@ -7,6 +7,8 @@ import { describe, expect, it } from 'vitest'
 import { buildRows, deskKpis, needsDecision, type SeedBundle } from '@/lib/domain/derive'
 import { DEFAULT_POLICY } from '@/lib/domain/policy'
 import * as S from '@/lib/seed/sourcing'
+import { blockedStock } from '@/lib/seed/blocked'
+import { reviewQueue, supplierDocuments } from '@/lib/seed/intake'
 
 const seed: SeedBundle = {
   today: S.TODAY_SOURCING,
@@ -224,6 +226,46 @@ describe('§7 · changing the supplier re-prices the line without moving the reo
   })
   it('and the premium over the recommendation is named', () =>
     expect(after.premiumPerUnit!.value).toBeGreaterThan(0))
+})
+
+describe('§9.1 · blocked capital foots on both marginals', () => {
+  it('₹18.4 L in total', () => expect(blockedStock.reduce((a, b) => a + b.value, 0)).toBe(1_840_000))
+  it('by age: 0–90 ₹6.2 L · 90–180 ₹5.1 L · 180+ ₹7.1 L', () => {
+    const by = (k: string) => blockedStock.filter((b) => b.ageBucket === k).reduce((a, b) => a + b.value, 0)
+    expect([by('0_90'), by('90_180'), by('over_180')]).toEqual([620_000, 510_000, 710_000])
+  })
+  it('by cause: MOQ ₹5.8 L · spec ₹4.6 L · over-buy ₹3.9 L · cancelled ₹2.4 L · wrong ₹1.7 L', () => {
+    const by = (k: string) => blockedStock.filter((b) => b.cause === k).reduce((a, b) => a + b.value, 0)
+    expect(['moq_forced', 'spec_change', 'over_buy', 'cancelled_order', 'wrong_purchase'].map(by))
+      .toEqual([580_000, 460_000, 390_000, 240_000, 170_000])
+  })
+})
+
+describe('§9.1 · intake — 14 documents, 11 auto-filed, 3 in review', () => {
+  it('counts come from document status, not subtraction', () => {
+    expect(supplierDocuments).toHaveLength(14)
+    expect(supplierDocuments.filter((d) => d.status === 'auto')).toHaveLength(11)
+    expect(supplierDocuments.filter((d) => d.status === 'pending')).toHaveLength(3)
+    expect(reviewQueue).toHaveLength(3)
+  })
+  it('the teaching case is in the queue with a suggested match and a confidence', () => {
+    const l = reviewQueue.find((x) => x.rawItemText === 'TERMINAL BLK CERAMIC 2WAY 30A')!
+    expect(l.suggestedItemId).toBe('CM-TRB-2W')
+    expect(l.confidence).toBeGreaterThan(0.5)
+  })
+})
+
+describe('§5 · a quoted lead time is a promise; the receipts are the record', () => {
+  it('at least one recommended vendor quotes shorter than it delivers', () => {
+    const drift = rows.map((r) => r.leadTime.value - r.chosen.vendorItem.quotedLeadTimeDays)
+    expect(Math.max(...drift)).toBeGreaterThan(0)
+  })
+  it('and the reorder point still runs on the receipts, never the quote', () => {
+    for (const r of rows) {
+      expect(r.reorderPoint.value)
+        .toBe(Math.round((r.item.avgDailyConsumption * r.leadTime.value + r.item.safetyStock) * 1000) / 1000)
+    }
+  })
 })
 
 /* ========================================================================== */

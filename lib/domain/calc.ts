@@ -36,11 +36,6 @@ const D = <T>(
 
 /* ---------------------------------------------------------------- constants */
 
-/** §5 — configurable per item class. §13-3 flags 15 as a guess. */
-export const DEFAULT_CYCLE_DAYS = 15
-export const DEFAULT_INBOUND_QC_DAYS = 2
-export const DEFAULT_BUFFER_DAYS = 3
-
 /* ----------------------------------------------------------------- formulas */
 
 /** reorder_point = avg_daily_consumption × vendor_lead_time + safety_stock */

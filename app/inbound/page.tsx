@@ -5,7 +5,7 @@ import { Card, StatusPill } from '@/components/ui/bits'
 import { Num } from '@/components/ui/Num'
 import { buildRows, type SeedBundle } from '@/lib/domain/derive'
 import { DEFAULT_POLICY } from '@/lib/domain/policy'
-import { daysBetween } from '@/lib/domain/calc'
+import { addDays, daysBetween } from '@/lib/domain/calc'
 import * as S from '@/lib/seed/sourcing'
 import { qtyText, shortDate } from '@/lib/domain/format'
 
@@ -61,7 +61,7 @@ export default function Page() {
                 </div>
                 <p className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-ink-3">
                   <span>{l.status === 'in_transit' ? 'In transit' : 'Ordered, not despatched'} · arrives {shortDate(l.promisedDate)}</span>
-                  <span>issuable {shortDate(row.estimatedArrival.value > l.promisedDate ? l.promisedDate : l.promisedDate)} + {DEFAULT_POLICY.inboundQcDays} days QC</span>
+                  <span>issuable {shortDate(addDays(l.promisedDate, DEFAULT_POLICY.inboundQcDays))} after {DEFAULT_POLICY.inboundQcDays} days of inbound QC</span>
                   <span className="text-critical">line stops {shortDate(row.stockoutDate.value)}</span>
                   {l.earmarkedJobNo && <span>earmarked for {l.earmarkedJobNo} — not free stock</span>}
                 </p>

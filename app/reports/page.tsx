@@ -131,8 +131,8 @@ export default function Page() {
       <p className="mb-4 max-w-3xl text-[13.5px] leading-relaxed text-ink-2">
         Every figure quoted in the design document, recomputed live from the seed data by the same
         functions the dashboards render. Nothing here is a stored expected value — if a formula
-        changes, this page goes red before anyone notices on a dashboard. It is the reason a client
-        who checks one number against another finds them consistent.
+        changes, this page goes red before anyone notices on a dashboard. It checks the seed as
+        shipped, not the decisions you have made this session, so it stays a contract.
       </p>
 
       <div className="space-y-3">
@@ -156,9 +156,11 @@ export default function Page() {
                       const good = eq(c)
                       return (
                         <tr key={i} className="anim-fade-in border-b border-line-soft last:border-0">
-                          <td className="px-3 py-1.5">
-                            <span aria-label={good ? 'reconciles' : 'does not reconcile'}
-                              className={`inline-block size-2 rounded-full ${good ? 'bg-good' : 'bg-critical'}`} />
+                          <td className="whitespace-nowrap px-3 py-1.5">
+                            <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium ${good ? 'text-good' : 'text-critical'}`}>
+                              <span aria-hidden className={`inline-block size-2 rounded-full ${good ? 'bg-good' : 'bg-critical'}`} />
+                              {good ? 'reconciles' : 'differs'}
+                            </span>
                           </td>
                           <td className="mono whitespace-nowrap px-3 py-1.5">{c.label}</td>
                           <td className="px-3 py-1.5 text-[11.5px] text-ink-3">{c.source}</td>

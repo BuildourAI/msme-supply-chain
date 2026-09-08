@@ -136,8 +136,8 @@ export function buildRow(
   const coverDays = C.buyerCoverDays(u, item.avgDailyConsumption, uom)
   const stockoutDate = C.stockoutDate(seed.today, coverDays.value)
 
-  const inboundDates = poFor.map((l) => l.promisedDate).sort()
-  const earliestInboundEta = inboundDates[0] ?? null
+  const inboundSorted = [...poFor].sort((a, b) => a.promisedDate.localeCompare(b.promisedDate))
+  const earliestInboundEta = inboundSorted[0]?.promisedDate ?? null
   const status = C.buyerStatus(truePosition.value, reorderPoint.value, u, earliestInboundEta, stockoutDate.value)
   const reorderQty = C.reorderQty(
     reorderPoint.value, policy.cycleDays, item.avgDailyConsumption,
@@ -175,7 +175,7 @@ export function buildRow(
     item, usable, nonUsable,
     nonUsableReasons: nonUsableLots.map((l) => l.usabilityReason).filter(Boolean) as string[],
     inTransit, openPoQty, truePosition, leadTime, reorderPoint, coverDays, stockoutDate,
-    earliestInboundEta, inboundRefs: poFor.map((l) => l.poNo),
+    earliestInboundEta, inboundRefs: inboundSorted.map((l) => l.poNo),
     status, reorderQty, quotes, recommendedVendorId, chosenVendorId, chosen, premiumPerUnit,
     poCost, shipmentCost, otherCosts, landedTotal, estimatedArrival,
     coverageAfterMonths, held, nonUsableValue, flipsVendor,

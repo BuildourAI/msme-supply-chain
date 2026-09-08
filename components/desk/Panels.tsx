@@ -161,17 +161,17 @@ export function GuardrailPanel() {
 /* ------------------------------------------------------ SRC-02 · intake --- */
 
 export function IntakeQueue() {
-  const { state, reviewIntake } = useDesk()
+  const { state, reviewIntake, intakeCounts: c } = useDesk()
   const pending = reviewQueue.filter((l) => state.intake[l.id] === 'pending')
-  const auto = supplierDocuments.length - pending.length
 
   return (
     <Card id="intake" index={7} title="Supplier intake" sub="SRC-02 · one inbox, one WhatsApp number">
       <div className="p-4">
         <div className="mb-3 flex flex-wrap gap-2">
-          <Pill tone="neutral">{supplierDocuments.length} documents</Pill>
-          <Pill tone="good">{auto} auto-filed</Pill>
-          <Pill tone={pending.length ? 'warn' : 'good'}>{pending.length} in review</Pill>
+          <Pill tone="neutral">{c.total} documents</Pill>
+          <Pill tone="good">{c.auto} auto-filed</Pill>
+          <Pill tone={c.review ? 'warn' : 'good'}>{c.review} in review</Pill>
+          {c.escalated > 0 && <Pill tone="critical">{c.escalated} escalated to a person</Pill>}
         </div>
 
         {pending.length > 0 ? (
@@ -211,7 +211,7 @@ export function IntakeQueue() {
             Item alias table · {state.aliases.length} mappings
           </p>
           <ul className="mt-1.5 space-y-1">
-            {state.aliases.slice(0, 5).map((a, i) => (
+            {state.aliases.map((a, i) => (
               <li key={i} className="flex flex-wrap items-baseline gap-x-2 text-[11.5px]">
                 <span className="mono truncate text-ink-2">“{a.rawText}”</span>
                 <span aria-hidden className="text-ink-3">→</span>

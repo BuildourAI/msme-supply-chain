@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useMemo, useReducer } from 'rea
 import { buildRows, deskKpis, needsDecision, type DerivedRow, type SeedBundle } from '@/lib/domain/derive'
 import { DEFAULT_POLICY, type Policy } from '@/lib/domain/policy'
 import * as S from '@/lib/seed/sourcing'
-import { reviewQueue, seededAliases } from '@/lib/seed/intake'
+import { reviewQueue, seededAliases, supplierDocuments } from '@/lib/seed/intake'
 import { useApp } from '@/state/app-store'
 import { money } from '@/lib/domain/format'
 import type { BuyerStatus, Decision } from '@/lib/domain/types'
@@ -17,7 +17,18 @@ export const SEED: SeedBundle = {
 export type ViewMode = 'summary' | 'detail'
 export type SortCol = 'code' | 'position' | 'cover' | 'reorder' | 'value' | 'status'
 
-export interface DecisionRecord { decision: Decision; reason?: string; vendorName: string }
+/**
+ * §7 snapshot rule: a suggestion freezes the figures it was decided on. A later
+ * policy or rate change must never alter an approved line, so the decision
+ * carries the numbers as they stood, and the row renders from them thereafter.
+ */
+export type RowSnapshot = Pick<DerivedRow,
+  'reorderQty' | 'poCost' | 'shipmentCost' | 'otherCosts' | 'landedTotal' |
+  'coverageAfterMonths' | 'held' | 'chosen' | 'chosenVendorId' | 'estimatedArrival'>
+
+export interface DecisionRecord {
+  decision: Decision; reason?: string; vendorName: string; decidedAt: string; snapshot: RowSnapshot
+}
 
 interface State {
   selectedId: string
@@ -35,7 +46,7 @@ interface State {
 type Action =
   | { t: 'select'; id: string }
   | { t: 'vendor'; id: string; vendorId: string }
-  | { t: 'decide'; id: string; decision: Decision; reason?: string; vendorName: string }
+  | { t: 'decide'; id: string; record: DecisionRecord }
   | { t: 'view'; view: ViewMode }
   | { t: 'sort'; col: SortCol }
   | { t: 'query'; q: string }
@@ -58,7 +69,7 @@ function reducer(s: State, a: Action): State {
     case 'select': return { ...s, selectedId: a.id }
     case 'vendor': return { ...s, overrides: { ...s.overrides, [a.id]: a.vendorId } }
     case 'decide':
-      return { ...s, decisions: { ...s.decisions, [a.id]: { decision: a.decision, reason: a.reason, vendorName: a.vendorName } } }
+      return { ...s, decisions: { ...s.decisions, [a.id]: a.record } }
     case 'view': return { ...s, view: a.view }
     case 'sort':
       return { ...s, sort: { col: a.col, dir: s.sort.col === a.col && s.sort.dir === 'asc' ? 'desc' : 'asc' } }
@@ -80,9 +91,12 @@ const STATUS_RANK: Record<BuyerStatus, number> = {
   at_risk: 0, at_risk_late: 1, open_po_covers: 2, covered: 3,
 }
 
+export interface IntakeCounts { total: number; auto: number; review: number; escalated: number }
+
 interface Ctx {
   state: State
   rows: DerivedRow[]
+  intakeCounts: IntakeCounts
   visible: DerivedRow[]
   selected: DerivedRow
   kpis: ReturnType<typeof deskKpis>
@@ -107,10 +121,25 @@ export function DeskProvider({ children }: { children: React.ReactNode }) {
 
   // Rows are derived, never stored. Changing a vendor or a policy knob recomputes
   // the whole run from the seed — which is what makes every figure inspectable.
-  const rows = useMemo(
-    () => buildRows(SEED, state.policy, state.overrides),
-    [state.policy, state.overrides],
-  )
+  // A decided line is the exception by design (§7): it keeps the figures it was
+  // decided on, whatever the knobs do afterwards.
+  const rows = useMemo(() => {
+    const live = buildRows(SEED, state.policy, state.overrides)
+    return live.map((r) => {
+      const d = state.decisions[r.item.id]
+      return d ? { ...r, ...d.snapshot } : r
+    })
+  }, [state.policy, state.overrides, state.decisions])
+
+  // §8.2 — counts come from document status, never by subtraction: a rejected
+  // line is escalated to a person, it does not become "auto-filed".
+  const intakeCounts = useMemo<IntakeCounts>(() => {
+    const review = reviewQueue.filter((l) => state.intake[l.id] === 'pending').length
+    const confirmed = reviewQueue.filter((l) => state.intake[l.id] === 'confirmed').length
+    const escalated = reviewQueue.filter((l) => state.intake[l.id] === 'rejected').length
+    const autoDocs = supplierDocuments.filter((d) => d.status === 'auto').length
+    return { total: supplierDocuments.length, auto: autoDocs + confirmed, review, escalated }
+  }, [state.intake])
 
   // KPIs are computed over ALL rows, never the filtered view: filtering the table
   // must not change "4 lines need a decision" or the numbers stop meaning anything.
@@ -158,7 +187,16 @@ export function DeskProvider({ children }: { children: React.ReactNode }) {
   }, [log, say])
 
   const decide = useCallback((row: DerivedRow, decision: Decision, reason?: string) => {
-    dispatch({ t: 'decide', id: row.item.id, decision, reason, vendorName: row.chosen.vendor.name })
+    const snapshot: RowSnapshot = {
+      reorderQty: row.reorderQty, poCost: row.poCost, shipmentCost: row.shipmentCost,
+      otherCosts: row.otherCosts, landedTotal: row.landedTotal,
+      coverageAfterMonths: row.coverageAfterMonths, held: row.held, chosen: row.chosen,
+      chosenVendorId: row.chosenVendorId, estimatedArrival: row.estimatedArrival,
+    }
+    dispatch({ t: 'decide', id: row.item.id, record: {
+      decision, reason, vendorName: row.chosen.vendor.name,
+      decidedAt: new Date().toISOString(), snapshot,
+    } })
     const verb: Record<string, string> = {
       approved: 'Draft PO raised', held: 'Held', overridden: 'Guardrail overridden',
       expedited: 'Expedite requested', deferred: 'Deferred',
@@ -198,7 +236,7 @@ export function DeskProvider({ children }: { children: React.ReactNode }) {
   }, [log, say])
 
   const value: Ctx = {
-    state, rows, visible, selected, kpis, select, chooseVendor, decide, reviewIntake,
+    state, rows, visible, selected, kpis, intakeCounts, select, chooseVendor, decide, reviewIntake,
     setView: (v) => dispatch({ t: 'view', view: v }),
     toggleSort: (c) => dispatch({ t: 'sort', col: c }),
     setQuery: (q) => dispatch({ t: 'query', q }),

@@ -236,6 +236,11 @@ export function DetailTable() {
                 <td className="px-2.5 py-2">
                   <StatusPill label={STATUS_LABEL[r.status.value]} tone={STATUS_TONE[r.status.value]}
                               explain={r.status.note} />
+                  {r.held.value && (
+                    <span className="mt-1 block text-[10.5px] leading-tight text-warn">
+                      held · {r.coverageAfterMonths.value} mo cover
+                    </span>
+                  )}
                 </td>
                 <td className="px-2.5 py-2" onClick={(e) => e.stopPropagation()}>
                   <RowActions row={r} />
