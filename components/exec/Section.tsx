@@ -34,7 +34,7 @@ const PROVENANCE_TITLE: Record<Provenance, string> = {
   illustrative: 'Nothing in this build measures this. The figure is made up; the tile says what would have to be captured to make it real.',
 }
 
-function ExecTile({ k, index }: { k: Kpi; index: number }) {
+function ExecTile({ k, index, chart }: { k: Kpi; index: number; chart?: React.ReactNode }) {
   const tone: Tone | undefined =
     k.provenance === 'illustrative' ? undefined
       : k.meetsTarget === true ? 'good'
@@ -60,7 +60,12 @@ function ExecTile({ k, index }: { k: Kpi; index: number }) {
       </p>
 
       <p className="mt-1 text-[11.5px] leading-snug text-ink-3">{k.caption}</p>
-      <p className="mt-2 border-t border-line-soft pt-2 text-[11.5px] leading-relaxed text-ink-2">{k.meaning}</p>
+
+      {chart && <div className="mt-3 mb-3">{chart}</div>}
+
+      {/* mt-auto keeps the explanation on the tile's floor, so a row of tiles
+          with charts of different heights still lines its footers up */}
+      <p className="mt-auto border-t border-line-soft pt-2.5 text-[11.5px] leading-relaxed text-ink-2">{k.meaning}</p>
       {k.needs && (
         <p className="mt-1.5 text-[11px] leading-relaxed text-warn">
           <span className="font-medium">Needs:</span> {k.needs}
@@ -70,8 +75,10 @@ function ExecTile({ k, index }: { k: Kpi; index: number }) {
   )
 }
 
-export function ExecSection({ no, title, blurb, kpis, index = 0, children }: {
+export function ExecSection({ no, title, blurb, kpis, charts, index = 0, children }: {
   no: number; title: string; blurb: string; kpis: Kpi[]; index?: number
+  /** one chart per KPI id — a KPI with no entry keeps its bare headline figure */
+  charts?: Record<string, React.ReactNode>
   children?: React.ReactNode
 }) {
   const counts = kpis.reduce<Record<string, number>>((a, k) => {
@@ -90,7 +97,7 @@ export function ExecSection({ no, title, blurb, kpis, index = 0, children }: {
           ) : null)}
       </div>}>
       <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-4">
-        {kpis.map((k, i) => <ExecTile key={k.id} k={k} index={i} />)}
+        {kpis.map((k, i) => <ExecTile key={k.id} k={k} index={i} chart={charts?.[k.id]} />)}
       </div>
       {children}
     </Card>

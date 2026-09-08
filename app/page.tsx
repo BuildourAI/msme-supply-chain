@@ -20,6 +20,7 @@ import { useInbound } from '@/components/inbound/store'
 import * as X from '@/lib/domain/exec'
 import { ASSUMPTIONS, A } from '@/lib/seed/exec'
 import { AssumptionLedger, ExecSection, ProvenanceChip } from '@/components/exec/Section'
+import { execCharts } from '@/components/exec/charts'
 
 const seed: SeedBundle = {
   today: S.TODAY_SOURCING, items: S.items, vendors: S.vendors, vendorItems: S.vendorItems,
@@ -68,7 +69,7 @@ const causeRows = (() => {
 export default function Page() {
   const decide = rows.filter(needsDecision)
   const { intakeCounts: ic, kpis: deskKpi } = useDesk()
-  const { lossRows, stockRows, offcutRows, netLoss } = useInventory()
+  const { lossRows, stockRows, offcutRows, netLoss, byCause } = useInventory()
   const { grns, challanRows } = useInbound()
   const halting = lw.jobs.filter((j) => j.status.value === 'will_halt').length
   const risky = lw.jobs.filter((j) => j.status.value === 'at_risk').length
@@ -119,6 +120,23 @@ export default function Page() {
     X.procurementCost(deskKpi.draftPoCount, rows.length),
   ]
   const inFreight = X.inboundFreight(rows)
+
+  /* One picture per KPI, off the same figures the tiles quote — never a second
+     computation of the same thing, which is how a chart and its headline drift
+     apart. Freight per unit shipped is deliberately left unillustrated. */
+  const charts = execCharts({
+    grns, rows, poLines: S.poLines, today: seed.today,
+    jobs: lw.jobs.map((j) => ({ jobNo: j.job.jobNo, product: j.job.product, status: j.status.value })),
+    byCause,
+    rmValue: usableValue, wipValue: jobworkValue, fgValue: A.finishedGoodsValue,
+    nonUsableValue: deskKpi.nonUsableValue.value,
+    dio: dioKpi.d.value, dso: A.dsoDays, dpo: S.vendors[0].paymentTermsDays,
+    procurementPerPo: A.procurementCostPerPo,
+    holdingRatePct: A.holdingRatePctPerMonth,
+    customerOtifPct: A.customerOtifPct,
+    fulfilmentCycleDays: A.fulfilmentCycleDays,
+    rmaRatePct: A.rmaRatePct,
+  })
   const all16 = [...inbound, ...warehouse, ...outbound, ...financial]
   const mix = {
     derived: all16.filter((k) => k.provenance === 'derived').length,
@@ -157,11 +175,13 @@ export default function Page() {
         An <ProvenanceChip p="illustrative" /> number is made up, and the tile says what would have to
         start being recorded to make it real — §2 puts Stage 5 out of scope, so every outbound figure
         is illustrative by construction. Sixteen figures where some are measured and some are assumed,
-        with nothing to tell them apart, would be worse than eight measured ones.
+        with nothing to tell them apart, would be worse than eight measured ones. The charts say it
+        again where the eye actually goes: <strong className="text-ink">a hatched fill is a made-up
+        number</strong>, a solid one is measured.
       </p>
 
       <div className="mb-4 space-y-3">
-        <ExecSection no={1} index={0} title="Inbound procurement" kpis={inbound}
+        <ExecSection no={1} index={0} title="Inbound procurement" kpis={inbound} charts={charts}
           blurb="Supplier efficiency and risk — whether the people you buy from can be relied on to keep the line fed">
           <p className="border-t border-line-soft px-4 py-3 text-[12px] leading-relaxed text-ink-2">
             <strong className="text-ink">Two different promises, and the gap between them is the point.</strong>{' '}
@@ -177,10 +197,10 @@ export default function Page() {
           </p>
         </ExecSection>
 
-        <ExecSection no={2} index={1} title="Warehouse & inventory health" kpis={warehouse}
+        <ExecSection no={2} index={1} title="Warehouse & inventory health" kpis={warehouse} charts={charts}
           blurb="Whether the cash is rotting on shelves, or the line is about to stop" />
 
-        <ExecSection no={3} index={2} title="Outbound fulfilment" kpis={outbound}
+        <ExecSection no={3} index={2} title="Outbound fulfilment" kpis={outbound} charts={charts}
           blurb="Delivery to customers — scoped but not built, so every figure here is illustrative">
           <p className="border-t border-line-soft px-4 py-3 text-[12px] leading-relaxed text-ink-2">
             <strong className="text-ink">Nothing in this build ships anything.</strong> §2 scopes it to
@@ -191,7 +211,7 @@ export default function Page() {
           </p>
         </ExecSection>
 
-        <ExecSection no={4} index={3} title="Supply chain financials" kpis={financial}
+        <ExecSection no={4} index={3} title="Supply chain financials" kpis={financial} charts={charts}
           blurb="Cash flow and cost — every supply-chain decision lands on the runway">
           <p className="border-t border-line-soft px-4 py-3 text-[12px] leading-relaxed text-ink-2">
             <strong className="text-ink">The freight half that IS measured:</strong> inbound freight on
