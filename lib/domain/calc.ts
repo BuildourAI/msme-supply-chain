@@ -115,13 +115,16 @@ export function buyerCoverDays(usable: number, avgDailyConsumption: number, unit
 export function trailingLeadTimeDays(
   receipts: { orderedOn: string; receivedOn: string }[], quoted?: number,
 ): Derived {
-  const spans = receipts.map((r) => daysBetween(r.orderedOn, r.receivedOn))
+  // The last six by receipt date — older history is deliberately ignored (§5).
+  const lastSix = [...receipts]
+    .sort((a, b) => b.receivedOn.localeCompare(a.receivedOn)).slice(0, 6).reverse()
+  const spans = lastSix.map((r) => daysBetween(r.orderedOn, r.receivedOn))
   const mean = spans.length ? round(spans.reduce((a, b) => a + b, 0) / spans.length, 2) : 0
   return D(
     mean, 'Vendor lead time',
     'mean(last 6 actual receipts: received_on − ordered_on)',
     [
-      ...receipts.map((r, i) => ({
+      ...lastSix.map((r, i) => ({
         name: `receipt ${i + 1}`, value: `${r.orderedOn} → ${r.receivedOn}`,
         unit: `${spans[i]} days`,
       })),

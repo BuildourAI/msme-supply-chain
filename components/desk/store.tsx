@@ -24,7 +24,7 @@ export type SortCol = 'code' | 'position' | 'cover' | 'reorder' | 'value' | 'sta
  */
 export type RowSnapshot = Pick<DerivedRow,
   'reorderQty' | 'poCost' | 'shipmentCost' | 'otherCosts' | 'landedTotal' |
-  'coverageAfterMonths' | 'held' | 'chosen' | 'chosenVendorId' | 'estimatedArrival'>
+  'coverageAfterMonths' | 'held' | 'chosen' | 'chosenVendorId' | 'estimatedArrival' | 'orderBy'>
 
 export interface DecisionRecord {
   decision: Decision; reason?: string; vendorName: string; decidedAt: string; snapshot: RowSnapshot
@@ -201,7 +201,7 @@ export function DeskProvider({ children }: { children: React.ReactNode }) {
       reorderQty: row.reorderQty, poCost: row.poCost, shipmentCost: row.shipmentCost,
       otherCosts: row.otherCosts, landedTotal: row.landedTotal,
       coverageAfterMonths: row.coverageAfterMonths, held: row.held, chosen: row.chosen,
-      chosenVendorId: row.chosenVendorId, estimatedArrival: row.estimatedArrival,
+      chosenVendorId: row.chosenVendorId, estimatedArrival: row.estimatedArrival, orderBy: row.orderBy,
     }
     dispatch({ t: 'decide', id: row.item.id, record: {
       decision, reason, vendorName: row.chosen.vendor.name,

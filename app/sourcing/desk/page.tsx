@@ -144,7 +144,7 @@ function PolicyTab() {
   const p = state.policy
   const knobs = [
     { k: 'inboundQcDays' as const, label: 'INBOUND_QC_DAYS', help: 'Days between goods arriving and being issuable. Received is not the same as usable.', min: 0, max: 7, step: 1 },
-    { k: 'bufferDays' as const, label: 'BUFFER_DAYS', help: 'Slack built into the order-by date (§5 order_by_date). Shown on each line’s arrival inspector; it does not move a reorder quantity.', min: 0, max: 10, step: 1 },
+    { k: 'bufferDays' as const, label: 'BUFFER_DAYS', help: 'Slack built into each line’s order-by date (§5 order_by_date) — see Full detail → Est. arrival. It does not move a reorder quantity.', min: 0, max: 10, step: 1 },
   ]
   const allCycle = new Set(Object.values(p.cycleDays)).size === 1 ? p.cycleDays.A : null
   return (

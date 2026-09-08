@@ -1,16 +1,16 @@
 'use client'
 import { useApp } from '@/state/app-store'
 import { lakh, money, num, type Tone } from '@/lib/domain/format'
-import { longDate } from '@/lib/domain/format'
+import { longDate, shortDate } from '@/lib/domain/format'
 import { TONE_FG } from './bits'
 import { useAnimatedNumber, useFlash } from './motion'
 import type { Derived } from '@/lib/domain/types'
 
-export type NumFormat = 'qty' | 'money' | 'lakh' | 'days' | 'months' | 'date' | 'int' | 'raw'
+export type NumFormat = 'qty' | 'money' | 'lakh' | 'days' | 'months' | 'date' | 'shortdate' | 'int' | 'raw'
 
 export function formatDerived(d: Derived<unknown>, format: NumFormat, dp?: number): string {
   const v = d.value
-  if (typeof v === 'string') return format === 'date' ? longDate(v) : v
+  if (typeof v === 'string') return format === 'date' ? longDate(v) : format === 'shortdate' ? shortDate(v) : v
   if (typeof v === 'boolean') return v ? 'Yes' : 'No'
   const n = v as number
   if (!Number.isFinite(n)) return '—'

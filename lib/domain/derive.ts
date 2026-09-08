@@ -44,6 +44,7 @@ export interface DerivedRow {
   otherCosts: Derived
   landedTotal: Derived
   estimatedArrival: Derived<string>
+  orderBy: Derived<string>
   coverageAfterMonths: Derived
   held: Derived<boolean>
   nonUsableValue: Derived
@@ -162,6 +163,12 @@ export function buildRow(
         ], '₹/unit')
 
   const estimatedArrival = C.estimatedArrival(seed.today, chosen.leadTime.value, policy.inboundQcDays)
+  // §5 order_by_date, with the stockout date standing in for need_date: the last
+  // day an order can go out and still land before the line runs dry.
+  const orderBy: Derived<string> = {
+    ...C.orderByDate(stockoutDate.value, chosen.leadTime.value, policy.inboundQcDays, policy.bufferDays),
+    note: 'need_date is taken as the stockout date. A date already in the past means ordering today is too late — expedite or accept the gap.',
+  }
   const coverageAfterMonths = C.coverageAfterReceiptMonths(u, inTransitQty, openQty, q, item.avgDailyConsumption)
   const held = C.heldByGuardrail(q, coverageAfterMonths.value, policy.coverageCeiling[item.itemClass])
 
@@ -202,7 +209,7 @@ export function buildRow(
     inTransit, openPoQty, truePosition, leadTime, reorderPoint, coverDays, stockoutDate,
     earliestInboundEta, inboundRefs: inboundSorted.map((l) => l.poNo),
     status, reorderQty, quotes, recommendedVendorId, chosenVendorId, chosen, premiumPerUnit,
-    poCost, shipmentCost, otherCosts, landedTotal, estimatedArrival,
+    poCost, shipmentCost, otherCosts, landedTotal, estimatedArrival, orderBy,
     coverageAfterMonths, held, nonUsableValue, flipsVendor, aboveLastPurchase, needsOwnerSignoff,
   }
 }

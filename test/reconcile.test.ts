@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildRows, deskKpis, needsDecision, type SeedBundle } from '@/lib/domain/derive'
 import { DEFAULT_POLICY } from '@/lib/domain/policy'
+import { trailingLeadTimeDays } from '@/lib/domain/calc'
 import * as S from '@/lib/seed/sourcing'
 import { blockedStock } from '@/lib/seed/blocked'
 import { resolveAlias, reviewQueue, seededAliases, supplierDocuments } from '@/lib/seed/intake'
@@ -285,6 +286,33 @@ describe('§11 · the sign-off triggers the data can evaluate', () => {
   it('the element tube order is above the owner’s ₹2 L threshold; the nichrome one is not', () => {
     expect(row('EL-TUB-INC85').needsOwnerSignoff.value).toBe(true)
     expect(row('RM-NCR-8020').needsOwnerSignoff.value).toBe(false)
+  })
+})
+
+describe('§5 · order_by_date reaches the desk', () => {
+  it('MgO must have been ordered on 24 Aug to land before its 10 Sep stockout — so Expedite is the only move', () => {
+    expect(row('RM-MGO-EG').orderBy.value).toBe('2026-08-24')
+    expect(row('RM-MGO-EG').orderBy.value < S.TODAY_SOURCING).toBe(true)
+  })
+  it('moving BUFFER_DAYS moves every order-by date and nothing else', () => {
+    const wide = buildRows(seed, { ...DEFAULT_POLICY, bufferDays: 10 })
+    for (const r of wide) {
+      const base = row(r.item.code)
+      expect(r.orderBy.value < base.orderBy.value).toBe(true)
+      expect(r.reorderQty.value).toBe(base.reorderQty.value)
+    }
+  })
+})
+
+describe('§5 · the LAST six receipts, not all of them', () => {
+  it('older history is ignored', () => {
+    const mk = (o: string, r: string) => ({ orderedOn: o, receivedOn: r })
+    const history = [
+      mk('2026-01-01', '2026-01-31'), mk('2026-02-01', '2026-03-03'),   // two slow, old receipts (30 days)
+      mk('2026-04-01', '2026-04-08'), mk('2026-05-01', '2026-05-08'), mk('2026-06-01', '2026-06-08'),
+      mk('2026-07-01', '2026-07-08'), mk('2026-08-01', '2026-08-08'), mk('2026-08-20', '2026-08-27'),
+    ]
+    expect(trailingLeadTimeDays(history).value).toBe(7)
   })
 })
 

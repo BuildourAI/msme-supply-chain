@@ -5,7 +5,7 @@ import { StatusPill } from '@/components/ui/bits'
 import { money, qtyText, shortDate, STATUS_LABEL, STATUS_TONE } from '@/lib/domain/format'
 import { VendorSelect } from './VendorSelect'
 import { OrderValue, RowActions } from './RowActions'
-import { useDesk, type SortCol } from './store'
+import { SEED, useDesk, type SortCol } from './store'
 
 function Th({ children, col, right, sticky }: {
   children: React.ReactNode; col?: SortCol; right?: boolean; sticky?: boolean
@@ -231,6 +231,11 @@ export function DetailTable() {
                   </span>
                   <span className="mono block text-[10px] text-ink-3">
                     stock out {shortDate(r.stockoutDate.value)}
+                  </span>
+                  <span className="mono block text-[10px] text-ink-3">
+                    order by{' '}
+                    <Num d={r.orderBy} format="shortdate" size="sm"
+                         tone={r.orderBy.value < SEED.today ? 'critical' : undefined} />
                   </span>
                 </td>
                 <td className="px-2.5 py-2">
