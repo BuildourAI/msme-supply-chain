@@ -14,6 +14,22 @@ import { lakh, money, num } from '@/lib/domain/format'
  * anyway.
  */
 
+/**
+ * Hatching marks an invented or not-yet-available series. One pattern for the
+ * whole app: a light wash of the series colour with a 45° stripe over it, so
+ * a made-up bar cannot pass for a measured one at a glance. Every chart keeps
+ * its own <defs> and a useId-derived id, because a url(#…) must resolve inside
+ * the document it is painted in.
+ */
+export function Hatch({ id, color }: { id: string; color: string }) {
+  return (
+    <pattern id={id} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="4" height="4" fill={color} opacity="0.22" />
+      <line x1="0" y1="0" x2="0" y2="4" stroke={color} strokeWidth="1.7" />
+    </pattern>
+  )
+}
+
 export const CAT = ['var(--cat-1)', 'var(--cat-2)', 'var(--cat-3)', 'var(--cat-4)', 'var(--cat-5)']
 export const SEQ = ['var(--seq-2)', 'var(--seq-3)', 'var(--seq-4)', 'var(--seq-5)']
 
@@ -89,7 +105,7 @@ export function StackedBars({ rows, keys, format = 'money', max }: {
               {r.sub && <span className="mono text-[10.5px] text-ink-3">{r.sub}</span>}
               <span className="num ml-auto text-[13px] font-semibold text-ink">{fmt(r.total)}</span>
             </div>
-            <div className="anim-reveal flex h-4 w-full overflow-hidden rounded-[4px] bg-surface-2"
+            <div className="anim-reveal flex h-4 w-full overflow-hidden rounded-md bg-surface-2"
                  style={{ width: `${Math.max(4, (r.total / top) * 100)}%`, '--i': ri } as React.CSSProperties}>
               {r.segments.map((s, i) => {
                 const w = r.total > 0 ? (s.value / r.total) * 100 : 0
@@ -111,32 +127,36 @@ export function StackedBars({ rows, keys, format = 'money', max }: {
         )
       })}
 
+      {/* seven numeric columns cannot shrink below their digits; on a phone
+          the table scrolls inside the card rather than pushing the card wide */}
+      <div className="overflow-x-auto">
       <table className="mt-3 w-full border-collapse text-[12px]">
-        <thead>
-          <tr className="border-b border-line text-ink-3">
-            <th className="py-1.5 pr-2 text-left font-medium">Supplier</th>
-            {keys.map((k, i) => (
-              <th key={k} className="py-1.5 pl-2 text-right font-medium">
-                <span aria-hidden className="mr-1 inline-block size-2 rounded-[2px] align-middle"
-                      style={{ background: CAT[i % CAT.length] }} />
-                {k}
-              </th>
-            ))}
-            <th className="py-1.5 pl-2 text-right font-medium">Landed</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.label} className="border-b border-line-soft last:border-0">
-              <td className="py-1.5 pr-2 text-ink-2">{r.label}</td>
-              {r.segments.map((s) => (
-                <td key={s.key} className="num py-1.5 pl-2 text-right">{s.inspect ?? fmt(s.value)}</td>
+          <thead>
+            <tr className="border-b border-line text-ink-3">
+              <th className="py-1.5 pr-2 text-left font-medium">Supplier</th>
+              {keys.map((k, i) => (
+                <th key={k} className="py-1.5 pl-2 text-right font-medium">
+                  <span aria-hidden className="mr-1 inline-block size-2 rounded-[2px] align-middle"
+                        style={{ background: CAT[i % CAT.length] }} />
+                  {k}
+                </th>
               ))}
-              <td className="num py-1.5 pl-2 text-right font-semibold">{fmt(r.total)}</td>
+              <th className="py-1.5 pl-2 text-right font-medium">Landed</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.label} className="border-b border-line-soft last:border-0">
+                <td className="py-1.5 pr-2 text-ink-2">{r.label}</td>
+                {r.segments.map((s) => (
+                  <td key={s.key} className="num py-1.5 pl-2 text-right">{s.inspect ?? fmt(s.value)}</td>
+                ))}
+                <td className="num py-1.5 pl-2 text-right font-semibold">{fmt(r.total)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -155,8 +175,8 @@ export function BarRows({ rows, format = 'lakh', colorMode = 'sequential' }: {
       {rows.map((r, i) => (
         <li key={r.label} className="grid grid-cols-[minmax(6.5rem,1fr)_2.2fr_auto] items-center gap-2.5">
           <span className="truncate text-[12px] text-ink-2" title={r.label}>{r.label}</span>
-          <span className="h-3.5 w-full rounded-[4px] bg-surface-2">
-            <span className="anim-reveal block h-full rounded-[4px]"
+          <span className="h-3.5 w-full rounded-md bg-surface-2">
+            <span className="anim-reveal block h-full rounded-md"
               style={{
                 width: `${Math.max(2, (r.value / top) * 100)}%`,
                 background: colorMode === 'categorical' ? CAT[i % CAT.length] : SEQ[Math.min(i, SEQ.length - 1)],
@@ -252,11 +272,7 @@ export function StockBar({ segments, uom }: { segments: StockSeg[]; uom: string 
            aria-label={shown.map((s) => `${s.label} ${s.value} ${uom}`).join(', ')}>
         <defs>
           {shown.filter((s) => s.hatched).map((s) => (
-            <pattern key={s.key} id={`h-${uid}-${s.key}`} width="3" height="3"
-                     patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <rect width="3" height="3" fill={s.color} opacity="0.28" />
-              <line x1="0" y1="0" x2="0" y2="3" stroke={s.color} strokeWidth="1.6" />
-            </pattern>
+            <Hatch key={s.key} id={`h-${uid}-${s.key}`} color={s.color} />
           ))}
         </defs>
         {(() => {
@@ -264,7 +280,7 @@ export function StockBar({ segments, uom }: { segments: StockSeg[]; uom: string 
           return shown.map((s) => {
             const w = total > 0 ? (s.value / total) * 100 : 0
             const el = (
-              <rect key={s.key} x={x} y="0" width={Math.max(0, w - 0.4)} height="6" rx="0.8"
+              <rect key={s.key} x={x} y="0" width={Math.max(0, w - 0.4)} height="6" rx="1.1"
                     fill={s.hatched ? `url(#h-${uid}-${s.key})` : s.color}>
                 <title>{`${s.label}: ${num(s.value, 2)} ${uom}`}</title>
               </rect>
@@ -277,10 +293,8 @@ export function StockBar({ segments, uom }: { segments: StockSeg[]; uom: string 
       <ul className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
         {shown.map((s) => (
           <li key={s.key} className="flex items-center gap-1.5 text-[11px] text-ink-2">
-            <span aria-hidden className="size-2.5 shrink-0 rounded-[2px]"
-              style={s.hatched
-                ? { background: `repeating-linear-gradient(45deg, ${s.color} 0 1.5px, transparent 1.5px 3px)`, border: `1px solid ${s.color}` }
-                : { background: s.color }} />
+            <span aria-hidden className={`size-2.5 shrink-0 rounded-[2px] ${s.hatched ? 'hatch' : ''}`}
+              style={s.hatched ? { '--hatch-c': s.color } as React.CSSProperties : { background: s.color }} />
             {s.label} <span className="num font-medium text-ink">{num(s.value, s.value < 10 ? 2 : 0)}</span>
           </li>
         ))}

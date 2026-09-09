@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { STAGES, type ModuleEntry } from '@/lib/seed/stages'
+import { TabIndicator, useSlidingIndicator } from '@/components/ui/Tabs'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/bits'
 
@@ -59,7 +60,6 @@ export function TopNav() {
   const [lock, setLock] = useState<{ label: string; lock: NonNullable<ModuleEntry['lock']> } | null>(null)
   const closeTimer = useRef<number | undefined>(undefined)
   const navRef = useRef<HTMLElement>(null)
-  const listRef = useRef<HTMLUListElement>(null)
   const triggers = useRef(new Map<string, HTMLLIElement>())
 
   const cancelClose = () => window.clearTimeout(closeTimer.current)
@@ -96,7 +96,7 @@ export function TopNav() {
       if (navRef.current && !navRef.current.contains(e.target as Node)) setOpen(null)
     }
     // scrolling the strip would leave the panel pointing at the wrong item
-    const list = listRef.current
+    const list = ink.track.current
     const onScroll = () => setOpen(null)
     document.addEventListener('keydown', onKey)
     document.addEventListener('mousedown', onClick)
@@ -110,29 +110,30 @@ export function TopNav() {
 
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' : pathname.startsWith(href)
+  // the one accent rule under the strip slides to whichever stage you are in
+  const activeLabel = NAV.find((n) => isActive(n.href))?.label
+  const ink = useSlidingIndicator<string, HTMLUListElement>(activeLabel)
 
   const openItem = NAV.find((n) => n.label === open)
   const entries = openItem?.children ? [...openItem.children].sort((a, b) => rank(a) - rank(b)) : []
 
   return (
     <>
-      <nav ref={navRef} aria-label="Main" className="relative border-b border-line bg-surface">
-        <ul ref={listRef} className="scroll-x flex items-stretch overflow-x-auto px-2">
+      <nav ref={navRef} aria-label="Main" className="relative">
+        <ul ref={ink.track} className="scroll-x relative flex items-stretch overflow-x-auto px-2">
           {NAV.map((item) => {
             const active = isActive(item.href)
             const expanded = open === item.label
             return (
               <li key={item.label} className="shrink-0"
-                  ref={(el) => { if (el) triggers.current.set(item.label, el) }}
+                  ref={(el) => { if (el) triggers.current.set(item.label, el); ink.register(item.label)(el) }}
                   onMouseEnter={() => { if (item.children) { cancelClose(); setOpen(item.label) } }}
                   onMouseLeave={() => { if (item.children) scheduleClose() }}>
                 <div className="flex items-stretch">
                   <Link href={item.href}
                     aria-current={active ? 'page' : undefined}
-                    className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-[13px] font-medium transition-colors ${
-                      active
-                        ? 'border-accent text-ink'
-                        : 'border-transparent text-ink-2 hover:text-ink'}`}>
+                    className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 border-transparent px-3 py-2.5 text-[13px] font-medium transition-colors ${
+                      active ? 'text-ink' : 'text-ink-2 hover:text-ink'}`}>
                     {item.label}
                   </Link>
                   {item.children && (
@@ -143,8 +144,8 @@ export function TopNav() {
                       onKeyDown={(e) => {
                         if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(item.label) }
                       }}
-                      className={`-ml-2 border-b-2 pr-2 pl-0.5 transition-colors ${
-                        active ? 'border-accent text-ink' : 'border-transparent text-ink-3 hover:text-ink'}`}>
+                      className={`-ml-2 border-b-2 border-transparent pr-2 pl-0.5 transition-colors ${
+                        active ? 'text-ink' : 'text-ink-3 hover:text-ink'}`}>
                       <Caret />
                     </button>
                   )}
@@ -152,19 +153,24 @@ export function TopNav() {
               </li>
             )
           })}
+          <TabIndicator pos={ink.pos} settled={ink.settled} />
         </ul>
 
         {openItem && entries.length > 0 && (
           <div role="menu" aria-label={openItem.label}
             onMouseEnter={cancelClose} onMouseLeave={scheduleClose}
             style={{ left, width: PANEL_W }}
-            className="anim-drop absolute top-full z-40 rounded-b-lg border border-t-0 border-line bg-surface py-1.5 shadow-xl">
+            // Not glass, deliberately: this panel lives inside the blurred
+            // header, and a backdrop-filter inside a backdrop-filter only sees
+            // its parent's contents — the page beneath would show through
+            // sharp. A near-solid surface is what a menu should be anyway.
+            className="anim-drop absolute top-full z-40 rounded-b-xl border border-t-0 border-line bg-surface/[.97] py-1.5 shadow-xl">
             {entries.map((m, i, all) =>
               m.href ? (
                 <div key={m.label}>
                   <Link href={m.href} role="menuitem"
                     onClick={() => setOpen(null)}
-                    className="block px-3.5 py-1.5 hover:bg-surface-2">
+                    className="press mx-1 block rounded-md px-2.5 py-1.5 hover:bg-accent-soft/50">
                     <span className={`block truncate text-[13px] font-medium ${
                       m.label === PAINKILLERS ? 'text-accent' : 'text-ink'}`}>{m.label}</span>
                   </Link>
@@ -180,7 +186,7 @@ export function TopNav() {
                   <button type="button" role="menuitem"
                     aria-label={`${m.label} — not available yet, opens an explanation`}
                     onClick={() => { setOpen(null); setLock({ label: m.label, lock: m.lock! }) }}
-                    className="flex w-full items-center gap-2 px-3.5 py-1.5 text-left hover:bg-surface-2">
+                    className="press mx-1 flex w-[calc(100%-0.5rem)] items-center gap-2 rounded-md px-2.5 py-1.5 text-left hover:bg-surface-2">
                     <span className="text-[13px] text-ink-3">{m.label}</span>
                     <span className="ml-auto flex items-center gap-1.5 text-ink-3">
                       <span className="mono text-[10px] uppercase tracking-wide">

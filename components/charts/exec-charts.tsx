@@ -1,4 +1,5 @@
 'use client'
+import { Hatch } from './kit'
 import { useId } from 'react'
 import { money, num } from '@/lib/domain/format'
 
@@ -24,15 +25,6 @@ import { money, num } from '@/lib/domain/format'
 
 export const ILLUS_NOTE = 'Hatched fill means the figure is illustrative — nothing in this build measures it.'
 
-/** Hatching marks an invented series, on top of the dashed card border. */
-function Hatch({ id, color }: { id: string; color: string }) {
-  return (
-    <pattern id={id} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-      <rect width="4" height="4" fill={color} opacity="0.22" />
-      <line x1="0" y1="0" x2="0" y2="4" stroke={color} strokeWidth="1.7" />
-    </pattern>
-  )
-}
 
 const TONE: Record<string, string> = {
   good: 'var(--good)', warn: 'var(--warn)', critical: 'var(--critical)', accent: 'var(--accent)',
@@ -60,8 +52,8 @@ export function Meter({ value, max, target, targetLabel, tone = 'accent', hatche
       <svg viewBox="0 0 100 8" preserveAspectRatio="none" className="h-3.5 w-full" role="img"
            aria-label={`${num(value, 1)}${unit} of ${num(max, 0)}${unit}${target != null ? `, target ${num(target, 1)}${unit}` : ''}`}>
         <defs>{hatched && <Hatch id={`m-${uid}`} color={col} />}</defs>
-        <rect x="0" y="0" width="100" height="8" rx="1.2" fill="var(--surface-3)" />
-        <rect x="0" y="0" width={w} height="8" rx="1.2" fill={hatched ? `url(#m-${uid})` : col}
+        <rect x="0" y="0" width="100" height="8" rx="1.5" fill="var(--surface-3)" />
+        <rect x="0" y="0" width={w} height="8" rx="1.5" fill={hatched ? `url(#m-${uid})` : col}
               className="anim-reveal">
           <title>{`${num(value, 2)}${unit}`}</title>
         </rect>
@@ -214,6 +206,9 @@ export function Donut({ segments, centre, centreSub, foot }: {
         <defs>{segments.map((s, i) => s.hatched
           ? <Hatch key={i} id={`d-${uid}-${i}`} color={s.color} /> : null)}</defs>
         <g transform="rotate(-90 50 50)">
+          {/* the spin-in lives on an inner group: a CSS transform on the rotated
+              group itself would replace the attribute rotation */}
+          <g className="anim-donut">
           {segments.map((s, i) => {
             const frac = s.value / total
             // a 2px surface gap between fills, as adjacent segments require
@@ -228,6 +223,7 @@ export function Donut({ segments, centre, centreSub, foot }: {
             offset += C * frac
             return el
           })}
+          </g>
         </g>
         <text x="50" y="49" textAnchor="middle" fontSize="15" fontWeight="600" fill="var(--ink)"
               fontFamily="var(--font-plex-sans)">{centre}</text>
@@ -239,10 +235,8 @@ export function Donut({ segments, centre, centreSub, foot }: {
       <ul className="min-w-0 flex-1 space-y-1.5">
         {segments.map((s) => (
           <li key={s.label} className="flex items-baseline gap-2 text-[11.5px]">
-            <span aria-hidden className="size-2.5 shrink-0 translate-y-0.5 rounded-[2px]"
-              style={s.hatched
-                ? { background: `repeating-linear-gradient(45deg, ${s.color} 0 1.5px, transparent 1.5px 3px)`, border: `1px solid ${s.color}` }
-                : { background: s.color }} />
+            <span aria-hidden className={`size-2.5 shrink-0 translate-y-0.5 rounded-[2px] ${s.hatched ? 'hatch' : ''}`}
+              style={s.hatched ? { '--hatch-c': s.color } as React.CSSProperties : { background: s.color }} />
             <span className="min-w-0 truncate text-ink-2">{s.label}</span>
             <span className="num ml-auto shrink-0 font-medium">
               {Math.round((s.value / total) * 100)}%
@@ -285,7 +279,7 @@ export function Waterfall({ steps, unit = 'days', totalLabel }: {
             <svg viewBox="0 0 100 8" preserveAspectRatio="none" className="h-3.5 w-full" role="img"
                  aria-label={`${b.label}: ${b.sign > 0 ? 'adds' : 'takes away'} ${b.value} ${unit}`}>
               <defs>{!b.measured && <Hatch id={`w-${uid}-${i}`} color={b.sign > 0 ? 'var(--critical)' : 'var(--good)'} />}</defs>
-              <rect x={X(Math.min(b.from, b.to))} y="0" width={Math.max(0.6, X(b.value))} height="8" rx="1"
+              <rect x={X(Math.min(b.from, b.to))} y="0" width={Math.max(0.6, X(b.value))} height="8" rx="1.5"
                     fill={!b.measured
                       ? `url(#w-${uid}-${i})`
                       : b.sign > 0 ? 'var(--critical)' : 'var(--good)'}
@@ -302,7 +296,7 @@ export function Waterfall({ steps, unit = 'days', totalLabel }: {
           <span className="text-[11px] font-medium">{totalLabel}</span>
           <svg viewBox="0 0 100 8" preserveAspectRatio="none" className="h-3.5 w-full" role="img"
                aria-label={`${totalLabel}: ${total} ${unit}`}>
-            <rect x="0" y="0" width={Math.max(0.6, X(total))} height="8" rx="1" fill="var(--accent)" />
+            <rect x="0" y="0" width={Math.max(0.6, X(total))} height="8" rx="1.5" fill="var(--accent)" />
           </svg>
           <span className="num w-20 text-right text-[11px] font-medium">{num(total, 1)} {unit}</span>
         </li>
@@ -350,7 +344,7 @@ export function RankedBars({ rows, format = 'money', hatched, unit, target, targ
             <svg viewBox="0 0 100 8" preserveAspectRatio="none" className="mt-1 h-2.5 w-full" role="img"
                  aria-label={`${r.label}: ${fmt(r.value)}`}>
               <defs>{hatched && <Hatch id={`r-${uid}-${i}`} color="var(--seq-4)" />}</defs>
-              <rect x="0" y="0" width={Math.max(0.8, (r.value / top) * 100)} height="8" rx="1"
+              <rect x="0" y="0" width={Math.max(0.8, (r.value / top) * 100)} height="8" rx="1.5"
                     fill={hatched ? `url(#r-${uid}-${i})` : 'var(--seq-4)'}
                     className="anim-reveal" style={{ '--i': Math.min(i, 6) } as React.CSSProperties}>
                 <title>{`${r.label}: ${fmt(r.value)}`}</title>
@@ -411,8 +405,10 @@ export function Gauge({ value, max, target, targetLabel, tone = 'accent', hatche
            aria-label={`${num(value, dp)}${unit} of ${num(max, 0)}${unit}${target != null ? `, target ${num(target, 1)}${unit}` : ''}`}>
         <defs>{hatched && <Hatch id={`g-${uid}`} color={col} />}</defs>
         <path d={arc} fill="none" stroke="var(--surface-3)" strokeWidth="9" strokeLinecap="round" />
+        {/* pathLength normalises the arc to 100 so the sweep-in keyframe can
+            drive stroke-dashoffset without knowing the geometry */}
         <path d={arc} fill="none" stroke={hatched ? `url(#g-${uid})` : col} strokeWidth="9"
-              strokeLinecap="round" strokeDasharray={`${L * f} ${L}`} className="anim-reveal">
+              strokeLinecap="round" pathLength={100} strokeDasharray={`${f * 100} 200`} className="anim-arc">
           <title>{`${num(value, dp)}${unit}`}</title>
         </path>
         {tick && (

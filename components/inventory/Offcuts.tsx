@@ -217,7 +217,7 @@ export function OffcutRegister() {
           <ul className="space-y-3">
             {offcutRows.map((r, i) => (
               <li key={r.lot.id} style={{ '--i': Math.min(i, 5) } as React.CSSProperties}
-                  className={`anim-fade-up lift rounded-lg border bg-surface p-3.5 ${
+                  className={`anim-fade-up lift shadow-sm rounded-lg border bg-surface p-3.5 ${
                     r.aged ? 'border-warn/40' : 'border-line'}`}>
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                   <span className="mono text-[12.5px] font-medium">{r.item.code}</span>

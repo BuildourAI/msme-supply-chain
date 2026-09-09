@@ -167,7 +167,7 @@ function LineCard({ row, onRevise, onAck }: {
   const short = row.gap.value > 0
 
   return (
-    <li className={`anim-fade-up lift rounded-lg border bg-surface p-3.5 ${
+    <li className={`anim-fade-up lift shadow-sm rounded-lg border bg-surface p-3.5 ${
       row.state === 'not_told' ? 'border-critical/40' : row.state === 'awaiting_ack' ? 'border-warn/40' : 'border-line'}`}>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="mono text-[12.5px] font-medium">{s.poNo}</span>
@@ -378,12 +378,10 @@ export function InboundBoard({ lines, span = 26 }: {
                      style={{ left: `${Math.min(100, (l.stockout / span) * 100)}%` }} />
                 <div className="anim-reveal absolute top-1.5 h-4 rounded-l-[3px] bg-accent"
                      style={{ left: 0, width: `${Math.min(100, (l.arrival / span) * 100)}%` }} />
-                <div className="anim-reveal absolute top-1.5 h-4 rounded-r-[3px]"
-                     style={{ '--i': 3,
+                <div className="anim-reveal hatch absolute top-1.5 h-4 rounded-r-[3px]"
+                     style={{ '--i': 3, '--hatch-c': 'var(--accent)', '--hatch-pitch': '5px', '--hatch-w': '2px',
                        left: `${Math.min(100, (l.arrival / span) * 100)}%`,
                        width: `${Math.max(0, ((l.usable - l.arrival) / span) * 100)}%`,
-                       background: 'repeating-linear-gradient(45deg, var(--accent) 0 2px, transparent 2px 5px)',
-                       border: '1px solid var(--accent)',
                      } as React.CSSProperties} />
               </div>
               <p className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-ink-3">

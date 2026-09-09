@@ -1,8 +1,9 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { AppProvider, useApp } from '@/state/app-store'
 import { useTheme } from '@/state/theme-provider'
 import { Inspector } from '@/components/ui/Inspector'
+import { Sheet } from '@/components/ui/Sheet'
 import { TopNav } from './TopNav'
 import { Segmented } from '@/components/ui/bits'
 import { crossfadeTheme } from '@/components/ui/motion'
@@ -12,62 +13,44 @@ import { InventoryProvider } from '@/components/inventory/store'
 
 function ActivityDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { audit } = useApp()
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [open, onClose])
-  if (!open) return null
   return (
-    <div className="anim-backdrop fixed inset-0 z-[55] flex justify-end bg-ink/20" onClick={onClose}>
-      <aside role="dialog" aria-modal="true" aria-label="Activity"
-        onClick={(e) => e.stopPropagation()}
-        className="anim-sheet flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-line bg-surface shadow-2xl">
-        <header className="sticky top-0 flex items-start gap-3 border-b border-line bg-surface px-4 py-3">
-          <div>
-            <p className="mono text-[10px] uppercase tracking-wider text-ink-3">Audit trail · §11</p>
-            <h2 className="mt-0.5 text-[17px]">Activity</h2>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Close"
-            className="ml-auto rounded p-1 text-ink-3 hover:bg-surface-2 hover:text-ink">✕</button>
-        </header>
-        <div className="p-4">
-          {audit.length === 0 ? (
-            <p className="text-[13px] leading-relaxed text-ink-3">
-              Nothing yet. Every choice you make — a supplier changed, a line approved, a guardrail
-              overridden — is recorded here with who did it, when, and on what data.
-            </p>
-          ) : (
-            <ol className="space-y-2.5">
-              {audit.map((e, i) => (
-                <li key={e.id} style={{ '--i': Math.min(i, 6) } as React.CSSProperties}
-                    className="anim-fade-up rounded-md border border-line bg-surface-2 p-2.5">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-[12px] font-medium text-ink">{e.action}</span>
-                    <span className="mono ml-auto text-[10px] text-ink-3">{e.at}</span>
-                  </div>
-                  <p className="mt-0.5 text-[12px] leading-snug text-ink-2">{e.detail}</p>
-                  {(e.before || e.after) && (
-                    <p className="mono mt-1 text-[10.5px] text-ink-3">
-                      {e.before ?? '—'} <span aria-hidden>→</span> {e.after ?? '—'}
-                    </p>
-                  )}
-                  {e.reason && (
-                    <p className="mt-1 border-l-2 border-warn/40 pl-2 text-[11.5px] italic leading-snug text-ink-2">
-                      “{e.reason}”
-                    </p>
-                  )}
-                  <p className="mono mt-1 text-[10px] text-ink-3">
-                    {e.actor} · {e.entity}/{e.entityId}
+    <Sheet open={open} onClose={onClose} z="z-[55]"
+      label="Activity" eyebrow="Audit trail · §11" title="Activity">
+      <div className="p-4">
+        {audit.length === 0 ? (
+          <p className="text-[13px] leading-relaxed text-ink-3">
+            Nothing yet. Every choice you make — a supplier changed, a line approved, a guardrail
+            overridden — is recorded here with who did it, when, and on what data.
+          </p>
+        ) : (
+          <ol className="space-y-2.5">
+            {audit.map((e, i) => (
+              <li key={e.id} style={{ '--i': Math.min(i, 6) } as React.CSSProperties}
+                  className="anim-fade-up rounded-md border border-line bg-surface-2 p-2.5">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[12px] font-medium text-ink">{e.action}</span>
+                  <span className="mono ml-auto text-[10px] text-ink-3">{e.at}</span>
+                </div>
+                <p className="mt-0.5 text-[12px] leading-snug text-ink-2">{e.detail}</p>
+                {(e.before || e.after) && (
+                  <p className="mono mt-1 text-[10.5px] text-ink-3">
+                    {e.before ?? '—'} <span aria-hidden>→</span> {e.after ?? '—'}
                   </p>
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
-      </aside>
-    </div>
+                )}
+                {e.reason && (
+                  <p className="mt-1 border-l-2 border-warn/40 pl-2 text-[11.5px] italic leading-snug text-ink-2">
+                    “{e.reason}”
+                  </p>
+                )}
+                <p className="mono mt-1 text-[10px] text-ink-3">
+                  {e.actor} · {e.entity}/{e.entityId}
+                </p>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+    </Sheet>
   )
 }
 
@@ -76,7 +59,7 @@ function Toast() {
   if (!toast) return null
   return (
     <div role="status" aria-live="polite"
-      className="anim-toast fixed bottom-5 left-1/2 z-[70] w-[min(30rem,calc(100vw-2rem))] rounded-lg border border-line bg-surface px-4 py-2.5 text-[13px] leading-snug shadow-xl">
+      className="anim-toast glass fixed bottom-5 left-1/2 z-[70] w-[min(30rem,calc(100vw-2rem))] rounded-xl border px-4 py-2.5 text-[13px] leading-snug shadow-xl">
       {toast}
     </div>
   )
@@ -86,9 +69,9 @@ function TopBar({ onActivity }: { onActivity: () => void }) {
   const { theme, setTheme } = useTheme()
   const { audit } = useApp()
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line bg-surface-2 px-4 py-2">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line-soft/60 px-4 py-2">
       <div className="flex items-center gap-2">
-        <span aria-hidden className="grid size-6 place-items-center rounded bg-accent text-[11px] font-bold text-on-accent">B</span>
+        <span aria-hidden className="grid size-6 place-items-center rounded-md bg-accent text-[11px] font-bold text-on-accent shadow-sm">B</span>
         <span className="text-[13px] font-semibold tracking-tight">BuildOur</span>
         <span className="text-ink-3">·</span>
         <span className="text-[13px] text-ink-2">Material Flow</span>
@@ -100,7 +83,7 @@ function TopBar({ onActivity }: { onActivity: () => void }) {
 
       <div className="ml-auto flex items-center gap-2">
         <button type="button" onClick={onActivity}
-          className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1 text-[12px] font-medium hover:bg-surface-2">
+          className="press inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1 text-[12px] font-medium shadow-sm hover:bg-surface-2">
           Activity
           <span className={`mono rounded-full px-1.5 text-[10px] ${audit.length ? 'bg-accent text-on-accent' : 'bg-surface-3 text-ink-3'}`}>
             {audit.length}
@@ -117,8 +100,12 @@ function Chrome({ children }: { children: React.ReactNode }) {
   const [activity, setActivity] = useState(false)
   return (
     <div className="min-h-screen bg-ground">
-      <TopBar onActivity={() => setActivity(true)} />
-      <TopNav />
+      {/* One sticky glass header for both bars. No overflow on it, ever — the
+          nav dropdown hangs off this element and must escape downward. */}
+      <header className="glass sticky top-0 z-40 border-b">
+        <TopBar onActivity={() => setActivity(true)} />
+        <TopNav />
+      </header>
       <main className="mx-auto max-w-[1600px] px-4 py-5">{children}</main>
       <footer className="mx-auto max-w-[1600px] px-4 pb-8 pt-2 text-[11px] leading-relaxed text-ink-3">
         The system suggests, holds and recommends. It never places an order, never contacts a

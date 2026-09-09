@@ -1,124 +1,195 @@
 @import "tailwindcss";
 
 /* ============================================================================
-   BuildOur design system — CONTEXT.md §10
+   BuildOur design system — CONTEXT.md §10, restyled.
+
+   Surfaces are Apple-quiet: muted tones, rounded corners, layered low-alpha
+   shadows, and glass only where content actually scrolls underneath. The hue
+   is the one the app always had — a teal-green at ~175° — with the chroma
+   pulled down so it sits back instead of shouting.
+
    Full light palette on bare :root; redefined under prefers-color-scheme: dark
    guarded as :root:not([data-theme="light"]); and again under [data-theme="dark"]
-   so an explicit toggle wins in both directions.
+   so an explicit toggle wins in both directions. The two dark blocks are
+   duplicated on purpose (there is no way to share them in plain CSS) — edit
+   both, always.
+
+   Two things here are load-bearing for the browser suites, not just for looks:
+   `rounded-lg` and `border-dashed` are selectors the checks walk. So a radius
+   changes by changing the token below, never by renaming a class.
    ========================================================================== */
 
 :root {
-  --ground: #ECEDE9;
-  --surface: #FBFBF9;
-  --surface-2: #F2F3EF;
-  --surface-3: #E5E7E1;
-  --ink: #191E1C;
-  --ink-2: #4C5854;
-  --ink-3: #7D8985;
-  --line: #D8DAD4;
-  --line-soft: #E4E6E0;
-  --accent: #0E5C57;
-  --accent-soft: #D6E5E2;
+  /* Inter carries body, headings and figures. The two Plex names survive as
+     aliases so every existing font-family reference — here and in SVG text in
+     the chart files — resolves without a rewrite. */
+  --font-plex-sans: var(--font-inter);
+  --font-plex-cond: var(--font-inter);
+
+  --ground: #EEF0ED;
+  --surface: #FCFCFB;
+  --surface-2: #F4F5F3;
+  --surface-3: #E9EBE8;
+  --ink: #1C1F1E;
+  --ink-2: #535D5A;
+  --ink-3: #717B78;
+  --line: #DCDFDB;
+  --line-soft: #E8EAE6;
+  --accent: #2C6B65;
+  --accent-soft: #DDE9E6;
   --on-accent: #FFFFFF;
-  --critical: #A32E23;
-  --critical-soft: #F3DEDA;
-  --warn: #8F6108;
-  --warn-soft: #F3E6CB;
-  --good: #2E6B4A;
-  --good-soft: #DCEADF;
+  --critical: #A5382E;
+  --critical-soft: #F4E2DE;
+  --warn: #835C12;
+  --warn-soft: #F3E8D2;
+  --good: #33704F;
+  --good-soft: #DEEAE2;
 
-  /* validated categorical slots — §10. Never invent hues. */
-  --cat-1: #2a78d6;
-  --cat-2: #eb6834;
-  --cat-3: #1baf7a;
-  --cat-4: #eda100;
-  --cat-5: #e87ba4;
+  /* validated categorical slots — §10. Never invent hues. Muted from the
+     originals by ~15% chroma and re-validated against these surfaces with the
+     dataviz validator; CVD separation sits in the 6–8 band, which is legal
+     because every chart ships direct labels, a value table and hatching. */
+  --cat-1: #3d7ec9;
+  --cat-2: #dd7048;
+  --cat-3: #2fa77e;
+  --cat-4: #d9a020;
+  --cat-5: #db86a8;
 
-  /* sequential blue ramp for ordered magnitudes */
+  /* sequential blue ramp for ordered magnitudes — the upper three steps
+     muted like the categorical slots; lightness stays monotonic, and seq-4
+     is still cat-1's blue */
   --seq-1: #d3e3f7;
   --seq-2: #a7c7ef;
-  --seq-3: #6ba3e2;
-  --seq-4: #2a78d6;
-  --seq-5: #14508f;
+  --seq-3: #71a3dc;
+  --seq-4: #3d7ec9;
+  --seq-5: #225186;
+
+  /* radii — named --r-* so the @theme bridge below can map them onto
+     Tailwind's --radius-* without a variable referring to itself */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+  --r-2xl: 20px;
+
+  /* elevation — two or three low-alpha layers, never one heavy drop */
+  --sh-1: 0 1px 2px rgb(20 24 22 / .05), 0 0 0 1px rgb(20 24 22 / .04);
+  --sh-2: 0 2px 6px rgb(20 24 22 / .06), 0 8px 24px -8px rgb(20 24 22 / .10);
+  --sh-3: 0 4px 12px rgb(20 24 22 / .08), 0 24px 48px -12px rgb(20 24 22 / .18);
+
+  /* glass — a translucent surface plus blur and a little saturation, so what
+     scrolls beneath reads as depth rather than noise */
+  --glass-bg: rgb(252 252 251 / .72);
+  --glass-border: rgb(28 31 30 / .08);
+  --glass-blur: 20px;
+  --glass-sat: 160%;
+
+  /* motion — one house curve, one settle curve, one spring; three durations */
+  --ease-std: cubic-bezier(.2, .7, .2, 1);
+  --ease-quint: cubic-bezier(.22, 1, .36, 1);
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --dur-1: 140ms;
+  --dur-2: 240ms;
+  --dur-3: 440ms;
+
+  /* hatch — the mark of an invented figure, one definition for every swatch */
+  --hatch-pitch: 3px;
+  --hatch-w: 1.5px;
 
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --ground: #141715;
-    --surface: #1C201E;
-    --surface-2: #232825;
-    --surface-3: #2B302C;
-    --ink: #E8EBE7;
-    --ink-2: #A7B0AB;
-    --ink-3: #79837E;
-    --line: #323834;
-    --line-soft: #282E2A;
-    --accent: #63C3B4;
-    --accent-soft: #1D3936;
-    --on-accent: #0F1F1D;
-    --critical: #E58876;
-    --critical-soft: #3A211C;
-    --warn: #DCA945;
-    --warn-soft: #362B14;
-    --good: #7CC094;
-    --good-soft: #1B3325;
+    --ground: #1A1D1C;
+    --surface: #242827;
+    --surface-2: #2C3130;
+    --surface-3: #363B3A;
+    --ink: #ECEEEB;
+    --ink-2: #B1B8B5;
+    --ink-3: #8A928F;
+    --line: #3A403E;
+    --line-soft: #303534;
+    --accent: #7EC2B5;
+    --accent-soft: #243D39;
+    --on-accent: #10201E;
+    --critical: #DE9284;
+    --critical-soft: #3E2723;
+    --warn: #D6B061;
+    --warn-soft: #392F1A;
+    --good: #8CC29F;
+    --good-soft: #22372B;
 
-    --cat-1: #3987e5;
-    --cat-2: #d95926;
-    --cat-3: #199e70;
-    --cat-4: #c98500;
-    --cat-5: #d55181;
+    --cat-1: #4a8ddc;
+    --cat-2: #cf6636;
+    --cat-3: #2f9d74;
+    --cat-4: #bc861a;
+    --cat-5: #cc6088;
 
     --seq-1: #17314f;
     --seq-2: #1d4a7a;
-    --seq-3: #2a6bb0;
-    --seq-4: #3987e5;
-    --seq-5: #8ab8ef;
+    --seq-3: #376ca6;
+    --seq-4: #4a8ddc;
+    --seq-5: #87b8f3;
+
+    --sh-1: 0 1px 2px rgb(0 0 0 / .35), inset 0 1px 0 rgb(255 255 255 / .04);
+    --sh-2: 0 2px 8px rgb(0 0 0 / .40), 0 12px 28px -8px rgb(0 0 0 / .55);
+    --sh-3: 0 6px 16px rgb(0 0 0 / .45), 0 32px 64px -12px rgb(0 0 0 / .65), inset 0 1px 0 rgb(255 255 255 / .05);
+
+    --glass-bg: rgb(36 40 39 / .68);
+    --glass-border: rgb(236 238 235 / .09);
 
     color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
-  --ground: #141715;
-  --surface: #1C201E;
-  --surface-2: #232825;
-  --surface-3: #2B302C;
-  --ink: #E8EBE7;
-  --ink-2: #A7B0AB;
-  --ink-3: #79837E;
-  --line: #323834;
-  --line-soft: #282E2A;
-  --accent: #63C3B4;
-  --accent-soft: #1D3936;
-  --on-accent: #0F1F1D;
-  --critical: #E58876;
-  --critical-soft: #3A211C;
-  --warn: #DCA945;
-  --warn-soft: #362B14;
-  --good: #7CC094;
-  --good-soft: #1B3325;
+  --ground: #1A1D1C;
+  --surface: #242827;
+  --surface-2: #2C3130;
+  --surface-3: #363B3A;
+  --ink: #ECEEEB;
+  --ink-2: #B1B8B5;
+  --ink-3: #8A928F;
+  --line: #3A403E;
+  --line-soft: #303534;
+  --accent: #7EC2B5;
+  --accent-soft: #243D39;
+  --on-accent: #10201E;
+  --critical: #DE9284;
+  --critical-soft: #3E2723;
+  --warn: #D6B061;
+  --warn-soft: #392F1A;
+  --good: #8CC29F;
+  --good-soft: #22372B;
 
-  --cat-1: #3987e5;
-  --cat-2: #d95926;
-  --cat-3: #199e70;
-  --cat-4: #c98500;
-  --cat-5: #d55181;
+  --cat-1: #4a8ddc;
+  --cat-2: #cf6636;
+  --cat-3: #2f9d74;
+  --cat-4: #bc861a;
+  --cat-5: #cc6088;
 
   --seq-1: #17314f;
   --seq-2: #1d4a7a;
-  --seq-3: #2a6bb0;
-  --seq-4: #3987e5;
-  --seq-5: #8ab8ef;
+  --seq-3: #376ca6;
+  --seq-4: #4a8ddc;
+  --seq-5: #87b8f3;
+
+  --sh-1: 0 1px 2px rgb(0 0 0 / .35), inset 0 1px 0 rgb(255 255 255 / .04);
+  --sh-2: 0 2px 8px rgb(0 0 0 / .40), 0 12px 28px -8px rgb(0 0 0 / .55);
+  --sh-3: 0 6px 16px rgb(0 0 0 / .45), 0 32px 64px -12px rgb(0 0 0 / .65), inset 0 1px 0 rgb(255 255 255 / .05);
+
+  --glass-bg: rgb(36 40 39 / .68);
+  --glass-border: rgb(236 238 235 / .09);
 
   color-scheme: dark;
 }
 
 /* Map the live custom properties onto Tailwind utilities. `inline` keeps the
    reference to var(--x) rather than snapshotting the value, so the theme
-   switch above continues to drive every utility. */
+   switch above continues to drive every utility. The radius and shadow rows
+   are why 189 rounded-* and 10 shadow-* usages restyle with no edits. */
 @theme inline {
   --color-ground: var(--ground);
   --color-surface: var(--surface);
@@ -143,9 +214,25 @@
   --color-cat-3: var(--cat-3);
   --color-cat-4: var(--cat-4);
   --color-cat-5: var(--cat-5);
+  --color-glass: var(--glass-bg);
+  --color-glass-border: var(--glass-border);
 
-  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-cond: var(--font-plex-cond), var(--font-plex-sans), ui-sans-serif, sans-serif;
+  --radius: var(--r-sm);
+  --radius-xs: var(--r-xs);
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-xl: var(--r-xl);
+  --radius-2xl: var(--r-2xl);
+
+  --shadow-sm: var(--sh-1);
+  --shadow-md: var(--sh-2);
+  --shadow-lg: var(--sh-2);
+  --shadow-xl: var(--sh-3);
+  --shadow-2xl: var(--sh-3);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-cond: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, SFMono-Regular, monospace;
 }
 
@@ -158,19 +245,23 @@ html { -webkit-text-size-adjust: 100%; }
 body {
   background: var(--ground);
   color: var(--ink);
-  font-family: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   font-size: 14px;
   line-height: 1.45;
   margin: 0;
   -webkit-font-smoothing: antialiased;
 }
 
+/* Inter is set a touch tighter than Plex Condensed needed — its headings are
+   wider, and the tighter tracking is what keeps them reading as a display
+   face rather than large body text. */
 h1, h2, h3, h4 {
-  font-family: var(--font-plex-cond), var(--font-plex-sans), sans-serif;
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   font-weight: 600;
-  letter-spacing: -0.005em;
+  letter-spacing: -0.012em;
   margin: 0;
 }
+h1 { letter-spacing: -0.02em; }
 
 /* §10 — tabular figures on every numeric column */
 .num, table td, table th, .font-mono {
@@ -182,18 +273,18 @@ h1, h2, h3, h4 {
   font-variant-numeric: tabular-nums;
 }
 
-/* Headline/figure face — §10 puts numbers on Plex Sans Condensed */
+/* Headline/figure face */
 .figure {
-  font-family: var(--font-plex-cond), var(--font-plex-sans), sans-serif;
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
   outline-offset: 2px;
-  border-radius: 2px;
+  border-radius: var(--r-xs);
 }
 
 button { font: inherit; color: inherit; }
@@ -206,6 +297,42 @@ button { font: inherit; color: inherit; }
 .scroll-x::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; }
 .scroll-x::-webkit-scrollbar-track { background: transparent; }
 
+/* ------------------------------------------------------------ components ----
+   Rules for things that recur in fourteen files and were never one component.
+   They live in the components layer so any utility class on the element still
+   wins — a selected row's tint beats the hover here, whatever the specificity.
+   ========================================================================== */
+@layer components {
+  /* data tables: the twelve .scroll-x wrappers, and only those, so the paper
+     facsimile, the inspector and the chart value tables keep their own look */
+  .scroll-x > table > thead > tr > th { background: var(--surface-2); }
+  .scroll-x > table > tbody > tr { transition: background-color var(--dur-1) var(--ease-std); }
+  .scroll-x > table > tbody > tr:hover { background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+  .scroll-x > table > tbody > tr:last-child > td { border-bottom-color: transparent; }
+
+  /* a table that opens a card needs its header to follow the card's corner */
+  .scroll-x:first-child > table > thead > tr:first-child > th:first-child { border-top-left-radius: calc(var(--r-lg) - 1px); }
+  .scroll-x:first-child > table > thead > tr:first-child > th:last-child { border-top-right-radius: calc(var(--r-lg) - 1px); }
+
+  /* glass: only where something scrolls beneath — the sticky header, menus,
+     dialogs, sheets, the toast. Never a table, never a tile. */
+  .glass {
+    background: var(--glass-bg);
+    border-color: var(--glass-border);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass { background: var(--surface); }
+  }
+
+  /* the hatch swatch beside a hatched series; --hatch-c is set inline */
+  .hatch {
+    background: repeating-linear-gradient(45deg, var(--hatch-c) 0 var(--hatch-w), transparent var(--hatch-w) var(--hatch-pitch));
+    border: 1px solid var(--hatch-c);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -215,36 +342,67 @@ button { font: inherit; color: inherit; }
 }
 
 /* ================================================================ motion ====
-   Subtle, purposeful, and CSS-first so it is hydration-safe: keyframes run
-   when an element paints, with no client state that could disagree with the
-   server. Every animation honours prefers-reduced-motion via the rule above.
+   Purposeful and CSS-first so it is hydration-safe: keyframes run when an
+   element paints, with no client state that could disagree with the server.
+   Every animation honours prefers-reduced-motion via the rule above — which is
+   why every transition in the app is declared here and not as a utility.
    Stagger is a per-element --i custom property, never a JS timer.
    ========================================================================== */
 
 @keyframes fade-up   { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
 @keyframes fade-in   { from { opacity: 0 } to { opacity: 1 } }
+@keyframes page-in   { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
 @keyframes reveal-x  { from { clip-path: inset(0 100% 0 0) } to { clip-path: inset(0 0 0 0) } }
 @keyframes draw      { from { stroke-dashoffset: 1 } to { stroke-dashoffset: 0 } }
-@keyframes sheet-in  { from { opacity: 0; transform: translateX(28px) } to { opacity: 1; transform: none } }
-@keyframes pop-in    { from { opacity: 0; transform: translateY(8px) scale(.985) } to { opacity: 1; transform: none } }
-@keyframes drop-in   { from { opacity: 0; transform: translateY(-5px) } to { opacity: 1; transform: none } }
+@keyframes arc-in    { from { stroke-dashoffset: 100 } to { stroke-dashoffset: 0 } }
+@keyframes donut-in  { from { opacity: 0; transform: rotate(-14deg) scale(.96) } to { opacity: 1; transform: none } }
+@keyframes sheet-in  { from { opacity: 0; transform: translateX(32px) } to { opacity: 1; transform: none } }
+@keyframes pop-in    { from { opacity: 0; transform: translateY(10px) scale(.97) } to { opacity: 1; transform: none } }
+@keyframes drop-in   { from { opacity: 0; transform: translateY(-6px) scale(.98) } to { opacity: 1; transform: none } }
 @keyframes toast-in  { from { opacity: 0; transform: translate(-50%, 10px) } to { opacity: 1; transform: translate(-50%, 0) } }
 @keyframes flash     { from { background-color: var(--accent-soft) } to { background-color: transparent } }
 @keyframes tick-in   { from { transform: scaleY(0) } to { transform: scaleY(1) } }
 @keyframes dot-in    { from { opacity: 0; transform: scale(.4) } to { opacity: 1; transform: none } }
 
-.anim-fade-up  { animation: fade-up 440ms cubic-bezier(.2,.7,.2,1) backwards; animation-delay: calc(var(--i, 0) * 45ms) }
+/* entrance */
+.anim-page     { animation: page-in var(--dur-2) var(--ease-quint) backwards }
+.anim-fade-up  { animation: fade-up var(--dur-3) var(--ease-std) backwards; animation-delay: calc(var(--i, 0) * 45ms) }
 .anim-fade-in  { animation: fade-in 220ms ease-out backwards }
-.anim-reveal   { animation: reveal-x 680ms cubic-bezier(.2,.7,.2,1) backwards; animation-delay: calc(var(--i, 0) * 45ms + 140ms) }
+.anim-reveal   { animation: reveal-x 680ms var(--ease-std) backwards; animation-delay: calc(var(--i, 0) * 45ms + 140ms) }
 .anim-draw     { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 1000ms cubic-bezier(.4,0,.2,1) 160ms forwards }
-.anim-dot      { transform-origin: center; transform-box: fill-box; animation: dot-in 320ms cubic-bezier(.2,.7,.2,1) backwards; animation-delay: calc(360ms + var(--i, 0) * 110ms) }
-.anim-sheet    { animation: sheet-in 260ms cubic-bezier(.2,.7,.2,1) backwards }
-.anim-backdrop { animation: fade-in 200ms ease-out backwards }
-.anim-pop      { animation: pop-in 200ms cubic-bezier(.2,.7,.2,1) backwards }
-.anim-drop     { animation: drop-in 140ms ease-out backwards }
-.anim-toast    { animation: toast-in 240ms cubic-bezier(.2,.7,.2,1) both }
-.anim-tick     { transform-origin: bottom; animation: tick-in 300ms cubic-bezier(.2,.7,.2,1) 760ms backwards }
+.anim-arc      { animation: arc-in 700ms var(--ease-quint) 140ms backwards }
+.anim-donut    { transform-origin: center; transform-box: fill-box; animation: donut-in 520ms var(--ease-quint) 120ms backwards }
+.anim-dot      { transform-origin: center; transform-box: fill-box; animation: dot-in 320ms var(--ease-std) backwards; animation-delay: calc(360ms + var(--i, 0) * 110ms) }
+.anim-tick     { transform-origin: bottom; animation: tick-in 300ms var(--ease-std) 760ms backwards }
 .flash         { animation: flash 900ms ease-out }
+
+/* overlays — a small overshoot, all under 300ms */
+.anim-sheet    { animation: sheet-in 280ms var(--ease-spring) backwards }
+.anim-backdrop { animation: fade-in 200ms ease-out backwards }
+.anim-pop      { animation: pop-in 260ms var(--ease-spring) backwards }
+.anim-drop     { animation: drop-in 200ms var(--ease-spring) backwards }
+.anim-toast    { animation: toast-in 240ms var(--ease-spring) both }
+
+/* interaction */
+.lift { transition: transform var(--dur-2) var(--ease-quint), box-shadow var(--dur-2) var(--ease-quint), border-color var(--dur-2) var(--ease-std) }
+.lift:hover { transform: translateY(-1px); box-shadow: var(--sh-2); border-color: color-mix(in srgb, var(--line) 55%, var(--accent)) }
+
+.press { transition: transform var(--dur-1) var(--ease-std), background-color var(--dur-1) var(--ease-std), border-color var(--dur-1) var(--ease-std), color var(--dur-1) var(--ease-std), opacity var(--dur-1) var(--ease-std) }
+.press:active:not(:disabled) { transform: scale(.98) }
+
+/* the one tab rule, moving between tabs rather than switching; `-still` is
+   worn for the first paint so it appears in place instead of sliding in */
+.tab-ink { transition: transform 320ms var(--ease-spring), width 320ms var(--ease-spring) }
+.tab-ink-still { transition: none }
+
+/* the segmented control's thumb — a raised pill that slides */
+.seg-thumb {
+  position: absolute; top: 2px; bottom: 2px; left: 0;
+  border-radius: var(--r-xs);
+  background: var(--surface);
+  box-shadow: var(--sh-1);
+  transition: transform 260ms var(--ease-spring), width 260ms var(--ease-spring);
+}
 
 /* Theme cross-fade. Only ever applied for a moment around a toggle, never on
    load, so the first paint is instant and the switch feels deliberate. */
@@ -252,8 +410,3 @@ html.theme-fade, html.theme-fade *, html.theme-fade *::before, html.theme-fade *
   transition: background-color .28s ease, color .28s ease, border-color .28s ease,
               fill .28s ease, stroke .28s ease, box-shadow .28s ease !important;
 }
-
-/* A restrained lift for the tiles a hand naturally hovers over. */
-.lift { transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease }
-.lift:hover { transform: translateY(-1px); box-shadow: 0 6px 18px -8px rgb(0 0 0 / .22) }
-:root[data-theme="dark"] .lift:hover { box-shadow: 0 6px 18px -8px rgb(0 0 0 / .6) }

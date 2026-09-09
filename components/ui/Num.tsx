@@ -55,7 +55,7 @@ export function Num({ d, format = 'qty', dp, tone, className = '', suffix, size 
       type="button"
       onClick={() => openInspect(d)}
       title={`${d.label} — click to see how this is calculated`}
-      className={`num inline-flex items-baseline gap-1 rounded-sm underline decoration-dotted decoration-ink-3/40 underline-offset-[3px] transition-colors hover:decoration-accent hover:text-accent ${sz} ${tone ? TONE_FG[tone] : ''} ${flash} ${className}`}
+      className={`press num inline-flex items-baseline gap-1 rounded-sm underline decoration-dotted decoration-ink-3/40 underline-offset-[3px] hover:decoration-accent hover:text-accent ${sz} ${tone ? TONE_FG[tone] : ''} ${flash} ${className}`}
     >
       {formatDerived(shown, format, dp)}
       {suffix && <span className="text-[0.8em] font-normal text-ink-3">{suffix}</span>}

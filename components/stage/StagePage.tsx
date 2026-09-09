@@ -44,7 +44,7 @@ export function StagePage({ stage, children }: { stage: Stage; children?: React.
         </>}
         actions={painkillers && (
           <Link href={painkillers.href!}
-            className="rounded border border-line px-2.5 py-1 text-[12px] font-medium text-accent transition-colors hover:bg-accent-soft">
+            className="press rounded-md border border-line px-2.5 py-1 text-[12px] font-medium text-accent shadow-sm hover:bg-accent-soft">
             Painkillers solved →
           </Link>
         )} />

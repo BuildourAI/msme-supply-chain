@@ -1,5 +1,6 @@
 'use client'
 import type { Tone } from '@/lib/domain/format'
+import { useSlidingIndicator } from './Tabs'
 
 export const TONE_BG: Record<Tone, string> = {
   critical: 'bg-critical-soft text-critical border-critical/25',
@@ -42,6 +43,17 @@ export function StatusPill({ label, tone, explain }: { label: string; tone: Tone
   )
 }
 
+/**
+ * The section container. `rounded-lg` is a selector the browser suites walk
+ * to measure empty space — its radius is set by the token, never by swapping
+ * the class. The hairline shadow is what lifts a card off the ground; the
+ * border alone read as a wireframe once the ground and surface drew closer.
+ *
+ * `min-w-0` is load-bearing on a phone: a card in a grid inherits min-width
+ * auto, and one seven-column value table inside it was enough to push the
+ * whole page 40px wider than the screen. A card never gets to do that — what
+ * is wider than the card scrolls inside it.
+ */
 export function Card({ title, sub, live, annotation, actions, children, id, className = '', index = 0 }: {
   title?: string; sub?: string; live?: boolean; annotation?: string
   actions?: React.ReactNode; children: React.ReactNode; id?: string; className?: string
@@ -50,7 +62,7 @@ export function Card({ title, sub, live, annotation, actions, children, id, clas
 }) {
   return (
     <section id={id} style={{ '--i': index } as React.CSSProperties}
-             className={`anim-fade-up rounded-lg border border-line bg-surface ${className}`}>
+             className={`anim-fade-up min-w-0 rounded-lg border border-line bg-surface shadow-sm ${className}`}>
       {(title || actions) && (
         <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line-soft px-4 py-3">
           <div className="min-w-0">
@@ -75,16 +87,28 @@ export function Card({ title, sub, live, annotation, actions, children, id, clas
   )
 }
 
+/**
+ * A segmented control with a thumb that slides to the option you chose,
+ * rather than one button lighting up as another goes out. The thumb is a
+ * separate element under the buttons; the buttons themselves only change
+ * colour, so role, label and aria-pressed are exactly as before.
+ */
 export function Segmented<T extends string>({ options, value, onChange, label }: {
   options: { id: T; label: string }[]; value: T; onChange: (v: T) => void; label: string
 }) {
+  const { track, register, pos, settled } = useSlidingIndicator(value)
   return (
-    <div role="group" aria-label={label}
-         className="inline-flex rounded-md border border-line bg-surface-2 p-0.5">
+    <div ref={track} role="group" aria-label={label}
+         className="relative inline-flex rounded-md border border-line bg-surface-2 p-0.5">
+      {pos && (
+        <span aria-hidden className={`seg-thumb ${settled ? '' : 'tab-ink-still'}`}
+              style={{ transform: `translateX(${pos.left}px)`, width: pos.width }} />
+      )}
       {options.map((o) => (
         <button key={o.id} type="button" aria-pressed={value === o.id} onClick={() => onChange(o.id)}
-          className={`rounded px-2.5 py-1 text-[12px] font-medium transition-colors ${
-            value === o.id ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink-2'}`}>
+          ref={register(o.id)}
+          className={`press relative z-10 rounded px-2.5 py-1 text-[12px] font-medium ${
+            value === o.id ? 'text-ink' : 'text-ink-3 hover:text-ink-2'}`}>
           {o.label}
         </button>
       ))}
@@ -98,14 +122,14 @@ export function Button({ children, onClick, variant = 'default', size = 'md', di
   disabled?: boolean; title?: string; type?: 'button' | 'submit'
 }) {
   const v = {
-    default: 'border-line bg-surface hover:bg-surface-2 text-ink',
-    primary: 'border-accent bg-accent text-on-accent hover:opacity-90',
+    default: 'border-line bg-surface hover:bg-surface-2 text-ink shadow-sm',
+    primary: 'border-accent bg-accent text-on-accent hover:bg-[color-mix(in_srgb,var(--accent)_88%,var(--ink))] shadow-sm',
     ghost: 'border-transparent hover:bg-surface-2 text-ink-2',
     danger: 'border-critical/30 bg-critical-soft text-critical hover:bg-critical-soft/70',
   }[variant]
   return (
     <button type={type} onClick={onClick} disabled={disabled} title={title}
-      className={`inline-flex items-center gap-1.5 rounded-md border font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${v} ${
+      className={`press inline-flex items-center gap-1.5 rounded-md border font-medium disabled:cursor-not-allowed disabled:opacity-40 ${v} ${
         size === 'sm' ? 'px-2 py-1 text-[12px]' : 'px-3 py-1.5 text-[13px]'}`}>
       {children}
     </button>

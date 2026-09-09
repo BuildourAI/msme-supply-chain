@@ -217,7 +217,7 @@ function QueueCard({ row }: { row: GrnRow }) {
   const g = row.grn
   return (
     <li style={{ '--i': 0 } as React.CSSProperties}
-        className={`anim-fade-up lift rounded-lg border bg-surface p-3.5 ${
+        className={`anim-fade-up lift shadow-sm rounded-lg border bg-surface p-3.5 ${
           row.state === 'overdue' ? 'border-critical/40' : 'border-line'}`}>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="mono text-[12.5px] font-medium">{g.grnNo}</span>

@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { Button, Card, Pill, StatusPill } from '@/components/ui/bits'
+import { Button, Card, Pill, Segmented, StatusPill } from '@/components/ui/bits'
 import { Dialog } from '@/components/ui/Dialog'
 import { Num } from '@/components/ui/Num'
 import { money, num, qtyText, shortDate } from '@/lib/domain/format'
@@ -124,15 +124,8 @@ export function LossSummary() {
         </div>}>
         <div className="p-4">
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <div role="group" aria-label="Split by" className="inline-flex rounded-md border border-line bg-surface-2 p-0.5">
-              {(['cause', 'item'] as const).map((o) => (
-                <button key={o} type="button" aria-pressed={by === o} onClick={() => setBy(o)}
-                  className={`rounded px-2.5 py-1 text-[12px] font-medium transition-colors ${
-                    by === o ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink-2'}`}>
-                  By {o}
-                </button>
-              ))}
-            </div>
+            <Segmented label="Split by" value={by} onChange={setBy}
+              options={[{ id: 'cause', label: 'By cause' }, { id: 'item', label: 'By item' }]} />
             <Pill tone="neutral">{lossRows.length} loss records</Pill>
             <Pill tone={unrealised.value > 0 ? 'warn' : 'good'}>
               {money(unrealised.value)} still in the bin

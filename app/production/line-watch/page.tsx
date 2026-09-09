@@ -50,7 +50,7 @@ function WeekSchedule() {
                   return (
                     <div key={j.job.jobNo} title={`${j.job.jobNo} — ${short}`}
                       style={{ '--i': day + 2 } as React.CSSProperties}
-                      className={`anim-fade-up lift rounded-md border p-2 ${
+                      className={`anim-fade-up lift shadow-sm rounded-md border p-2 ${
                         tone === 'critical' ? 'border-critical/35 bg-critical-soft'
                         : tone === 'warn' ? 'border-warn/35 bg-warn-soft' : 'border-good/30 bg-good-soft'}`}>
                       <span className="mono block text-[10.5px] text-ink-3">{j.job.jobNo}</span>
