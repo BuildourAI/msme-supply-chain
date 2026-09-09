@@ -4,10 +4,11 @@ import { useState } from 'react'
 import { Button, Card, Pill, Segmented, StatusPill } from '@/components/ui/bits'
 import { Num } from '@/components/ui/Num'
 import { StackedBars, type StackRow } from '@/components/charts/kit'
-import { lakh, money, num, qtyText } from '@/lib/domain/format'
+import { lakh, money, num, qtyText, shortDate } from '@/lib/domain/format'
 import { blockedStock } from '@/lib/seed/blocked'
-import { reviewQueue } from '@/lib/seed/intake'
+import { documentLines, reviewQueue, supplierDocuments } from '@/lib/seed/intake'
 import { offcuts } from '@/lib/seed/sourcing'
+import { useDocViewer } from './DocumentViewer'
 import { useDesk } from './store'
 
 const COST_KEYS = ['Rate', 'Freight', 'Non-cred. GST', 'Payment term', 'Rejection']
@@ -173,7 +174,9 @@ export function GuardrailPanel() {
 
 export function IntakeQueue() {
   const { state, reviewIntake, intakeCounts: c } = useDesk()
+  const { open } = useDocViewer()
   const pending = reviewQueue.filter((l) => state.intake[l.id] === 'pending')
+  const docOf = (id: string) => supplierDocuments.find((d) => d.id === id)!
 
   return (
     <Card id="intake" index={7} title="Supplier intake" sub="SRC-02 · one inbox, one WhatsApp number">
@@ -194,6 +197,21 @@ export function IntakeQueue() {
                   <span className="text-[11px] text-ink-3">from {l.vendorName}</span>
                   <span className="num ml-auto text-[12px]">{money(l.rate, 2)}/{l.uom}</span>
                 </div>
+                {/* a line with no document behind it is a claim; this opens the page it came off */}
+                <p className="mt-1 flex flex-wrap items-baseline gap-x-2 text-[11px] text-ink-3">
+                  <span>
+                    line {(documentLines[l.documentId] ?? []).findIndex((x) => x.rawText === l.rawItemText) + 1}
+                    {' '}of {docOf(l.documentId).lineCount} on
+                  </span>
+                  <button type="button" onClick={() => open(l.documentId)}
+                    className="mono font-medium text-accent underline decoration-dotted underline-offset-2 hover:no-underline">
+                    {docOf(l.documentId).fileName}
+                  </button>
+                  <span>
+                    · {docOf(l.documentId).channel === 'whatsapp' ? 'photographed and sent to WhatsApp' : 'attached to an email'}
+                    {' '}on {shortDate(docOf(l.documentId).receivedAt)}
+                  </span>
+                </p>
                 <p className="mt-1.5 text-[12.5px] text-ink-2">
                   Suggested match <span className="mono font-medium text-ink">{l.suggestedItemId}</span>
                   <span className="ml-2 text-ink-3">confidence {(l.confidence * 100).toFixed(0)}%</span>
