@@ -125,7 +125,7 @@ export function TopNav() {
             const active = isActive(item.href)
             const expanded = open === item.label
             return (
-              <li key={item.label} className="shrink-0"
+              <li key={item.label} className="relative z-10 shrink-0 rounded-md transition-colors hover:bg-tint-2"
                   ref={(el) => { if (el) triggers.current.set(item.label, el); ink.register(item.label)(el) }}
                   onMouseEnter={() => { if (item.children) { cancelClose(); setOpen(item.label) } }}
                   onMouseLeave={() => { if (item.children) scheduleClose() }}>
@@ -133,7 +133,7 @@ export function TopNav() {
                   <Link href={item.href}
                     aria-current={active ? 'page' : undefined}
                     className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 border-transparent px-3 py-2.5 text-[13px] font-medium transition-colors ${
-                      active ? 'text-ink' : 'text-ink-2 hover:text-ink'}`}>
+                      active ? 'text-accent' : 'text-ink-2 hover:text-ink'}`}>
                     {item.label}
                   </Link>
                   {item.children && (
@@ -145,7 +145,7 @@ export function TopNav() {
                         if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(item.label) }
                       }}
                       className={`-ml-2 border-b-2 border-transparent pr-2 pl-0.5 transition-colors ${
-                        active ? 'text-ink' : 'text-ink-3 hover:text-ink'}`}>
+                        active ? 'text-accent' : 'text-ink-3 hover:text-ink'}`}>
                       <Caret />
                     </button>
                   )}
@@ -153,7 +153,7 @@ export function TopNav() {
               </li>
             )
           })}
-          <TabIndicator pos={ink.pos} settled={ink.settled} />
+          <TabIndicator pos={ink.pos} settled={ink.settled} pill="top-1.5 bottom-[5px]" />
         </ul>
 
         {openItem && entries.length > 0 && (

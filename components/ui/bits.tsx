@@ -108,7 +108,7 @@ export function Segmented<T extends string>({ options, value, onChange, label }:
         <button key={o.id} type="button" aria-pressed={value === o.id} onClick={() => onChange(o.id)}
           ref={register(o.id)}
           className={`press relative z-10 rounded px-2.5 py-1 text-[12px] font-medium ${
-            value === o.id ? 'text-ink' : 'text-ink-3 hover:text-ink-2'}`}>
+            value === o.id ? 'text-accent' : 'text-ink-3 hover:text-ink-2'}`}>
           {o.label}
         </button>
       ))}

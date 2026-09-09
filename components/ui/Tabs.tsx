@@ -60,15 +60,22 @@ export function useSlidingIndicator<K extends string, E extends HTMLElement = HT
   return { track, register, pos, settled }
 }
 
-export function TabIndicator({ pos, settled, className = '' }: {
-  pos: { left: number; width: number } | null; settled: boolean; className?: string
+/**
+ * The mark of the active tab: a very light accent pill behind it and the
+ * accent rule beneath it, sliding together. `pill` positions the pill inside
+ * the track — the page strips sit it on the rule, the nav insets it a little.
+ */
+export function TabIndicator({ pos, settled, pill = 'top-0 bottom-[3px]' }: {
+  pos: { left: number; width: number } | null; settled: boolean; pill?: string
 }) {
   if (!pos) return null
+  const still = settled ? '' : 'tab-ink-still'
+  const at = { transform: `translateX(${pos.left}px)`, width: pos.width }
   return (
-    <span aria-hidden
-      className={`tab-ink pointer-events-none absolute bottom-0 left-0 h-[2px] rounded-full bg-accent ${
-        settled ? '' : 'tab-ink-still'} ${className}`}
-      style={{ transform: `translateX(${pos.left}px)`, width: pos.width }} />
+    <>
+      <span aria-hidden className={`tab-ink pointer-events-none absolute left-0 rounded-md bg-tint ${pill} ${still}`} style={at} />
+      <span aria-hidden className={`tab-ink pointer-events-none absolute bottom-0 left-0 h-[2px] rounded-full bg-accent ${still}`} style={at} />
+    </>
   )
 }
 
@@ -84,7 +91,7 @@ export function Tabs<T extends string>({ items, value, onChange, label, classNam
   const inner = (t: TabItem<T>, on: boolean) => (
     <>
       <span className="flex items-center gap-2">
-        <span className={`text-[13px] font-medium transition-colors ${on ? 'text-ink' : 'text-ink-2'}`}>{t.label}</span>
+        <span className={`text-[13px] font-medium transition-colors ${on ? 'text-accent' : 'text-ink-2'}`}>{t.label}</span>
         {t.badge}
       </span>
       {t.sub && <span className="mono block text-[10.5px] text-ink-3">{t.sub}</span>}
@@ -93,7 +100,7 @@ export function Tabs<T extends string>({ items, value, onChange, label, classNam
   // pb-2.5: the originals were pb-2 plus a 2px border, and the indicator no
   // longer takes up space, so the extra 2px keeps every page's height as it was
   const cls = (on: boolean) =>
-    `tab-item shrink-0 rounded-md px-3 pb-2.5 pt-1 text-left transition-colors ${on ? '' : 'hover:bg-surface-2/60'}`
+    `tab-item relative z-10 shrink-0 rounded-md px-3 pb-2.5 pt-1 text-left transition-colors ${on ? '' : 'hover:bg-tint-2'}`
 
   const list = items.map((t) => {
     const on = t.id === value
