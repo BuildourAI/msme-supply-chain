@@ -125,7 +125,8 @@ export function TopNav() {
             const active = isActive(item.href)
             const expanded = open === item.label
             return (
-              <li key={item.label} className="relative z-10 shrink-0 rounded-md transition-colors hover:bg-tint-2"
+              <li key={item.label} className={`relative z-10 shrink-0 rounded-md transition-colors ${
+                    active ? '' : 'bg-tint-2 hover:bg-tint'}`}
                   ref={(el) => { if (el) triggers.current.set(item.label, el); ink.register(item.label)(el) }}
                   onMouseEnter={() => { if (item.children) { cancelClose(); setOpen(item.label) } }}
                   onMouseLeave={() => { if (item.children) scheduleClose() }}>

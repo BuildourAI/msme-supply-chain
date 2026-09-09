@@ -97,10 +97,15 @@ export function Tabs<T extends string>({ items, value, onChange, label, classNam
       {t.sub && <span className="mono block text-[10.5px] text-ink-3">{t.sub}</span>}
     </>
   )
+  // Every tab wears the tint, not only the one you are on: the strip reads as
+  // one green run of controls. The active tab is still unmistakable — a
+  // stronger pill, the accent rule under it, and a teal label.
+  //
   // pb-2.5: the originals were pb-2 plus a 2px border, and the indicator no
   // longer takes up space, so the extra 2px keeps every page's height as it was
   const cls = (on: boolean) =>
-    `tab-item relative z-10 shrink-0 rounded-md px-3 pb-2.5 pt-1 text-left transition-colors ${on ? '' : 'hover:bg-tint-2'}`
+    `tab-item relative z-10 shrink-0 rounded-md px-3 pb-2.5 pt-1 text-left transition-colors ${
+      on ? '' : 'bg-tint-2 hover:bg-tint'}`
 
   const list = items.map((t) => {
     const on = t.id === value

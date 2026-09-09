@@ -106,6 +106,7 @@
      are on and the fainter one under the pointer */
   --tint: color-mix(in oklab, var(--accent) 8%, transparent);
   --tint-2: color-mix(in oklab, var(--accent) 4%, transparent);
+  --tint-head: color-mix(in oklab, var(--accent) 7%, var(--surface-2));
   --thumb: color-mix(in oklab, var(--accent) 8%, var(--surface));
 
   /* motion — one house curve, one settle curve, one spring; three durations */
@@ -171,6 +172,7 @@
     --wash-4: color-mix(in oklab, var(--cat-4) 14%, transparent);
     --tint: color-mix(in oklab, var(--accent) 12%, transparent);
     --tint-2: color-mix(in oklab, var(--accent) 6%, transparent);
+    --tint-head: color-mix(in oklab, var(--accent) 10%, var(--surface-2));
     --thumb: color-mix(in oklab, var(--accent) 12%, var(--surface-3));
 
     color-scheme: dark;
@@ -224,6 +226,7 @@
   --wash-4: color-mix(in oklab, var(--cat-4) 14%, transparent);
   --tint: color-mix(in oklab, var(--accent) 12%, transparent);
   --tint-2: color-mix(in oklab, var(--accent) 6%, transparent);
+  --tint-head: color-mix(in oklab, var(--accent) 10%, var(--surface-2));
   --thumb: color-mix(in oklab, var(--accent) 12%, var(--surface-3));
 
   color-scheme: dark;
@@ -261,6 +264,7 @@
   --color-glass-border: var(--glass-border);
   --color-tint: var(--tint);
   --color-tint-2: var(--tint-2);
+  --color-tint-head: var(--tint-head);
 
   --radius: var(--r-sm);
   --radius-xs: var(--r-xs);
@@ -367,7 +371,7 @@ button { font: inherit; color: inherit; }
 @layer components {
   /* data tables: the twelve .scroll-x wrappers, and only those, so the paper
      facsimile, the inspector and the chart value tables keep their own look */
-  .scroll-x > table > thead > tr > th { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+  .scroll-x > table > thead > tr > th { background: var(--tint-head); }
   .scroll-x > table > tbody > tr { transition: background-color var(--dur-1) var(--ease-std); }
   .scroll-x > table > tbody > tr:hover { background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
   .scroll-x > table > tbody > tr:last-child > td { border-bottom-color: transparent; }
@@ -407,9 +411,13 @@ button { font: inherit; color: inherit; }
 }
 
 /* Fourteen tables carry `bg-surface-2` on their <thead>, which on a
-   translucent card painted as an opaque strip. This sits outside every layer
-   so it wins over that utility — the single deliberate exception. */
-.glass-card .scroll-x > table > thead { background-color: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+   translucent card painted as an opaque grey strip. This sits outside every
+   layer so it wins over that utility — the single deliberate exception — and
+   puts the same green on every column header as the tabs wear. */
+.glass-card .scroll-x > table > thead { background-color: var(--tint-head); }
+/* and one step deeper on the label: ink-3 on the green header sat at 3.95,
+   under the floor for 11px type. Here rather than in fourteen files. */
+.scroll-x > table > thead > tr > th { color: var(--ink-2); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
