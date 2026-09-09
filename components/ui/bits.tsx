@@ -62,7 +62,7 @@ export function Card({ title, sub, live, annotation, actions, children, id, clas
 }) {
   return (
     <section id={id} style={{ '--i': index } as React.CSSProperties}
-             className={`anim-fade-up min-w-0 rounded-lg border border-line bg-surface shadow-sm ${className}`}>
+             className={`anim-fade-up glass-card min-w-0 rounded-lg border border-line shadow-sm ${className}`}>
       {(title || actions) && (
         <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line-soft px-4 py-3">
           <div className="min-w-0">

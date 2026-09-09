@@ -92,7 +92,7 @@ export function Painkillers({ stage }: { stage: Stage }) {
       <div className="mb-3 grid gap-2 sm:grid-cols-3">
         {(['live', 'planned', 'unsolved'] as const).map((k, i) => (
           <div key={k} style={{ '--i': i } as React.CSSProperties}
-               className={`anim-fade-up rounded-lg border bg-surface px-3 py-2 ${
+               className={`anim-fade-up glass-card rounded-lg border px-3 py-2 ${
                  counts[k] ? 'border-line' : 'border-dashed border-line opacity-60'}`}>
             <p className="flex items-baseline gap-2">
               <span className="figure text-[22px] leading-none">{counts[k]}</span>

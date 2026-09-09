@@ -167,7 +167,7 @@ function LineCard({ row, onRevise, onAck }: {
   const short = row.gap.value > 0
 
   return (
-    <li className={`anim-fade-up lift shadow-sm rounded-lg border bg-surface p-3.5 ${
+    <li className={`anim-fade-up lift glass-card shadow-sm rounded-lg border p-3.5 ${
       row.state === 'not_told' ? 'border-critical/40' : row.state === 'awaiting_ack' ? 'border-warn/40' : 'border-line'}`}>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="mono text-[12.5px] font-medium">{s.poNo}</span>

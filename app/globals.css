@@ -32,7 +32,7 @@
   --surface-3: #E9EBE8;
   --ink: #1C1F1E;
   --ink-2: #535D5A;
-  --ink-3: #717B78;
+  --ink-3: #667370;
   --line: #DCDFDB;
   --line-soft: #E8EAE6;
   --accent: #2C6B65;
@@ -74,7 +74,7 @@
   --r-2xl: 20px;
 
   /* elevation — two or three low-alpha layers, never one heavy drop */
-  --sh-1: 0 1px 2px rgb(20 24 22 / .05), 0 0 0 1px rgb(20 24 22 / .04);
+  --sh-1: inset 0 1px 0 var(--material-edge), 0 1px 2px rgb(20 24 22 / .05), 0 0 0 1px rgb(20 24 22 / .04);
   --sh-2: 0 2px 6px rgb(20 24 22 / .06), 0 8px 24px -8px rgb(20 24 22 / .10);
   --sh-3: 0 4px 12px rgb(20 24 22 / .08), 0 24px 48px -12px rgb(20 24 22 / .18);
 
@@ -84,6 +84,23 @@
   --glass-border: rgb(28 31 30 / .08);
   --glass-blur: 20px;
   --glass-sat: 160%;
+
+  /* the material every card and tile is cut from: translucent enough that
+     the wash beneath shows through, opaque enough that text on it holds its
+     contrast in the greenest corner of the page (computed, not guessed) */
+  --material: rgb(252 252 251 / .70);
+  --material-edge: rgb(255 255 255 / .7);
+  --material-sheen: rgb(255 255 255 / .42);
+
+  /* the wash — the reason any of this reads as glass. Glass over a flat
+     colour is indistinguishable from paint. These are the soft colour fields
+     that sit behind everything, in the app's own hues, and shift as a card
+     crosses them. Fixed to the viewport, so a sheet or a header drifting over
+     them shows depth. */
+  --wash-1: color-mix(in oklab, var(--accent) 34%, transparent);
+  --wash-2: color-mix(in oklab, var(--cat-1) 22%, transparent);
+  --wash-3: color-mix(in oklab, var(--good) 26%, transparent);
+  --wash-4: color-mix(in oklab, var(--cat-4) 16%, transparent);
 
   /* motion — one house curve, one settle curve, one spring; three durations */
   --ease-std: cubic-bezier(.2, .7, .2, 1);
@@ -133,12 +150,19 @@
     --seq-4: #4a8ddc;
     --seq-5: #87b8f3;
 
-    --sh-1: 0 1px 2px rgb(0 0 0 / .35), inset 0 1px 0 rgb(255 255 255 / .04);
+    --sh-1: inset 0 1px 0 var(--material-edge), 0 1px 2px rgb(0 0 0 / .35);
     --sh-2: 0 2px 8px rgb(0 0 0 / .40), 0 12px 28px -8px rgb(0 0 0 / .55);
     --sh-3: 0 6px 16px rgb(0 0 0 / .45), 0 32px 64px -12px rgb(0 0 0 / .65), inset 0 1px 0 rgb(255 255 255 / .05);
 
     --glass-bg: rgb(36 40 39 / .68);
     --glass-border: rgb(236 238 235 / .09);
+    --material: rgb(36 40 39 / .66);
+    --material-edge: rgb(255 255 255 / .09);
+    --material-sheen: rgb(255 255 255 / .05);
+    --wash-1: color-mix(in oklab, var(--accent) 30%, transparent);
+    --wash-2: color-mix(in oklab, var(--cat-1) 22%, transparent);
+    --wash-3: color-mix(in oklab, var(--good) 20%, transparent);
+    --wash-4: color-mix(in oklab, var(--cat-4) 14%, transparent);
 
     color-scheme: dark;
   }
@@ -176,12 +200,19 @@
   --seq-4: #4a8ddc;
   --seq-5: #87b8f3;
 
-  --sh-1: 0 1px 2px rgb(0 0 0 / .35), inset 0 1px 0 rgb(255 255 255 / .04);
+  --sh-1: inset 0 1px 0 var(--material-edge), 0 1px 2px rgb(0 0 0 / .35);
   --sh-2: 0 2px 8px rgb(0 0 0 / .40), 0 12px 28px -8px rgb(0 0 0 / .55);
   --sh-3: 0 6px 16px rgb(0 0 0 / .45), 0 32px 64px -12px rgb(0 0 0 / .65), inset 0 1px 0 rgb(255 255 255 / .05);
 
   --glass-bg: rgb(36 40 39 / .68);
   --glass-border: rgb(236 238 235 / .09);
+  --material: rgb(36 40 39 / .66);
+  --material-edge: rgb(255 255 255 / .09);
+  --material-sheen: rgb(255 255 255 / .05);
+  --wash-1: color-mix(in oklab, var(--accent) 30%, transparent);
+  --wash-2: color-mix(in oklab, var(--cat-1) 22%, transparent);
+  --wash-3: color-mix(in oklab, var(--good) 20%, transparent);
+  --wash-4: color-mix(in oklab, var(--cat-4) 14%, transparent);
 
   color-scheme: dark;
 }
@@ -245,6 +276,10 @@ html { -webkit-text-size-adjust: 100%; }
 body {
   background: var(--ground);
   color: var(--ink);
+  /* the wash is a fixed layer behind everything, so the body colour the
+     theme checks read stays exactly the ground */
+  position: relative;
+  z-index: 0;
   font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   font-size: 14px;
   line-height: 1.45;
@@ -255,6 +290,19 @@ body {
 /* Inter is set a touch tighter than Plex Condensed needed — its headings are
    wider, and the tighter tracking is what keeps them reading as a display
    face rather than large body text. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(56rem 40rem at 88% 4%, var(--wash-1), transparent 62%),
+    radial-gradient(44rem 34rem at -4% 62%, var(--wash-2), transparent 60%),
+    radial-gradient(64rem 40rem at 52% 104%, var(--wash-3), transparent 62%),
+    radial-gradient(34rem 26rem at 78% 66%, var(--wash-4), transparent 60%);
+}
+
 h1, h2, h3, h4 {
   font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   font-weight: 600;
@@ -305,7 +353,7 @@ button { font: inherit; color: inherit; }
 @layer components {
   /* data tables: the twelve .scroll-x wrappers, and only those, so the paper
      facsimile, the inspector and the chart value tables keep their own look */
-  .scroll-x > table > thead > tr > th { background: var(--surface-2); }
+  .scroll-x > table > thead > tr > th { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
   .scroll-x > table > tbody > tr { transition: background-color var(--dur-1) var(--ease-std); }
   .scroll-x > table > tbody > tr:hover { background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
   .scroll-x > table > tbody > tr:last-child > td { border-bottom-color: transparent; }
@@ -314,8 +362,19 @@ button { font: inherit; color: inherit; }
   .scroll-x:first-child > table > thead > tr:first-child > th:first-child { border-top-left-radius: calc(var(--r-lg) - 1px); }
   .scroll-x:first-child > table > thead > tr:first-child > th:last-child { border-top-right-radius: calc(var(--r-lg) - 1px); }
 
+  /* the card material: translucent over the wash, with the lit top edge.
+     No backdrop-filter here on purpose — over a smooth wash a blur changes
+     nothing you can see, and a filter would make every card a containing
+     block for the fixed dialogs rendered inside it. The blur is spent where
+     it shows: on things that move over content. */
+  .glass-card {
+    background:
+      linear-gradient(180deg, var(--material-sheen), transparent 46%),
+      var(--material);
+  }
+
   /* glass: only where something scrolls beneath — the sticky header, menus,
-     dialogs, sheets, the toast. Never a table, never a tile. */
+     dialogs, sheets, the toast. */
   .glass {
     background: var(--glass-bg);
     border-color: var(--glass-border);
@@ -332,6 +391,11 @@ button { font: inherit; color: inherit; }
     border: 1px solid var(--hatch-c);
   }
 }
+
+/* Fourteen tables carry `bg-surface-2` on their <thead>, which on a
+   translucent card painted as an opaque strip. This sits outside every layer
+   so it wins over that utility — the single deliberate exception. */
+.glass-card .scroll-x > table > thead { background-color: color-mix(in srgb, var(--surface-2) 55%, transparent); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

@@ -20,7 +20,7 @@ export function KpiTile({ label, d, format, caption, tone = 'neutral', onClick, 
 }) {
   return (
     <div style={{ '--i': index } as React.CSSProperties}
-         className={`anim-fade-up lift flex items-stretch gap-3 rounded-lg border bg-surface shadow-sm ${active ? 'border-accent' : 'border-line'}`}>
+         className={`anim-fade-up lift glass-card flex items-stretch gap-3 rounded-lg border shadow-sm ${active ? 'border-accent' : 'border-line'}`}>
       <span aria-hidden className={`w-[3px] shrink-0 rounded-l-[calc(var(--r-lg)-1px)] ${TONE_BAR[tone]}`} />
       <div className="min-w-0 flex-1 py-3 pr-3">
         <span className="mono block text-[10px] uppercase tracking-wider text-ink-3">{label}</span>

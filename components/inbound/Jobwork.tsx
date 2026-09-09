@@ -211,7 +211,7 @@ function ChallanCard({ row, onReturn, onClose, onExtend }: {
   const closed = c.status === 'closed'
 
   return (
-    <li className={`anim-fade-up lift shadow-sm rounded-lg border bg-surface p-3.5 ${
+    <li className={`anim-fade-up lift glass-card shadow-sm rounded-lg border p-3.5 ${
       row.overdue ? 'border-critical/40' : closed ? 'border-line-soft' : 'border-line'}`}>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="mono text-[12.5px] font-medium">{c.challanNo}</span>

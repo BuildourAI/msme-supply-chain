@@ -99,7 +99,7 @@ function TopBar({ onActivity }: { onActivity: () => void }) {
 function Chrome({ children }: { children: React.ReactNode }) {
   const [activity, setActivity] = useState(false)
   return (
-    <div className="min-h-screen bg-ground">
+    <div className="min-h-screen">
       {/* One sticky glass header for both bars. No overflow on it, ever — the
           nav dropdown hangs off this element and must escape downward. */}
       <header className="glass sticky top-0 z-40 border-b">
