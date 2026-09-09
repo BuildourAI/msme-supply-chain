@@ -82,7 +82,7 @@
      scrolls beneath reads as depth rather than noise */
   --glass-bg: rgb(252 252 251 / .72);
   --glass-border: rgb(28 31 30 / .08);
-  --glass-blur: 20px;
+  --glass-blur: 14px;
   --glass-sat: 160%;
 
   /* the material every card and tile is cut from: translucent enough that
@@ -108,6 +108,9 @@
   --tint-2: color-mix(in oklab, var(--accent) 4%, transparent);
   --tint-head: color-mix(in oklab, var(--accent) 7%, var(--surface-2));
   --thumb: color-mix(in oklab, var(--accent) 8%, var(--surface));
+  /* the tiles are cut from the same glass as the cards, with the green in it */
+  --material-green: color-mix(in oklab, var(--accent) 6%, var(--material));
+  --tile-edge: color-mix(in oklab, var(--accent) 22%, var(--line));
 
   /* motion — one house curve, one settle curve, one spring; three durations */
   --ease-std: cubic-bezier(.2, .7, .2, 1);
@@ -174,6 +177,8 @@
     --tint-2: color-mix(in oklab, var(--accent) 6%, transparent);
     --tint-head: color-mix(in oklab, var(--accent) 10%, var(--surface-2));
     --thumb: color-mix(in oklab, var(--accent) 12%, var(--surface-3));
+    --material-green: color-mix(in oklab, var(--accent) 8%, var(--material));
+    --tile-edge: color-mix(in oklab, var(--accent) 26%, var(--line));
 
     color-scheme: dark;
   }
@@ -228,6 +233,8 @@
   --tint-2: color-mix(in oklab, var(--accent) 6%, transparent);
   --tint-head: color-mix(in oklab, var(--accent) 10%, var(--surface-2));
   --thumb: color-mix(in oklab, var(--accent) 12%, var(--surface-3));
+  --material-green: color-mix(in oklab, var(--accent) 8%, var(--material));
+  --tile-edge: color-mix(in oklab, var(--accent) 26%, var(--line));
 
   color-scheme: dark;
 }
@@ -391,6 +398,17 @@ button { font: inherit; color: inherit; }
       var(--material);
   }
 
+  /* The tile: the same glass as a card with the green in it, and a green
+     hairline. Deliberately no backdrop-filter — sixteen blurred layers on one
+     dashboard is what turns a scroll into a slideshow, and over a smooth wash
+     a blur changes nothing you can see. A translucent fill costs nothing. */
+  .glass-tile {
+    background:
+      linear-gradient(180deg, var(--material-sheen), transparent 46%),
+      var(--material-green);
+    border-color: var(--tile-edge);
+  }
+
   /* glass: only where something scrolls beneath — the sticky header, menus,
      dialogs, sheets, the toast. */
   .glass {
@@ -471,6 +489,7 @@ button { font: inherit; color: inherit; }
 
 /* interaction */
 .lift { transition: transform var(--dur-2) var(--ease-quint), box-shadow var(--dur-2) var(--ease-quint), border-color var(--dur-2) var(--ease-std) }
+.lift, .tab-ink, .seg-thumb { will-change: transform }
 .lift:hover { transform: translateY(-1px); box-shadow: var(--sh-2); border-color: color-mix(in srgb, var(--line) 55%, var(--accent)) }
 
 .press { transition: transform var(--dur-1) var(--ease-std), background-color var(--dur-1) var(--ease-std), border-color var(--dur-1) var(--ease-std), color var(--dur-1) var(--ease-std), opacity var(--dur-1) var(--ease-std) }
