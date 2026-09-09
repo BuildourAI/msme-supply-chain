@@ -24,7 +24,7 @@ const PROV_STYLE: Record<Provenance, string> = {
 export function ProvenanceChip({ p, title }: { p: Provenance; title?: string }) {
   return (
     <span title={title ?? PROVENANCE_TITLE[p]}
-      className={`mono inline-flex shrink-0 cursor-help items-center rounded border px-1 py-px text-[9px] uppercase tracking-wide ${PROV_STYLE[p]}`}>
+      className={`mono inline-flex shrink-0 cursor-help items-center rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-wide ${PROV_STYLE[p]}`}>
       {PROVENANCE_LABEL[p]}
     </span>
   )
@@ -89,10 +89,7 @@ function ExecTile({ k, index, chart, notes }: {
     <div style={{ '--i': index } as React.CSSProperties}
          className={`anim-fade-up lift glass-tile flex flex-col rounded-lg border p-3 shadow-sm ${
            k.provenance === 'illustrative' ? 'border-dashed !border-line' : ''}`}>
-      <div className="flex items-start gap-1.5">
-        <h3 className="text-[12px] font-medium leading-tight">{k.label}</h3>
-        <span className="ml-auto"><ProvenanceChip p={k.provenance} /></span>
-      </div>
+      <h3 className="text-[15px] font-semibold leading-tight tracking-tight">{k.label}</h3>
 
       <p className="mt-1.5 flex flex-wrap items-baseline gap-x-2">
         <Num d={k.d} format={k.format} dp={k.dp} suffix={k.suffix} size="lg" tone={tone} />
@@ -108,11 +105,16 @@ function ExecTile({ k, index, chart, notes }: {
 
       {chart && <div className="mt-2.5">{chart}</div>}
 
-      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
-        className="mt-auto flex w-full items-center gap-1 border-t border-line-soft pt-1.5 text-left text-[10.5px] text-ink-3 transition-colors hover:text-accent">
-        <span aria-hidden className={`inline-block transition-transform ${open ? 'rotate-90' : ''}`}>›</span>
-        {open ? 'Hide the note' : 'What this means'}
-      </button>
+      {/* the foot of the tile: the note toggle on the left, the provenance
+          chip as a pill on the right — where the reference puts its badge */}
+      <div className="mt-auto flex items-center gap-2 border-t border-line-soft pt-1.5">
+        <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
+          className="flex min-w-0 flex-1 items-center gap-1 text-left text-[10.5px] text-ink-3 transition-colors hover:text-accent">
+          <span aria-hidden className={`inline-block transition-transform ${open ? 'rotate-90' : ''}`}>›</span>
+          {open ? 'Hide the note' : 'What this means'}
+        </button>
+        <ProvenanceChip p={k.provenance} />
+      </div>
       {open && (
         <div className="anim-fade-up">
           <p className="mt-1 text-[11px] leading-relaxed text-ink-2">{k.meaning}</p>
@@ -127,8 +129,10 @@ function ExecTile({ k, index, chart, notes }: {
   )
 }
 
-export function ExecSection({ no, title, blurb, kpis, charts, notes, index = 0, children }: {
+export function ExecSection({ no, title, blurb, kpis, charts, notes, index = 0, hue, children }: {
   no: number; title: string; blurb: string; kpis: Kpi[]; index?: number
+  /** the colour this section's tiles are cut in — a CSS colour, usually a token */
+  hue?: string
   /** one chart per KPI id — a KPI with no entry keeps its bare headline figure */
   charts?: Record<string, React.ReactNode>
   /** the page-level switch: open every tile's note, and the section footer */
@@ -150,7 +154,8 @@ export function ExecSection({ no, title, blurb, kpis, charts, notes, index = 0, 
             </span>
           ) : null)}
       </div>}>
-      <div className="grid gap-2.5 p-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-2.5 p-3 md:grid-cols-2 xl:grid-cols-4"
+           style={hue ? { '--tile-c': hue } as React.CSSProperties : undefined}>
         {kpis.map((k, i) => (
           <ExecTile key={k.id} k={k} index={i} chart={charts?.[k.id]} notes={notes} />
         ))}

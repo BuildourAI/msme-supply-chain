@@ -77,13 +77,13 @@ function TopBar({ onActivity }: { onActivity: () => void }) {
         <span className="text-[13px] text-ink-2">Material Flow</span>
       </div>
 
-      <span className="mono hidden rounded border border-line bg-surface px-2 py-0.5 text-[10.5px] text-ink-3 sm:inline">
+      <span className="mono hidden rounded-full border border-line bg-surface/70 px-2.5 py-0.5 text-[10.5px] text-ink-3 sm:inline">
         sample data · not any client’s real trading data
       </span>
 
       <div className="ml-auto flex items-center gap-2">
         <button type="button" onClick={onActivity}
-          className="press inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1 text-[12px] font-medium shadow-sm hover:bg-surface-2">
+          className="press inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1 text-[12px] font-medium shadow-sm hover:bg-surface-2">
           Activity
           <span className={`mono rounded-full px-1.5 text-[10px] ${audit.length ? 'bg-accent text-on-accent' : 'bg-surface-3 text-ink-3'}`}>
             {audit.length}
@@ -99,19 +99,22 @@ function TopBar({ onActivity }: { onActivity: () => void }) {
 function Chrome({ children }: { children: React.ReactNode }) {
   const [activity, setActivity] = useState(false)
   return (
-    <div className="min-h-screen">
-      {/* One sticky glass header for both bars. No overflow on it, ever — the
-          nav dropdown hangs off this element and must escape downward. */}
-      <header className="glass sticky top-0 z-40 border-b">
-        <TopBar onActivity={() => setActivity(true)} />
-        <TopNav />
-      </header>
-      <main className="mx-auto max-w-[1600px] px-4 py-5">{children}</main>
-      <footer className="mx-auto max-w-[1600px] px-4 pb-8 pt-2 text-[11px] leading-relaxed text-ink-3">
-        The system suggests, holds and recommends. It never places an order, never contacts a
-        supplier, never edits a customer record. All figures are illustrative sample data prepared
-        for demonstration — none of it is any client’s real trading data.
-      </footer>
+    <div className="min-h-screen p-2 sm:p-3 lg:p-4">
+      {/* The whole app floats in one pane on the gradient. No overflow on the
+          frame or the header, ever — the nav dropdown hangs off the header and
+          must escape downward, and the header must stick to the viewport. */}
+      <div className="glass-frame mx-auto max-w-[1600px] rounded-2xl border">
+        <header className="glass sticky top-0 z-40 rounded-t-2xl border-b">
+          <TopBar onActivity={() => setActivity(true)} />
+          <TopNav />
+        </header>
+        <main className="px-4 py-5">{children}</main>
+        <footer className="px-4 pb-6 pt-2 text-[11px] leading-relaxed text-ink-3">
+          The system suggests, holds and recommends. It never places an order, never contacts a
+          supplier, never edits a customer record. All figures are illustrative sample data prepared
+          for demonstration — none of it is any client’s real trading data.
+        </footer>
+      </div>
       <ActivityDrawer open={activity} onClose={() => setActivity(false)} />
       <Inspector />
       <Toast />

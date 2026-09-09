@@ -99,7 +99,7 @@ export function Segmented<T extends string>({ options, value, onChange, label }:
   const { track, register, pos, settled } = useSlidingIndicator(value)
   return (
     <div ref={track} role="group" aria-label={label}
-         className="relative inline-flex rounded-md border border-line bg-surface-2 p-0.5">
+         className="relative inline-flex rounded-full border border-line bg-surface-2 p-0.5">
       {pos && (
         <span aria-hidden className={`seg-thumb ${settled ? '' : 'tab-ink-still'}`}
               style={{ transform: `translateX(${pos.left}px)`, width: pos.width }} />
@@ -107,7 +107,7 @@ export function Segmented<T extends string>({ options, value, onChange, label }:
       {options.map((o) => (
         <button key={o.id} type="button" aria-pressed={value === o.id} onClick={() => onChange(o.id)}
           ref={register(o.id)}
-          className={`press relative z-10 rounded px-2.5 py-1 text-[12px] font-medium ${
+          className={`press relative z-10 rounded-full px-2.5 py-1 text-[12px] font-medium ${
             value === o.id ? 'text-accent' : 'text-ink-3 hover:text-ink-2'}`}>
           {o.label}
         </button>
