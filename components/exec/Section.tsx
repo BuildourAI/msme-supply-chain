@@ -56,9 +56,9 @@ export function HeadlineStrip({ cells }: {
              className="anim-fade-up lift glass-tile flex items-stretch gap-2.5 rounded-lg border py-2 pr-2.5 shadow-sm">
           <span aria-hidden className={`w-[3px] shrink-0 rounded-r ${TONE_BAR[c.tone]}`} />
           <div className="min-w-0 flex-1">
-            <span className="mono block truncate text-[9.5px] uppercase tracking-wider text-ink-3">{c.label}</span>
+            <span className="mono block truncate text-[9.5px] uppercase tracking-wider text-ink-2">{c.label}</span>
             <Num d={c.d} format={c.format} size="lg" tone={c.tone === 'neutral' ? undefined : c.tone} />
-            <span className="block truncate text-[10.5px] leading-tight text-ink-3" title={c.caption}>{c.caption}</span>
+            <span className="block truncate text-[10.5px] leading-tight text-ink-2" title={c.caption}>{c.caption}</span>
           </div>
         </div>
       ))}
@@ -104,7 +104,7 @@ function ExecTile({ k, index, chart, notes }: {
         )}
       </p>
 
-      <p className="mt-0.5 text-[11px] leading-snug text-ink-3">{k.caption}</p>
+      <p className="mt-0.5 text-[11px] leading-snug text-ink-2">{k.caption}</p>
 
       {chart && <div className="mt-2.5">{chart}</div>}
 

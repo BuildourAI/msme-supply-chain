@@ -109,8 +109,8 @@
   --tint-head: color-mix(in oklab, var(--accent) 7%, var(--surface-2));
   --thumb: color-mix(in oklab, var(--accent) 8%, var(--surface));
   /* the tiles are cut from the same glass as the cards, with the green in it */
-  --material-green: color-mix(in oklab, var(--accent) 6%, var(--material));
-  --tile-edge: color-mix(in oklab, var(--accent) 22%, var(--line));
+  --material-green: color-mix(in oklab, var(--accent) 12%, var(--material));
+  --tile-edge: color-mix(in oklab, var(--accent) 32%, var(--line));
 
   /* motion — one house curve, one settle curve, one spring; three durations */
   --ease-std: cubic-bezier(.2, .7, .2, 1);
@@ -177,8 +177,8 @@
     --tint-2: color-mix(in oklab, var(--accent) 6%, transparent);
     --tint-head: color-mix(in oklab, var(--accent) 10%, var(--surface-2));
     --thumb: color-mix(in oklab, var(--accent) 12%, var(--surface-3));
-    --material-green: color-mix(in oklab, var(--accent) 8%, var(--material));
-    --tile-edge: color-mix(in oklab, var(--accent) 26%, var(--line));
+    --material-green: color-mix(in oklab, var(--accent) 16%, var(--material));
+    --tile-edge: color-mix(in oklab, var(--accent) 36%, var(--line));
 
     color-scheme: dark;
   }
@@ -233,8 +233,8 @@
   --tint-2: color-mix(in oklab, var(--accent) 6%, transparent);
   --tint-head: color-mix(in oklab, var(--accent) 10%, var(--surface-2));
   --thumb: color-mix(in oklab, var(--accent) 12%, var(--surface-3));
-  --material-green: color-mix(in oklab, var(--accent) 8%, var(--material));
-  --tile-edge: color-mix(in oklab, var(--accent) 26%, var(--line));
+  --material-green: color-mix(in oklab, var(--accent) 16%, var(--material));
+  --tile-edge: color-mix(in oklab, var(--accent) 36%, var(--line));
 
   color-scheme: dark;
 }

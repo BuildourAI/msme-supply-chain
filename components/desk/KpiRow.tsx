@@ -23,12 +23,12 @@ export function KpiTile({ label, d, format, caption, tone = 'neutral', onClick, 
          className={`anim-fade-up lift glass-tile flex items-stretch gap-3 rounded-lg border shadow-sm ${active ? '!border-accent' : ''}`}>
       <span aria-hidden className={`w-[3px] shrink-0 rounded-l-[calc(var(--r-lg)-1px)] ${TONE_BAR[tone]}`} />
       <div className="min-w-0 flex-1 py-3 pr-3">
-        <span className="mono block text-[10px] uppercase tracking-wider text-ink-3">{label}</span>
+        <span className="mono block text-[10px] uppercase tracking-wider text-ink-2">{label}</span>
         <span className="mt-1 block">
           <Num d={d} format={format} size="display" suffix={suffix}
                tone={tone === 'neutral' ? undefined : tone} />
         </span>
-        <span className="mt-1.5 block text-[11.5px] leading-snug text-ink-3">{caption}</span>
+        <span className="mt-1.5 block text-[11.5px] leading-snug text-ink-2">{caption}</span>
         {onClick && (
           <button type="button" onClick={onClick} aria-pressed={active}
             className={`press mt-1.5 rounded border px-1.5 py-0.5 text-[11px] font-medium ${
