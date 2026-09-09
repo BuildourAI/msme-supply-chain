@@ -1,11 +1,12 @@
 'use client'
+import Link from 'next/link'
 import { useState } from 'react'
 import { Button, Card, Pill, Segmented, StatusPill } from '@/components/ui/bits'
 import { Num } from '@/components/ui/Num'
-import { BarRows, StackedBars, type StackRow } from '@/components/charts/kit'
+import { StackedBars, type StackRow } from '@/components/charts/kit'
 import { lakh, money, num, qtyText } from '@/lib/domain/format'
-import { AGE_LABEL, blockedStock, CAUSE_LABEL, ROUTE_LABEL } from '@/lib/seed/blocked'
-import { reviewQueue, supplierDocuments } from '@/lib/seed/intake'
+import { blockedStock } from '@/lib/seed/blocked'
+import { reviewQueue } from '@/lib/seed/intake'
 import { offcuts } from '@/lib/seed/sourcing'
 import { useDesk } from './store'
 
@@ -154,6 +155,15 @@ export function GuardrailPanel() {
             </li>
           </ul>
         </div>
+
+        <p className="border-t border-line-soft pt-2.5 text-[11.5px] leading-relaxed text-ink-3">
+          This guardrail is the preventive half of SRC-04. What it failed to prevent in the past —
+          {' '}{lakh(blockedStock.reduce((a, b) => a + b.value, 0))} across {blockedStock.length} lots,
+          with an owner and a route out on each — is on the{' '}
+          <Link href="/sourcing/blocked" className="font-medium text-accent hover:underline">
+            blocked-capital register
+          </Link>.
+        </p>
       </div>
     </Card>
   )
@@ -227,82 +237,6 @@ export function IntakeQueue() {
             that vendor’s spelling for good.
           </p>
         </div>
-      </div>
-    </Card>
-  )
-}
-
-/* ---------------------------------------------- SRC-04 · blocked capital -- */
-
-export function BlockedCapital() {
-  const [by, setBy] = useState<'cause' | 'age'>('cause')
-  const total = blockedStock.reduce((a, b) => a + b.value, 0)
-
-  const group = (key: 'cause' | 'ageBucket', labels: Record<string, string>) => {
-    const m = new Map<string, number>()
-    for (const b of blockedStock) m.set(b[key], (m.get(b[key]) ?? 0) + b.value)
-    return [...m.entries()]
-      .map(([k, v]) => ({ label: labels[k] ?? k, value: v }))
-      .sort((a, b) => b.value - a.value)
-  }
-  const rows = by === 'cause' ? group('cause', CAUSE_LABEL) : group('ageBucket', AGE_LABEL)
-
-  return (
-    <Card id="blocked" index={8} title="Blocked capital" sub="SRC-04 · money stuck in the wrong material"
-      actions={<Segmented label="Group by" value={by} onChange={setBy}
-        options={[{ id: 'cause', label: 'By cause' }, { id: 'age', label: 'By age' }]} />}>
-      <div className="p-4">
-        <p className="figure mb-3 text-[28px] leading-none">{lakh(total)}</p>
-        <BarRows rows={rows} format="lakh" colorMode={by === 'cause' ? 'categorical' : 'sequential'} />
-
-        <p className="mt-3.5 rounded-md border border-line bg-surface-2 p-3 text-[12.5px] leading-relaxed text-ink-2">
-          {by === 'cause' ? (
-            <>
-              <strong className="text-ink">MOQ forced is the top cause at {lakh(rows[0].value)}.</strong>{' '}
-              That is a vendor negotiation, not a software change — which is the whole reason this
-              column exists.
-            </>
-          ) : (
-            <>
-              <strong className="text-ink">{lakh(rows[0].value)} has been sitting for over 180 days.</strong>{' '}
-              Age tells you how bad it is; cause tells you what to do about it.
-            </>
-          )}
-        </p>
-
-        <details className="mt-3 group">
-          <summary className="cursor-pointer text-[12px] font-medium text-accent hover:underline">
-            All {blockedStock.length} lots, with an owner and a deadline
-          </summary>
-          <div className="scroll-x mt-2 max-h-72 overflow-auto">
-            <table className="w-full min-w-[38rem] border-collapse text-[11.5px]">
-              <thead className="sticky top-0 bg-surface-2">
-                <tr className="text-ink-3">
-                  {['Material', 'Qty', 'Value', 'Age', 'Cause', 'Route', 'Owner', 'By'].map((h) => (
-                    <th key={h} className="whitespace-nowrap border-b border-line px-2 py-1.5 text-left font-medium">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {blockedStock.map((b) => (
-                  <tr key={b.id} className="border-b border-line-soft">
-                    <td className="px-2 py-1.5">
-                      <span className="mono block text-[10.5px] text-ink-3">{b.itemCode}</span>
-                      <span className="block max-w-[14rem] truncate">{b.itemName}</span>
-                    </td>
-                    <td className="num whitespace-nowrap px-2 py-1.5">{num(b.qty, b.qty < 10 ? 2 : 0)} {b.uom}</td>
-                    <td className="num whitespace-nowrap px-2 py-1.5 font-medium">{lakh(b.value)}</td>
-                    <td className="whitespace-nowrap px-2 py-1.5 text-ink-2">{AGE_LABEL[b.ageBucket]}</td>
-                    <td className="whitespace-nowrap px-2 py-1.5 text-ink-2">{CAUSE_LABEL[b.cause]}</td>
-                    <td className="whitespace-nowrap px-2 py-1.5 text-ink-2">{ROUTE_LABEL[b.route]}</td>
-                    <td className="whitespace-nowrap px-2 py-1.5 text-ink-2">{b.owner}</td>
-                    <td className="mono whitespace-nowrap px-2 py-1.5 text-ink-3">{b.deadline}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
       </div>
     </Card>
   )

@@ -348,7 +348,7 @@ export default function Page() {
               Ships first, because it needs no historical data and no ERP — only an inbox — and it
               produces the price history the landed-cost comparison runs on.
             </p>
-            <Link href="/sourcing/desk#intake" className="mt-2 inline-block text-[12px] font-medium text-accent hover:underline">
+            <Link href="/sourcing/intake" className="mt-2 inline-block text-[12px] font-medium text-accent hover:underline">
               Review the queue →
             </Link>
           </div>

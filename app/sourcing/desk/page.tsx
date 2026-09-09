@@ -6,8 +6,7 @@ import { Num } from '@/components/ui/Num'
 import { useDesk } from '@/components/desk/store'
 import { KpiTile } from '@/components/desk/KpiRow'
 import { DetailTable, SummaryTable } from '@/components/desk/Src01Table'
-import { BlockedCapital, GuardrailPanel, IntakeQueue, LandedCostCompare } from '@/components/desk/Panels'
-import { blockedStock } from '@/lib/seed/blocked'
+import { GuardrailPanel, LandedCostCompare } from '@/components/desk/Panels'
 import { lakh, longDate, money, num, STATUS_LABEL, STATUS_TONE } from '@/lib/domain/format'
 import { VALUATION_BASIS } from '@/lib/domain/policy'
 import { useApp } from '@/state/app-store'
@@ -53,7 +52,7 @@ function DeskTab() {
   const { kpis, setFilter, state, selected } = useDesk()
   return (
     <>
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <KpiTile index={0} label="Lines needing a decision" d={kpis.linesNeedingDecision} format="int"
           tone="critical" active={state.statusFilter === 'needs_decision'}
           onClick={() => setFilter(state.statusFilter === 'needs_decision' ? 'all' : 'needs_decision')}
@@ -61,13 +60,7 @@ function DeskTab() {
           caption="3 at risk · 1 covered on quantity but late on timing" />
         <KpiTile index={1} label="Cash to release" d={kpis.toRelease} format="lakh" tone="accent"
           caption={`across ${kpis.draftPoCount} draft POs · ${kpis.heldCount} held by the guardrail`} />
-        <KpiTile index={2} label="Blocked capital" d={{
-          value: blockedStock.reduce((a, b) => a + b.value, 0), label: 'Blocked capital',
-          formula: 'Σ blocked_stock.value', unit: '₹',
-          inputs: blockedStock.map((b) => ({ name: b.itemCode, value: b.value, unit: '₹' })),
-          note: 'Usable material bought for the wrong job — a different population from non-usable stock.',
-        }} format="lakh" tone="warn" caption={`${blockedStock.length} lots · MOQ forced is the top cause`} />
-        <KpiTile index={3} label="Non-usable stock" d={kpis.nonUsableValue} format="money" tone="warn"
+        <KpiTile index={2} label="Non-usable stock" d={kpis.nonUsableValue} format="money" tone="warn"
           caption={`on hand but not issuable · valued at ${VALUATION_BASIS}`} />
       </div>
 
@@ -83,13 +76,9 @@ function DeskTab() {
         </p>
       </Card>
 
-      <div className="mb-4 grid gap-3 lg:grid-cols-2">
+      <div className="grid items-start gap-3 lg:grid-cols-2">
         <LandedCostCompare />
         <GuardrailPanel />
-      </div>
-      <div className="grid gap-3 lg:grid-cols-2">
-        <IntakeQueue />
-        <BlockedCapital />
       </div>
     </>
   )
@@ -269,7 +258,7 @@ function Desk() {
       <PageHeader eyebrow="Stage 1 · Sourcing & procurement" title="Sourcing Desk"
         meta={<>
           <Pill mono>run R-0902 · {longDate('2026-09-02')}</Pill>
-          <Pill tone="accent">SRC-01 · 02 · 03 · 04</Pill>
+          <Pill tone="accent">SRC-01 · 03 · 04</Pill>
           {decided > 0 && <Pill tone="good">{decided} decided</Pill>}
         </>}
         actions={<>

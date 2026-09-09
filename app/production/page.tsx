@@ -72,7 +72,7 @@ export default function Page() {
         </ul>
         <p className="border-t border-line-soft px-4 py-3 text-[12px] leading-relaxed text-ink-3">
           New mappings are written from the review queue on the{' '}
-          <Link href="/sourcing/desk#intake" className="font-medium text-accent hover:underline">Sourcing Desk</Link>.
+          <Link href="/sourcing/intake" className="font-medium text-accent hover:underline">supplier intake page</Link>.
           Accepting a suggested match teaches the system that vendor’s spelling permanently.
         </p>
       </Card>

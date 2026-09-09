@@ -222,7 +222,7 @@ export default function Page() {
               Override, never block. A guardrail that cannot be overridden gets worked around within a
               week, and then it is measuring nothing.
             </p>
-            <a href="/sourcing/desk#blocked"
+            <a href="/sourcing/desk#guardrail"
                className="inline-block pt-0.5 text-[12px] font-medium text-accent hover:underline">
               See the guardrail on the desk →
             </a>

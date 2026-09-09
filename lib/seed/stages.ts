@@ -55,7 +55,7 @@ export const STAGES: Stage[] = [
         costsToday: 'Four of nine materials on this run crossed their reorder point before anyone looked. One of them — MgO powder — is covered on quantity and still late: the order exists, it just lands nine days after the material runs out.',
         how: 'A daily run computes true position — on hand, minus what is not issuable, plus only what a vendor has acknowledged — against a reorder point built from six real receipts rather than a quoted lead time. The line raises itself and states why; a person decides.' },
       { title: 'Unstructured supplier intake', detail: 'Quotes arrive by email and WhatsApp and are never searchable again.',
-        answeredBy: 'SRC-02 · Supplier intake & mapping', state: 'live', href: '/sourcing/desk#intake',
+        answeredBy: 'SRC-02 · Supplier intake & mapping', state: 'live', href: '/sourcing/intake',
         costsToday: 'Fourteen documents a month arrive as attachments and photos. Nothing is searchable afterwards, so the price history every other decision needs never accumulates.',
         how: 'One inbox and one WhatsApp number. Each document’s lines are matched against the item master; anything under 70% confidence goes to a person instead of being guessed at. A confirmed match writes a permanent alias, so the same supplier wording is never re-keyed twice.' },
       { title: 'No price comparison at the buy', detail: 'The cheapest quoted rate is not the cheapest material.',
@@ -68,7 +68,8 @@ export const STAGES: Stage[] = [
         how: 'Every lot carries a cause, an owner, a route out and a deadline, and the same guardrail holds any new order that would push cover past its ceiling. MOQ forced is the top cause at ₹5.8 L, which makes the fix a vendor negotiation rather than a software change — that is the whole reason the cause column exists.' },
     ],
     modules: [
-      { label: 'Sourcing Desk', href: '/sourcing/desk', note: 'SRC-01 reorder trigger + SRC-02 supplier intake & mapping' },
+      { label: 'Sourcing Desk', href: '/sourcing/desk', note: 'SRC-01 reorder trigger, with the SRC-03 comparison and the SRC-04 guardrail on the line you pick' },
+      { label: 'Supplier intake & mapping', href: '/sourcing/intake', note: 'SRC-02 · one inbox, one WhatsApp number, one alias table' },
       { label: 'Landed-cost comparison', href: '/sourcing/compare', note: 'SRC-03 · why the cheapest quote is not the cheapest material' },
       { label: 'Blocked capital', href: '/sourcing/blocked', note: 'SRC-04 · ₹18.4 L stuck, by cause and by age' },
       { label: 'Painkillers solved', href: '/sourcing/painkillers', note: 'the four pains, and the mechanism that removes each' },
