@@ -235,11 +235,23 @@ export function IntakeQueue() {
           </p>
         )}
 
-        <div className="mt-4">
-          <p className="mono text-[10px] uppercase tracking-wider text-ink-3">
-            Item alias table · {state.aliases.length} mappings
-          </p>
-          <ul className="mt-1.5 space-y-1">
+      </div>
+    </Card>
+  )
+}
+
+/**
+ * The alias table, beside the rules that produce it rather than inside the
+ * queue. The queue is what still needs a person; this is what the queue has
+ * already settled, and it is the actual deliverable of SRC-02.
+ */
+export function AliasTable() {
+  const { state } = useDesk()
+  return (
+    <Card index={2} title="Item alias table"
+      sub={`${state.aliases.length} mappings · a vendor's own wording, resolved for good`}>
+      <div className="p-3.5">
+          <ul className="space-y-1">
             {state.aliases.map((a, i) => (
               <li key={i} className="flex flex-wrap items-baseline gap-x-2 text-[11.5px]"
                   title={`Any future line from ${a.vendorName} reading “${a.rawText}” resolves to ${a.itemId} without review.`}>
@@ -254,7 +266,6 @@ export function IntakeQueue() {
             The mapping table is the deliverable, not the parser. Accepting a match teaches the system
             that vendor’s spelling for good.
           </p>
-        </div>
       </div>
     </Card>
   )
