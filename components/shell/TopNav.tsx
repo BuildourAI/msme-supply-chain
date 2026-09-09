@@ -23,11 +23,23 @@ const Caret = () => (
 interface NavGroup { label: string; href: string; children?: ModuleEntry[] }
 
 const PAINKILLERS = 'Painkillers solved'
-const PANEL_W = 320
+const PANEL_W = 258
 
 /** modules you can open first, then the painkiller brief, then everything not built */
 const rank = (m: ModuleEntry) => (m.href ? (m.label === PAINKILLERS ? 1 : 0) : 2)
 
+/**
+ * The menu is a list of destinations and nothing else.
+ *
+ * It used to carry a line of explanation under every entry — the module code,
+ * what it does, the headline figure. That belongs on the page it opens, or on
+ * the stage page, where there is room to read it. In a 258px panel it turned
+ * five links into fifteen lines of prose you have to scan past to find the one
+ * you wanted, which is the opposite of what a menu is for.
+ *
+ * One seam survives: the rule above the locked group. It is not description,
+ * it is the reason those entries look different from the ones above them.
+ */
 const MenuRule = ({ label }: { label: string }) => (
   <p className="mono mt-1 border-t border-line-soft px-3.5 pb-0.5 pt-1.5 text-[9.5px] uppercase tracking-wider text-ink-3">
     {label}
@@ -150,15 +162,11 @@ export function TopNav() {
             {entries.map((m, i, all) =>
               m.href ? (
                 <div key={m.label}>
-                  {/* the painkiller brief is a different kind of thing from a
-                      module, and the locked list is a third — label the seams */}
-                  {m.label === PAINKILLERS && <MenuRule label="what it solves" />}
                   <Link href={m.href} role="menuitem"
                     onClick={() => setOpen(null)}
-                    className="block px-3.5 py-2 hover:bg-surface-2">
-                    <span className={`text-[13px] font-medium ${
+                    className="block px-3.5 py-1.5 hover:bg-surface-2">
+                    <span className={`block truncate text-[13px] font-medium ${
                       m.label === PAINKILLERS ? 'text-accent' : 'text-ink'}`}>{m.label}</span>
-                    {m.note && <span className="mt-0.5 block text-[11px] leading-snug text-ink-3">{m.note}</span>}
                   </Link>
                   {all[i + 1] && !all[i + 1].href && <MenuRule label="not built yet" />}
                 </div>
