@@ -57,9 +57,10 @@ export function useFlash(value: unknown): string {
 
 /** Briefly cross-fades every colour on the page — used around a theme toggle. */
 export function crossfadeTheme(apply: () => void) {
-  const root = document.documentElement
-  if (reducedMotion()) { apply(); return }
-  root.classList.add('theme-fade')
-  apply()
-  window.setTimeout(() => root.classList.remove('theme-fade'), 340)
+  // One compositor-driven crossfade of a page snapshot. The old approach put a
+  // CSS transition on every element in the document for 340ms; this hands the
+  // browser two snapshots and lets it fade between them.
+  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown }
+  if (reducedMotion() || typeof doc.startViewTransition !== 'function') { apply(); return }
+  doc.startViewTransition(() => { apply() })
 }

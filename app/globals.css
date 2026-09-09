@@ -32,7 +32,7 @@
   --surface-3: #E9EBE8;
   --ink: #1C1F1E;
   --ink-2: #535D5A;
-  --ink-3: #667370;
+  --ink-3: #586562;
   --line: #DCDFDB;
   --line-soft: #E8EAE6;
   --accent: #2C6B65;
@@ -42,7 +42,7 @@
   --critical-soft: #F4E2DE;
   --warn: #835C12;
   --warn-soft: #F3E8D2;
-  --good: #33704F;
+  --good: #2E6A4A;
   --good-soft: #DEEAE2;
 
   /* validated categorical slots — §10. Never invent hues. Muted from the
@@ -80,7 +80,7 @@
 
   /* glass — a translucent surface plus blur and a little saturation, so what
      scrolls beneath reads as depth rather than noise */
-  --glass-bg: rgb(252 252 251 / .72);
+  --glass-bg: rgb(252 252 251 / .58);
   --glass-border: rgb(28 31 30 / .08);
   --glass-blur: 14px;
   --glass-sat: 160%;
@@ -97,7 +97,7 @@
      that sit behind everything, in the app's own hues, and shift as a card
      crosses them. Fixed to the viewport, so a sheet or a header drifting over
      them shows depth. */
-  --wash-1: color-mix(in oklab, var(--accent) 34%, transparent);
+  --wash-1: color-mix(in oklab, var(--pastel-b) 70%, transparent);
   --wash-2: color-mix(in oklab, var(--cat-1) 22%, transparent);
   --wash-3: color-mix(in oklab, var(--good) 26%, transparent);
   --wash-4: color-mix(in oklab, var(--cat-4) 16%, transparent);
@@ -117,15 +117,22 @@
      Translucent only: a backdrop-filter the size of the viewport re-blurs
      the fixed wash on every scrolled frame, and over a smooth gradient it
      shows nothing a plain alpha does not. */
-  --frame: rgb(255 255 255 / .52);
+  --frame: rgb(255 255 255 / .58);
   --frame-edge: rgb(255 255 255 / .75);
 
-  /* a tile takes its colour from --tile-c, set per section; the mix is how
-     much of that colour goes into the glass, and the edge how much into the rim */
-  --tile-c: var(--accent);
-  --tile-mix: 14%;
-  --tile-edge-mix: 34%;
-  --tile-glow: 16%;
+  /* A tile takes its colour from --tile-c, set per section. These are real
+     pastels, not the dark brand hues: mixing a dark accent into white gives
+     grey, which is what the tiles were. The rim takes a deeper mix of the same
+     pastel; the glow is white, so the lit corner is lighter than the tile
+     rather than — as it was — darker. */
+  --tile-1: #AFDDCF;   /* mint — inbound, the brand hue */
+  --tile-2: #CDE7BE;   /* sage — warehouse */
+  --tile-3: #C9D6F2;   /* lavender — outbound */
+  --tile-4: #F5DCB6;   /* peach — financials */
+  --tile-c: var(--tile-1);
+  --tile-mix: 66%;
+  --tile-edge-mix: 78%;
+  --tile-glow: .55;
 
   /* motion — one house curve, one settle curve, one spring; three durations */
   --ease-std: cubic-bezier(.2, .7, .2, 1);
@@ -150,13 +157,13 @@
     --surface-3: #363B3A;
     --ink: #ECEEEB;
     --ink-2: #B1B8B5;
-    --ink-3: #8A928F;
+    --ink-3: #9CA4A1;
     --line: #3A403E;
     --line-soft: #303534;
     --accent: #7EC2B5;
     --accent-soft: #243D39;
     --on-accent: #10201E;
-    --critical: #DE9284;
+    --critical: #E39B8E;
     --critical-soft: #3E2723;
     --warn: #D6B061;
     --warn-soft: #392F1A;
@@ -196,10 +203,14 @@
     --pastel-b: #183732;
     --frame: rgb(28 32 31 / .55);
     --frame-edge: rgb(255 255 255 / .08);
-    --tile-c: var(--accent);
-    --tile-mix: 18%;
-    --tile-edge-mix: 38%;
-    --tile-glow: 14%;
+    --tile-1: #142C27;
+    --tile-2: #172B20;
+    --tile-3: #16253A;
+    --tile-4: #2E2918;
+    --tile-c: var(--tile-1);
+    --tile-mix: 62%;
+    --tile-edge-mix: 62%;
+    --tile-glow: .05;
 
     color-scheme: dark;
   }
@@ -212,13 +223,13 @@
   --surface-3: #363B3A;
   --ink: #ECEEEB;
   --ink-2: #B1B8B5;
-  --ink-3: #8A928F;
+  --ink-3: #9CA4A1;
   --line: #3A403E;
   --line-soft: #303534;
   --accent: #7EC2B5;
   --accent-soft: #243D39;
   --on-accent: #10201E;
-  --critical: #DE9284;
+  --critical: #E39B8E;
   --critical-soft: #3E2723;
   --warn: #D6B061;
   --warn-soft: #392F1A;
@@ -258,10 +269,14 @@
   --pastel-b: #183732;
   --frame: rgb(28 32 31 / .55);
   --frame-edge: rgb(255 255 255 / .08);
-  --tile-c: var(--accent);
-  --tile-mix: 18%;
-  --tile-edge-mix: 38%;
-  --tile-glow: 14%;
+  --tile-1: #142C27;
+  --tile-2: #172B20;
+  --tile-3: #16253A;
+  --tile-4: #2E2918;
+  --tile-c: var(--tile-1);
+  --tile-mix: 62%;
+  --tile-edge-mix: 62%;
+  --tile-glow: .05;
 
   color-scheme: dark;
 }
@@ -314,6 +329,10 @@
   --shadow-xl: var(--sh-3);
   --shadow-2xl: var(--sh-3);
 
+  /* transition-* utilities ride the house curve instead of Tailwind's 150ms */
+  --default-transition-duration: var(--dur-1);
+  --default-transition-timing-function: var(--ease-std);
+
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-cond: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, SFMono-Regular, monospace;
@@ -321,7 +340,25 @@
 
 /* ---------------------------------------------------------------- base ---- */
 
-* { border-color: var(--line); }
+/* These sit in @layer base on purpose. Unlayered CSS beats every layered rule
+   in Tailwind v4 — the whole utilities layer included — so an unlayered
+   `* { border-color }` silently cancelled all 130 border-* utilities and both
+   glass classes, and an unlayered `button { font: inherit }` overrode
+   text-[30px] / text-on-accent / font-medium on every button in the app: the
+   display figures were rendering at 14px and the primary button was dark ink
+   on dark green. In the base layer they are what they were meant to be —
+   defaults that anything more specific overrides. */
+@layer base {
+  * { border-color: var(--line); }
+  button { font: inherit; color: inherit; }
+  h1, h2, h3, h4 {
+    font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    margin: 0;
+  }
+  h1 { letter-spacing: -0.02em; }
+}
 
 html { -webkit-text-size-adjust: 100%; }
 
@@ -339,9 +376,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Inter is set a touch tighter than Plex Condensed needed — its headings are
-   wider, and the tighter tracking is what keeps them reading as a display
-   face rather than large body text. */
 body::before {
   content: '';
   position: fixed;
@@ -353,16 +387,8 @@ body::before {
     radial-gradient(44rem 34rem at -4% 62%, var(--wash-2), transparent 60%),
     radial-gradient(64rem 40rem at 52% 104%, var(--wash-3), transparent 62%),
     radial-gradient(34rem 26rem at 78% 66%, var(--wash-4), transparent 60%),
-    linear-gradient(135deg, var(--pastel-a) 0%, var(--ground) 48%, var(--pastel-b) 100%);
+    linear-gradient(135deg, var(--pastel-a) 0%, color-mix(in oklab, var(--pastel-a) 45%, var(--pastel-b)) 48%, var(--pastel-b) 100%);
 }
-
-h1, h2, h3, h4 {
-  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  font-weight: 600;
-  letter-spacing: -0.012em;
-  margin: 0;
-}
-h1 { letter-spacing: -0.02em; }
 
 /* §10 — tabular figures on every numeric column */
 .num, table td, table th, .font-mono {
@@ -387,8 +413,6 @@ h1 { letter-spacing: -0.02em; }
   outline-offset: 2px;
   border-radius: var(--r-xs);
 }
-
-button { font: inherit; color: inherit; }
 
 ::selection { background: var(--accent-soft); color: var(--ink); }
 
@@ -433,7 +457,7 @@ button { font: inherit; color: inherit; }
   .glass-tile {
     background:
       linear-gradient(180deg, var(--material-sheen), transparent 46%),
-      radial-gradient(120% 90% at 100% 0%, color-mix(in oklab, var(--tile-c) var(--tile-glow), transparent), transparent 62%),
+      radial-gradient(120% 90% at 100% 0%, rgb(255 255 255 / var(--tile-glow)), transparent 62%),
       color-mix(in oklab, var(--tile-c) var(--tile-mix), var(--material));
     border-color: color-mix(in oklab, var(--tile-c) var(--tile-edge-mix), var(--line));
   }
@@ -477,7 +501,14 @@ button { font: inherit; color: inherit; }
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-delay: 0ms !important;
-    transition-duration: 0.01ms !important;
+    /* `transition-property: none`, not a near-zero duration: a duration still
+       makes every element transition `all`, which spawned ~5,000 transitions
+       on a theme switch and blocked the main thread for a third of a second —
+       a slowdown aimed squarely at the people this guard exists for. */
+    transition-property: none !important;
+  }
+  ::view-transition-group(*), ::view-transition-old(root), ::view-transition-new(root) {
+    animation: none !important;
   }
 }
 
@@ -525,7 +556,8 @@ button { font: inherit; color: inherit; }
 
 /* interaction */
 .lift { transition: transform var(--dur-2) var(--ease-quint), box-shadow var(--dur-2) var(--ease-quint), border-color var(--dur-2) var(--ease-std) }
-.lift, .tab-ink, .seg-thumb { will-change: transform }
+/* only the two things that actually slide get a permanent layer */
+.tab-ink, .seg-thumb { will-change: transform }
 .lift:hover { transform: translateY(-1px); box-shadow: var(--sh-2); border-color: color-mix(in srgb, var(--line) 55%, var(--accent)) }
 
 .press { transition: transform var(--dur-1) var(--ease-std), background-color var(--dur-1) var(--ease-std), border-color var(--dur-1) var(--ease-std), color var(--dur-1) var(--ease-std), opacity var(--dur-1) var(--ease-std) }
@@ -538,16 +570,18 @@ button { font: inherit; color: inherit; }
 
 /* the segmented control's thumb — a raised pill that slides */
 .seg-thumb {
-  position: absolute; top: 2px; bottom: 2px; left: 0;
+  position: absolute; top: 1px; bottom: 1px; left: 0;
   border-radius: 999px;
-  background: var(--thumb);
+  background: var(--accent);
   box-shadow: var(--sh-1);
   transition: transform 260ms var(--ease-spring), width 260ms var(--ease-spring);
 }
 
-/* Theme cross-fade. Only ever applied for a moment around a toggle, never on
-   load, so the first paint is instant and the switch feels deliberate. */
-html.theme-fade, html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after {
-  transition: background-color .28s ease, color .28s ease, border-color .28s ease,
-              fill .28s ease, stroke .28s ease, box-shadow .28s ease !important;
+/* Theme cross-fade, done by the compositor. The old rule put a transition on
+   every element in the document, which meant ~5,000 CSSTransitions and a third
+   of a second of blocked main thread for one attribute write. A view
+   transition fades one snapshot instead; browsers without it just switch. */
+::view-transition-old(root), ::view-transition-new(root) {
+  animation-duration: var(--dur-2);
+  animation-timing-function: var(--ease-std);
 }

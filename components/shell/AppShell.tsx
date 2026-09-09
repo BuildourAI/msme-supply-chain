@@ -77,7 +77,7 @@ function TopBar({ onActivity }: { onActivity: () => void }) {
         <span className="text-[13px] text-ink-2">Material Flow</span>
       </div>
 
-      <span className="mono hidden rounded-full border border-line bg-surface/70 px-2.5 py-0.5 text-[10.5px] text-ink-3 sm:inline">
+      <span className="mono hidden rounded-full border border-line bg-surface/70 px-2.5 py-0.5 text-[10.5px] text-ink-3 lg:inline">
         sample data · not any client’s real trading data
       </span>
 
@@ -85,7 +85,7 @@ function TopBar({ onActivity }: { onActivity: () => void }) {
         <button type="button" onClick={onActivity}
           className="press inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1 text-[12px] font-medium shadow-sm hover:bg-surface-2">
           Activity
-          <span className={`mono rounded-full px-1.5 text-[10px] ${audit.length ? 'bg-accent text-on-accent' : 'bg-surface-3 text-ink-3'}`}>
+          <span className={`mono rounded-full px-1.5 text-[10px] ${audit.length ? 'bg-accent text-on-accent' : 'bg-surface-3 text-ink-2'}`}>
             {audit.length}
           </span>
         </button>
@@ -99,17 +99,20 @@ function TopBar({ onActivity }: { onActivity: () => void }) {
 function Chrome({ children }: { children: React.ReactNode }) {
   const [activity, setActivity] = useState(false)
   return (
-    <div className="min-h-screen p-2 sm:p-3 lg:p-4">
-      {/* The whole app floats in one pane on the gradient. No overflow on the
-          frame or the header, ever — the nav dropdown hangs off the header and
-          must escape downward, and the header must stick to the viewport. */}
-      <div className="glass-frame mx-auto max-w-[1600px] rounded-2xl border">
-        <header className="glass sticky top-0 z-40 rounded-t-2xl border-b">
+    <div className="min-h-screen p-2 sm:p-4 lg:p-7">
+      {/* The whole app floats in one pane on the gradient. `overflow-clip` and
+          NOT `overflow-hidden`: hidden would make the frame a scroll container
+          and break the header's stick. Clip lets the sticky header square its
+          own top corners while the frame keeps its round ones — otherwise page
+          content shows through two notches once you scroll. The nav dropdown
+          still escapes downward, which is why neither element hides overflow. */}
+      <div className="glass-frame mx-auto max-w-[1600px] overflow-clip rounded-2xl border">
+        <header className="glass sticky top-0 z-40 border-b">
           <TopBar onActivity={() => setActivity(true)} />
           <TopNav />
         </header>
-        <main className="px-4 py-5">{children}</main>
-        <footer className="px-4 pb-6 pt-2 text-[11px] leading-relaxed text-ink-3">
+        <main className="px-4 pb-3 pt-5">{children}</main>
+        <footer className="px-4 pb-4 pt-1 text-[11px] leading-relaxed text-ink-3">
           The system suggests, holds and recommends. It never places an order, never contacts a
           supplier, never edits a customer record. All figures are illustrative sample data prepared
           for demonstration — none of it is any client’s real trading data.

@@ -19,7 +19,7 @@ export function Dialog({ open, onClose, title, sub, children, wide }: {
 
   if (!open) return null
   return (
-    <div className="anim-backdrop fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/30 p-4 pt-[10vh] backdrop-blur-[6px]"
+    <div className="anim-backdrop fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/30 p-4 pt-[10vh]"
          onClick={onClose}>
       <div ref={ref} role="dialog" aria-modal="true" aria-label={title}
            onClick={(e) => e.stopPropagation()}

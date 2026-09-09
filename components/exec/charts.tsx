@@ -297,7 +297,7 @@ export function execCharts(c: ChartCtx): Record<string, React.ReactNode> {
     // space — and the measured half of the same question in its place.
     freightOut: (
       <>
-        <p className="rounded border border-dashed border-line bg-surface-2 px-2.5 py-2 text-[11px] leading-relaxed text-ink-3">
+        <p className="rounded border border-dashed border-ink-3 bg-surface-2 px-2.5 py-2 text-[11px] leading-relaxed text-ink-3">
           <span className="font-medium text-ink-2">No chart here, deliberately.</span> One assumed rupee
           figure divided by another assumed count has no shape to draw. Drawing one anyway would give an
           invented number the authority of a picture.

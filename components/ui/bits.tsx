@@ -54,15 +54,19 @@ export function StatusPill({ label, tone, explain }: { label: string; tone: Tone
  * whole page 40px wider than the screen. A card never gets to do that — what
  * is wider than the card scrolls inside it.
  */
-export function Card({ title, sub, live, annotation, actions, children, id, className = '', index = 0 }: {
+export function Card({ title, sub, live, annotation, actions, children, id, className = '', index = 0, flat = false }: {
   title?: string; sub?: string; live?: boolean; annotation?: string
   actions?: React.ReactNode; children: React.ReactNode; id?: string; className?: string
   /** stagger position on entrance */
   index?: number
+  /** no pane of its own — for a card whose children are already panes, so they
+      sit on the frame instead of on a third slab */
+  flat?: boolean
 }) {
   return (
     <section id={id} style={{ '--i': index } as React.CSSProperties}
-             className={`anim-fade-up glass-card min-w-0 rounded-lg border border-line shadow-sm ${className}`}>
+             className={`anim-fade-up min-w-0 rounded-lg border ${
+               flat ? 'border-transparent' : 'glass-card border-line shadow-sm'} ${className}`}>
       {(title || actions) && (
         <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line-soft px-4 py-3">
           <div className="min-w-0">
@@ -99,7 +103,7 @@ export function Segmented<T extends string>({ options, value, onChange, label }:
   const { track, register, pos, settled } = useSlidingIndicator(value)
   return (
     <div ref={track} role="group" aria-label={label}
-         className="relative inline-flex rounded-full border border-line bg-surface-2 p-0.5">
+         className="relative inline-flex rounded-full border border-line bg-surface-2 p-px">
       {pos && (
         <span aria-hidden className={`seg-thumb ${settled ? '' : 'tab-ink-still'}`}
               style={{ transform: `translateX(${pos.left}px)`, width: pos.width }} />
@@ -107,8 +111,8 @@ export function Segmented<T extends string>({ options, value, onChange, label }:
       {options.map((o) => (
         <button key={o.id} type="button" aria-pressed={value === o.id} onClick={() => onChange(o.id)}
           ref={register(o.id)}
-          className={`press relative z-10 rounded-full px-2.5 py-1 text-[12px] font-medium ${
-            value === o.id ? 'text-accent' : 'text-ink-3 hover:text-ink-2'}`}>
+          className={`press relative z-10 rounded-full px-2.5 py-[3px] text-[12px] font-medium ${
+            value === o.id ? 'text-on-accent' : 'text-ink-2 hover:text-ink'}`}>
           {o.label}
         </button>
       ))}

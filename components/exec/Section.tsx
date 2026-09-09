@@ -18,7 +18,7 @@ import type { Tone } from '@/lib/domain/format'
 const PROV_STYLE: Record<Provenance, string> = {
   derived: 'border-good/30 bg-good-soft text-good',
   part: 'border-warn/30 bg-warn-soft text-warn',
-  illustrative: 'border-line bg-surface-3 text-ink-3',
+  illustrative: 'border-line bg-surface-3 text-ink-2',
 }
 
 export function ProvenanceChip({ p, title }: { p: Provenance; title?: string }) {
@@ -48,9 +48,13 @@ const PROVENANCE_TITLE: Record<Provenance, string> = {
 export function HeadlineStrip({ cells }: {
   cells: { label: string; d: Derived<unknown>; format?: NumFormat; tone: Tone; caption: string }[]
 }) {
-  const wide = cells.length >= 5 ? 'xl:grid-cols-5' : 'lg:grid-cols-4'
+  // five cells in a 2- or 3-column grid leaves an orphan slot for 640px of
+  // width; let the fifth span the row until there is room for all five
+  const cols = cells.length === 5
+    ? 'sm:grid-cols-2 sm:[&>:nth-child(5)]:col-span-2 lg:grid-cols-5 lg:[&>:nth-child(5)]:col-span-1'
+    : 'sm:grid-cols-2 lg:grid-cols-4'
   return (
-    <div className={`mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 ${wide}`}>
+    <div className={`mb-3 grid gap-2 ${cols}`}>
       {cells.map((c, i) => (
         <div key={c.label} style={{ '--i': i } as React.CSSProperties}
              className="anim-fade-up lift glass-tile flex items-stretch gap-2.5 rounded-lg border py-2 pr-2.5 shadow-sm">
@@ -88,8 +92,8 @@ function ExecTile({ k, index, chart, notes }: {
   return (
     <div style={{ '--i': index } as React.CSSProperties}
          className={`anim-fade-up lift glass-tile flex flex-col rounded-lg border p-3 shadow-sm ${
-           k.provenance === 'illustrative' ? 'border-dashed !border-line' : ''}`}>
-      <h3 className="text-[15px] font-semibold leading-tight tracking-tight">{k.label}</h3>
+           k.provenance === 'illustrative' ? 'border-dashed !border-ink-3' : ''}`}>
+      <h3 className="text-[15px] font-bold leading-tight tracking-tight">{k.label}</h3>
 
       <p className="mt-1.5 flex flex-wrap items-baseline gap-x-2">
         <Num d={k.d} format={k.format} dp={k.dp} suffix={k.suffix} size="lg" tone={tone} />
@@ -109,7 +113,7 @@ function ExecTile({ k, index, chart, notes }: {
           chip as a pill on the right — where the reference puts its badge */}
       <div className="mt-auto flex items-center gap-2 border-t border-line-soft pt-1.5">
         <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
-          className="flex min-w-0 flex-1 items-center gap-1 text-left text-[10.5px] text-ink-3 transition-colors hover:text-accent">
+          className="flex min-w-0 flex-1 items-center gap-1 text-left text-[10.5px] text-ink-2 transition-colors hover:text-accent">
           <span aria-hidden className={`inline-block transition-transform ${open ? 'rotate-90' : ''}`}>›</span>
           {open ? 'Hide the note' : 'What this means'}
         </button>
@@ -144,7 +148,7 @@ export function ExecSection({ no, title, blurb, kpis, charts, notes, index = 0, 
     return a
   }, {})
   return (
-    <Card index={index} title={`${no}. ${title}`} sub={blurb}
+    <Card flat index={index} title={`${no}. ${title}`} sub={blurb}
       actions={<div className="flex flex-wrap items-center gap-1.5">
         {(['derived', 'part', 'illustrative'] as Provenance[]).map((p) =>
           counts[p] ? (

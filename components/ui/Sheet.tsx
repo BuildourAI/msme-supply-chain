@@ -29,7 +29,7 @@ export function Sheet({ open, onClose, label, eyebrow, title, children, z = 'z-[
 
   if (!open) return null
   return (
-    <div className={`anim-backdrop fixed inset-0 ${z} flex justify-end bg-ink/20 backdrop-blur-[4px]`} onClick={onClose}>
+    <div className={`anim-backdrop fixed inset-0 ${z} flex justify-end bg-ink/20`} onClick={onClose}>
       <aside role="dialog" aria-modal="true" aria-label={label}
         onClick={(e) => e.stopPropagation()}
         className="anim-sheet glass flex h-full w-full max-w-md flex-col overflow-y-auto rounded-l-2xl border-l shadow-2xl">
