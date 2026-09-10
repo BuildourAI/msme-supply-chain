@@ -32,7 +32,7 @@
   --surface-3: #E9EBE8;
   --ink: #1C1F1E;
   --ink-2: #535D5A;
-  --ink-3: #53605D;
+  --ink-3: #505D5A;
   --line: #DCDFDB;
   --line-soft: #E8EAE6;
   --accent: #27615C;
@@ -80,7 +80,7 @@
 
   /* glass — a translucent surface plus blur and a little saturation, so what
      scrolls beneath reads as depth rather than noise */
-  --glass-bg: rgb(252 252 251 / .58);
+  --glass-bg: rgb(252 252 251 / .42);
   --glass-border: rgb(28 31 30 / .08);
   --glass-blur: 14px;
   --glass-sat: 125%;
@@ -88,7 +88,7 @@
   /* the material every card and tile is cut from: translucent enough that
      the wash beneath shows through, opaque enough that text on it holds its
      contrast in the greenest corner of the page (computed, not guessed) */
-  --material: rgb(252 252 251 / .70);
+  --material: rgb(252 252 251 / .44);
   --material-edge: rgb(255 255 255 / .7);
   --material-sheen: rgb(255 255 255 / .42);
 
@@ -118,7 +118,7 @@
      Translucent only: a backdrop-filter the size of the viewport re-blurs
      the fixed wash on every scrolled frame, and over a smooth gradient it
      shows nothing a plain alpha does not. */
-  --frame: rgb(255 255 255 / .42);
+  --frame: rgb(255 255 255 / .16);
   --frame-edge: rgb(255 255 255 / .85);
   --frame-top: rgb(255 255 255 / .95);
   --frame-sheen: rgb(255 255 255 / .10);
@@ -151,13 +151,13 @@
      paint. The rim is white, as on real glass, with a second fainter ring
      just inside it and a bright hairline along the top edge; the sheen is a
      diagonal reflection from the top left. */
-  --tile-mix: 76%;
+  --tile-mix: 62%;
   --tile-rim: rgb(255 255 255 / .86);
   --tile-rim-hover: rgb(255 255 255 / 1);
   --tile-ring: rgb(255 255 255 / .44);
   --tile-top: rgb(255 255 255 / .95);
   --tile-left: rgb(255 255 255 / .55);
-  --tile-sheen: .50;
+  --tile-sheen: .40;
   --tile-glow: .16;
   /* the far corner deepens toward the pure pastel, so a tile is lit from one
      side and shaded on the other — a flat pastel with a light edge is a card */
@@ -189,7 +189,7 @@
     --surface-2: #2C3130;
     --surface-3: #363B3A;
     --ink: #ECEEEB;
-    --ink-2: #B1B8B5;
+    --ink-2: #B7BEBB;
     --ink-3: #AFB7B4;
     --line: #3A403E;
     --line-soft: #303534;
@@ -219,9 +219,9 @@
     --sh-2: 0 2px 8px rgb(0 0 0 / .40), 0 12px 28px -8px rgb(0 0 0 / .55);
     --sh-3: 0 6px 16px rgb(0 0 0 / .45), 0 32px 64px -12px rgb(0 0 0 / .65), inset 0 1px 0 rgb(255 255 255 / .05);
 
-    --glass-bg: rgb(36 40 39 / .68);
+    --glass-bg: rgb(36 40 39 / .52);
     --glass-border: rgb(236 238 235 / .09);
-    --material: rgb(36 40 39 / .66);
+    --material: rgb(36 40 39 / .42);
     --material-edge: rgb(255 255 255 / .09);
     --material-sheen: rgb(255 255 255 / .05);
     --wash-1: color-mix(in oklab, var(--accent) 30%, transparent);
@@ -254,7 +254,7 @@
     --tile-5: #1F331B;
     --tile-6: #173634;
     --tile-c: var(--tile-1);
-    --tile-mix: 58%;
+    --tile-mix: 48%;
     --tile-rim: rgb(255 255 255 / .16);
     --tile-rim-hover: rgb(255 255 255 / .30);
     --tile-ring: rgb(255 255 255 / .07);
@@ -278,7 +278,7 @@
   --surface-2: #2C3130;
   --surface-3: #363B3A;
   --ink: #ECEEEB;
-  --ink-2: #B1B8B5;
+  --ink-2: #B7BEBB;
   --ink-3: #AFB7B4;
   --line: #3A403E;
   --line-soft: #303534;
@@ -308,9 +308,9 @@
   --sh-2: 0 2px 8px rgb(0 0 0 / .40), 0 12px 28px -8px rgb(0 0 0 / .55);
   --sh-3: 0 6px 16px rgb(0 0 0 / .45), 0 32px 64px -12px rgb(0 0 0 / .65), inset 0 1px 0 rgb(255 255 255 / .05);
 
-  --glass-bg: rgb(36 40 39 / .68);
+  --glass-bg: rgb(36 40 39 / .52);
   --glass-border: rgb(236 238 235 / .09);
-  --material: rgb(36 40 39 / .66);
+  --material: rgb(36 40 39 / .42);
   --material-edge: rgb(255 255 255 / .09);
   --material-sheen: rgb(255 255 255 / .05);
   --wash-1: color-mix(in oklab, var(--accent) 30%, transparent);
@@ -343,7 +343,7 @@
   --tile-5: #1F331B;
   --tile-6: #173634;
   --tile-c: var(--tile-1);
-  --tile-mix: 58%;
+  --tile-mix: 48%;
   --tile-rim: rgb(255 255 255 / .16);
   --tile-rim-hover: rgb(255 255 255 / .30);
   --tile-ring: rgb(255 255 255 / .07);
