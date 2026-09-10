@@ -19,7 +19,7 @@ export function KpiTile({ label, d, format, caption, tone = 'neutral', onClick, 
   index?: number
 }) {
   return (
-    <div style={{ '--i': index } as React.CSSProperties}
+    <div style={{ '--i': index, '--tile-c': `var(--tile-${(index % 6) + 1})` } as React.CSSProperties}
          className={`anim-fade-up lift glass-tile flex items-stretch gap-3 rounded-lg border ${active ? '!border-accent' : ''}`}>
       <span aria-hidden className={`w-[3px] shrink-0 rounded-l-[calc(var(--r-lg)-1px)] ${TONE_BAR[tone]}`} />
       <div className="min-w-0 flex-1 py-3 pr-3">

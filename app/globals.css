@@ -35,7 +35,7 @@
   --ink-3: #53605D;
   --line: #DCDFDB;
   --line-soft: #E8EAE6;
-  --accent: #2C6B65;
+  --accent: #27615C;
   --accent-soft: #DDE9E6;
   --on-accent: #FFFFFF;
   --critical: #A5382E;
@@ -83,7 +83,7 @@
   --glass-bg: rgb(252 252 251 / .58);
   --glass-border: rgb(28 31 30 / .08);
   --glass-blur: 14px;
-  --glass-sat: 160%;
+  --glass-sat: 125%;
 
   /* the material every card and tile is cut from: translucent enough that
      the wash beneath shows through, opaque enough that text on it holds its
@@ -104,43 +104,44 @@
 
   /* the tab tint — the accent at a whisper, for the pill behind the tab you
      are on and the fainter one under the pointer */
-  --tint: color-mix(in oklab, var(--accent) 8%, transparent);
-  --tint-2: color-mix(in oklab, var(--accent) 4%, transparent);
+  --tint: color-mix(in oklab, var(--accent) 16%, transparent);
+  --tint-2: color-mix(in oklab, var(--accent) 7%, transparent);
   --tint-head: color-mix(in oklab, var(--accent) 7%, var(--surface-2));
   --thumb: color-mix(in oklab, var(--accent) 8%, var(--surface));
   /* the two poles of the ground: lavender at the top left, mint at the foot —
      the app sits on a diagonal between them, the way the reference does */
-  --pastel-a: #C6BFEA;    /* lavender, top left */
-  --pastel-mid: #C8DCE8;  /* the diagonal never passes through grey */
-  --pastel-b: #B5E5D3;    /* mint, bottom right */
+  --pastel-a: #BDB4E6;    /* lavender, top left */
+  --pastel-mid: #BCD5E5;  /* the diagonal never passes through grey */
+  --pastel-b: #A8E0CC;    /* mint, bottom right */
 
   /* the frame — one big pane the whole app floats in, over the gradient.
      Translucent only: a backdrop-filter the size of the viewport re-blurs
      the fixed wash on every scrolled frame, and over a smooth gradient it
      shows nothing a plain alpha does not. */
-  --frame: rgb(255 255 255 / .50);
+  --frame: rgb(255 255 255 / .42);
   --frame-edge: rgb(255 255 255 / .85);
   --frame-top: rgb(255 255 255 / .95);
-  --frame-sheen: rgb(255 255 255 / .22);
+  --frame-sheen: rgb(255 255 255 / .10);
+  --frame-ring: rgb(255 255 255 / .18);
 
   /* the light orbs — the soft discs of light the reference has behind its
      pane. Fixed to the viewport with the gradient, so the content scrolls
      over them and a translucent tile crossing one shows it through. Drawn
      already soft, so they read as light rather than as shapes and no blur
      is needed to frost them. */
-  --orb-1: rgb(255 255 255 / .55);
-  --orb-2: rgb(255 255 255 / .42);
+  --orb-1: rgb(255 255 255 / .70);
+  --orb-2: rgb(255 255 255 / .58);
   --orb-3: color-mix(in oklab, var(--tile-1) 70%, white);
-  --orb-3-a: 55%;
+  --orb-3-a: 78%;
 
   /* A tile takes its colour from --tile-c, set per section. These are real
      pastels, not the dark brand hues: mixing a dark accent into white gives
      grey, which is what the tiles were. The rim takes a deeper mix of the same
      pastel; the glow is white, so the lit corner is lighter than the tile
      rather than — as it was — darker. */
-  --tile-1: #A9DCCB;   /* mint     */
-  --tile-2: #C2D9F2;   /* sky      */
-  --tile-3: #CFC9F0;   /* lavender */
+  --tile-1: #B0E0D0;   /* mint     */
+  --tile-2: #CBDAEA;   /* sky — grey-blue, so it never rhymes with cat-1 */
+  --tile-3: #D5D0F5;   /* lavender */
   --tile-4: #F6DDB8;   /* peach    */
   --tile-5: #C8E8BE;   /* sage     */
   --tile-6: #B6E5E0;   /* aqua     */
@@ -150,15 +151,21 @@
      paint. The rim is white, as on real glass, with a second fainter ring
      just inside it and a bright hairline along the top edge; the sheen is a
      diagonal reflection from the top left. */
-  --tile-mix: 68%;
-  --tile-rim: rgb(255 255 255 / .78);
-  --tile-rim-hover: rgb(255 255 255 / .95);
-  --tile-ring: rgb(255 255 255 / .34);
-  --tile-top: rgb(255 255 255 / .92);
-  --tile-sheen: .34;
-  --tile-glow: .26;
-  --tile-shadow: 0 1px 2px rgb(20 24 22 / .04), 0 12px 28px -14px rgb(20 24 22 / .24);
-  --tile-shadow-hover: 0 2px 6px rgb(20 24 22 / .06), 0 16px 32px -12px rgb(20 24 22 / .28);
+  --tile-mix: 76%;
+  --tile-rim: rgb(255 255 255 / .86);
+  --tile-rim-hover: rgb(255 255 255 / 1);
+  --tile-ring: rgb(255 255 255 / .44);
+  --tile-top: rgb(255 255 255 / .95);
+  --tile-left: rgb(255 255 255 / .55);
+  --tile-sheen: .50;
+  --tile-glow: .16;
+  /* the far corner deepens toward the pure pastel, so a tile is lit from one
+     side and shaded on the other — a flat pastel with a light edge is a card */
+  --tile-shade: 26%;
+  /* the 1px dark contact halo is what makes the white rim read as a crisp
+     line rather than a soft edge on a light pane */
+  --tile-shadow: 0 0 0 1px rgb(20 24 22 / .05), 0 1px 2px rgb(20 24 22 / .05), 0 14px 30px -12px rgb(20 24 22 / .20);
+  --tile-shadow-hover: 0 0 0 1px rgb(20 24 22 / .07), 0 2px 6px rgb(20 24 22 / .07), 0 18px 36px -10px rgb(20 24 22 / .24);
 
   /* motion — one house curve, one settle curve, one spring; three durations */
   --ease-std: cubic-bezier(.2, .7, .2, 1);
@@ -183,13 +190,13 @@
     --surface-3: #363B3A;
     --ink: #ECEEEB;
     --ink-2: #B1B8B5;
-    --ink-3: #A2AAA7;
+    --ink-3: #AFB7B4;
     --line: #3A403E;
     --line-soft: #303534;
     --accent: #7EC2B5;
     --accent-soft: #243D39;
     --on-accent: #10201E;
-    --critical: #E39B8E;
+    --critical: #EAA89B;
     --critical-soft: #3E2723;
     --warn: #D6B061;
     --warn-soft: #392F1A;
@@ -221,37 +228,45 @@
     --wash-2: color-mix(in oklab, var(--cat-1) 22%, transparent);
     --wash-3: color-mix(in oklab, var(--good) 20%, transparent);
     --wash-4: color-mix(in oklab, var(--cat-4) 14%, transparent);
-    --tint: color-mix(in oklab, var(--accent) 12%, transparent);
+    --tint: color-mix(in oklab, var(--accent) 14%, transparent);
     --tint-2: color-mix(in oklab, var(--accent) 6%, transparent);
     --tint-head: color-mix(in oklab, var(--accent) 10%, var(--surface-2));
     --thumb: color-mix(in oklab, var(--accent) 12%, var(--surface-3));
-    --pastel-a: #2A2550;
-    --pastel-mid: #1E2E43;
-    --pastel-b: #12403A;
-    --frame: rgb(28 32 31 / .50);
-    --frame-edge: rgb(255 255 255 / .10);
-    --frame-top: rgb(255 255 255 / .14);
-    --frame-sheen: rgb(255 255 255 / .05);
+    --pastel-a: #1F1F35;
+    --pastel-mid: #182432;
+    --pastel-b: #10312C;
+    /* the pane is a faint LIFT, never a dim: glass in a dark scene is
+       lighter than what it sits on, which is the whole cue */
+    --frame: rgb(255 255 255 / .022);
+    --frame-edge: rgb(255 255 255 / .14);
+    --frame-top: rgb(255 255 255 / .20);
+    --frame-sheen: rgb(255 255 255 / .04);
+    --frame-ring: rgb(255 255 255 / .05);
     --orb-1: rgb(255 255 255 / .06);
-    --orb-2: rgb(255 255 255 / .05);
-    --orb-3: color-mix(in oklab, var(--accent) 60%, white);
-    --orb-3-a: 10%;
-    --tile-1: #113029;
-    --tile-2: #15263C;
-    --tile-3: #221F3D;
-    --tile-4: #33291A;
-    --tile-5: #1B2E17;
-    --tile-6: #12302F;
+    --orb-2: rgb(255 255 255 / .045);
+    --orb-3: color-mix(in oklab, var(--accent) 70%, white);
+    --orb-3-a: 12%;
+    /* one step above the pane, not below it */
+    --tile-1: #16352E;
+    --tile-2: #1A2B42;
+    --tile-3: #262244;
+    --tile-4: #362C1E;
+    --tile-5: #1F331B;
+    --tile-6: #173634;
     --tile-c: var(--tile-1);
-    --tile-mix: 74%;
-    --tile-rim: rgb(255 255 255 / .13);
-    --tile-rim-hover: rgb(255 255 255 / .24);
-    --tile-ring: rgb(255 255 255 / .04);
-    --tile-top: rgb(255 255 255 / .12);
-    --tile-sheen: .06;
-    --tile-glow: .04;
-    --tile-shadow: 0 1px 2px rgb(0 0 0 / .35), 0 12px 28px -14px rgb(0 0 0 / .55);
-    --tile-shadow-hover: 0 2px 8px rgb(0 0 0 / .40), 0 16px 32px -12px rgb(0 0 0 / .60);
+    --tile-mix: 58%;
+    --tile-rim: rgb(255 255 255 / .16);
+    --tile-rim-hover: rgb(255 255 255 / .30);
+    --tile-ring: rgb(255 255 255 / .07);
+    /* the hairline is twice the rim, or the two collapse into one even border */
+    --tile-top: rgb(255 255 255 / .30);
+    --tile-left: rgb(255 255 255 / .12);
+    --tile-sheen: .16;
+    --tile-glow: .09;
+    --tile-shade: 34%;
+    /* on dark glass the lift comes from a luminous outer hair, not a black drop */
+    --tile-shadow: 0 0 0 1px rgb(255 255 255 / .03), 0 1px 2px rgb(0 0 0 / .35), 0 14px 30px -14px rgb(0 0 0 / .60);
+    --tile-shadow-hover: 0 0 0 1px rgb(255 255 255 / .05), 0 2px 8px rgb(0 0 0 / .40), 0 18px 34px -12px rgb(0 0 0 / .65);
 
     color-scheme: dark;
   }
@@ -264,13 +279,13 @@
   --surface-3: #363B3A;
   --ink: #ECEEEB;
   --ink-2: #B1B8B5;
-  --ink-3: #A2AAA7;
+  --ink-3: #AFB7B4;
   --line: #3A403E;
   --line-soft: #303534;
   --accent: #7EC2B5;
   --accent-soft: #243D39;
   --on-accent: #10201E;
-  --critical: #E39B8E;
+  --critical: #EAA89B;
   --critical-soft: #3E2723;
   --warn: #D6B061;
   --warn-soft: #392F1A;
@@ -302,37 +317,45 @@
   --wash-2: color-mix(in oklab, var(--cat-1) 22%, transparent);
   --wash-3: color-mix(in oklab, var(--good) 20%, transparent);
   --wash-4: color-mix(in oklab, var(--cat-4) 14%, transparent);
-  --tint: color-mix(in oklab, var(--accent) 12%, transparent);
+  --tint: color-mix(in oklab, var(--accent) 14%, transparent);
   --tint-2: color-mix(in oklab, var(--accent) 6%, transparent);
   --tint-head: color-mix(in oklab, var(--accent) 10%, var(--surface-2));
   --thumb: color-mix(in oklab, var(--accent) 12%, var(--surface-3));
-  --pastel-a: #2A2550;
-  --pastel-mid: #1E2E43;
-  --pastel-b: #12403A;
-  --frame: rgb(28 32 31 / .50);
-  --frame-edge: rgb(255 255 255 / .10);
-  --frame-top: rgb(255 255 255 / .14);
-  --frame-sheen: rgb(255 255 255 / .05);
+  --pastel-a: #1F1F35;
+  --pastel-mid: #182432;
+  --pastel-b: #10312C;
+  /* the pane is a faint LIFT, never a dim: glass in a dark scene is
+     lighter than what it sits on, which is the whole cue */
+  --frame: rgb(255 255 255 / .022);
+  --frame-edge: rgb(255 255 255 / .14);
+  --frame-top: rgb(255 255 255 / .20);
+  --frame-sheen: rgb(255 255 255 / .04);
+  --frame-ring: rgb(255 255 255 / .05);
   --orb-1: rgb(255 255 255 / .06);
-  --orb-2: rgb(255 255 255 / .05);
-  --orb-3: color-mix(in oklab, var(--accent) 60%, white);
-  --orb-3-a: 10%;
-  --tile-1: #113029;
-  --tile-2: #15263C;
-  --tile-3: #221F3D;
-  --tile-4: #33291A;
-  --tile-5: #1B2E17;
-  --tile-6: #12302F;
+  --orb-2: rgb(255 255 255 / .045);
+  --orb-3: color-mix(in oklab, var(--accent) 70%, white);
+  --orb-3-a: 12%;
+  /* one step above the pane, not below it */
+  --tile-1: #16352E;
+  --tile-2: #1A2B42;
+  --tile-3: #262244;
+  --tile-4: #362C1E;
+  --tile-5: #1F331B;
+  --tile-6: #173634;
   --tile-c: var(--tile-1);
-  --tile-mix: 74%;
-  --tile-rim: rgb(255 255 255 / .13);
-  --tile-rim-hover: rgb(255 255 255 / .24);
-  --tile-ring: rgb(255 255 255 / .04);
-  --tile-top: rgb(255 255 255 / .12);
-  --tile-sheen: .06;
-  --tile-glow: .04;
-  --tile-shadow: 0 1px 2px rgb(0 0 0 / .35), 0 12px 28px -14px rgb(0 0 0 / .55);
-  --tile-shadow-hover: 0 2px 8px rgb(0 0 0 / .40), 0 16px 32px -12px rgb(0 0 0 / .60);
+  --tile-mix: 58%;
+  --tile-rim: rgb(255 255 255 / .16);
+  --tile-rim-hover: rgb(255 255 255 / .30);
+  --tile-ring: rgb(255 255 255 / .07);
+  /* the hairline is twice the rim, or the two collapse into one even border */
+  --tile-top: rgb(255 255 255 / .30);
+  --tile-left: rgb(255 255 255 / .12);
+  --tile-sheen: .16;
+  --tile-glow: .09;
+  --tile-shade: 34%;
+  /* on dark glass the lift comes from a luminous outer hair, not a black drop */
+  --tile-shadow: 0 0 0 1px rgb(255 255 255 / .03), 0 1px 2px rgb(0 0 0 / .35), 0 14px 30px -14px rgb(0 0 0 / .60);
+  --tile-shadow-hover: 0 0 0 1px rgb(255 255 255 / .05), 0 2px 8px rgb(0 0 0 / .40), 0 18px 34px -12px rgb(0 0 0 / .65);
 
   color-scheme: dark;
 }
@@ -443,9 +466,9 @@ body::before {
        mint. Each is flat to ~60% of its radius and feathers over the rest,
        so it reads as a disc of light rather than a smear, without an edge
        anything has to be blurred to hide. */
-    radial-gradient(22rem 22rem at 24% 30%, var(--orb-1) 0 62%, transparent 100%),
-    radial-gradient(26rem 26rem at 76% 72%, var(--orb-2) 0 62%, transparent 100%),
-    radial-gradient(11rem 11rem at 58% 12%, color-mix(in oklab, var(--orb-3) var(--orb-3-a), transparent) 0 60%, transparent 100%),
+    radial-gradient(30rem 28rem at 18% 46%, var(--orb-1) 0 55%, transparent 100%),
+    radial-gradient(32rem 30rem at 80% 64%, var(--orb-2) 0 55%, transparent 100%),
+    radial-gradient(14rem 14rem at 56% 14%, color-mix(in oklab, var(--orb-3) var(--orb-3-a), transparent) 0 52%, transparent 100%),
     radial-gradient(50rem 38rem at 82% 8%, var(--wash-1), transparent 60%),
     radial-gradient(46rem 34rem at 10% 88%, var(--wash-2), transparent 60%),
     linear-gradient(135deg, var(--pastel-a) 0%, var(--pastel-mid) 46%, var(--pastel-b) 100%);
@@ -524,12 +547,17 @@ body::before {
      to show for it. */
   .glass-tile {
     background:
-      linear-gradient(135deg, rgb(255 255 255 / var(--tile-sheen)) 0%, rgb(255 255 255 / 0) 52%),
-      radial-gradient(120% 90% at 100% 0%, rgb(255 255 255 / var(--tile-glow)), transparent 62%),
+      /* the glint: brightest at the top-left corner, gone within a third of
+         the tile — a wash across half of it bleaches the pastel instead */
+      linear-gradient(135deg, rgb(255 255 255 / var(--tile-sheen)) 0%, rgb(255 255 255 / calc(var(--tile-sheen) * .3)) 26%, rgb(255 255 255 / 0) 46%),
+      radial-gradient(70% 55% at 100% 0%, rgb(255 255 255 / var(--tile-glow)), transparent 70%),
+      /* and the far corner in shade, so the slab is lit from one side */
+      linear-gradient(135deg, transparent 54%, color-mix(in oklab, var(--tile-c) var(--tile-shade), transparent) 100%),
       color-mix(in oklab, var(--tile-c) var(--tile-mix), transparent);
     border-color: var(--tile-rim);
     box-shadow:
       inset 0 1px 0 var(--tile-top),
+      inset 1px 0 0 var(--tile-left),
       inset 0 0 0 1px var(--tile-ring),
       var(--tile-shadow);
   }
@@ -540,13 +568,13 @@ body::before {
      and the orbs are drawn soft enough that none is needed. */
   .glass-frame {
     background:
-      linear-gradient(180deg, var(--frame-sheen), rgb(255 255 255 / 0) 14rem),
+      linear-gradient(180deg, var(--frame-sheen), rgb(255 255 255 / 0) 9rem),
       var(--frame);
     border-color: var(--frame-edge);
     box-shadow:
       var(--sh-3),
       inset 0 1px 0 var(--frame-top),
-      inset 0 0 0 1px rgb(255 255 255 / .18);
+      inset 0 0 0 1px var(--frame-ring);
   }
 
   /* glass: only where something scrolls beneath — the sticky header, menus,
@@ -576,6 +604,15 @@ body::before {
 /* and one step deeper on the label: ink-3 on the green header sat at 3.95,
    under the floor for 11px type. Here rather than in fourteen files. */
 .scroll-x > table > thead > tr > th { color: var(--ink-2); }
+
+/* A divider inside a tile: the opaque grey hairline was the one thing left
+   saying "card". Scoped here so the fourteen `border-line-soft` sites need
+   no edit; the border-line utilities keep the grey they need elsewhere. */
+.glass-tile { --color-line-soft: rgb(255 255 255 / .60); }
+:root[data-theme="dark"] .glass-tile { --color-line-soft: rgb(255 255 255 / .12); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .glass-tile { --color-line-soft: rgb(255 255 255 / .12); }
+}
 
 /* someone who asked the OS for less transparency gets the same tiles with
    the pastel over the surface instead of over whatever lies behind it */
@@ -647,7 +684,7 @@ body::before {
 .lift:hover { transform: translateY(-1px); box-shadow: var(--sh-2); border-color: color-mix(in srgb, var(--line) 55%, var(--accent)) }
 /* a glass tile lifts the same way, but keeps its inner rings and its rim
    goes brighter rather than greener */
-.glass-tile.lift:hover { box-shadow: inset 0 1px 0 var(--tile-top), inset 0 0 0 1px var(--tile-ring), var(--tile-shadow-hover); border-color: var(--tile-rim-hover) }
+.glass-tile.lift:hover { box-shadow: inset 0 1px 0 var(--tile-top), inset 1px 0 0 var(--tile-left), inset 0 0 0 1px var(--tile-ring), var(--tile-shadow-hover); border-color: var(--tile-rim-hover) }
 
 .press { transition: transform var(--dur-1) var(--ease-std), background-color var(--dur-1) var(--ease-std), border-color var(--dur-1) var(--ease-std), color var(--dur-1) var(--ease-std), opacity var(--dur-1) var(--ease-std) }
 .press:active:not(:disabled) { transform: scale(.98) }
