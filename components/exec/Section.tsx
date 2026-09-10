@@ -57,7 +57,7 @@ export function HeadlineStrip({ cells }: {
     <div className={`mb-3 grid gap-2 ${cols}`}>
       {cells.map((c, i) => (
         <div key={c.label} style={{ '--i': i, '--tile-c': `var(--tile-${(i % 6) + 1})` } as React.CSSProperties}
-             className="anim-fade-up lift glass-tile flex items-stretch gap-2.5 rounded-lg border py-2 pr-2.5 shadow-sm">
+             className="anim-fade-up lift glass-tile flex items-stretch gap-2.5 rounded-lg border py-2 pr-2.5">
           <span aria-hidden className={`w-[3px] shrink-0 rounded-r ${TONE_BAR[c.tone]}`} />
           <div className="min-w-0 flex-1">
             <span className="mono block truncate text-[9.5px] uppercase tracking-wider text-ink-2">{c.label}</span>
@@ -91,7 +91,7 @@ function ExecTile({ k, index, chart, notes }: {
       : undefined
   return (
     <div style={{ '--i': index, '--tile-c': `var(--tile-${(index % 6) + 1})` } as React.CSSProperties}
-         className={`anim-fade-up lift glass-tile flex flex-col rounded-lg border p-3.5 shadow-sm ${
+         className={`anim-fade-up lift glass-tile flex flex-col rounded-lg border p-3.5 ${
            k.provenance === 'illustrative' ? 'border-dashed !border-ink-3' : ''}`}>
       <h3 className="text-[17px] font-bold leading-tight tracking-tight">{k.label}</h3>
 
