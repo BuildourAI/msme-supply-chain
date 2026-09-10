@@ -99,7 +99,7 @@ function TopBar({ onActivity }: { onActivity: () => void }) {
 function Chrome({ children }: { children: React.ReactNode }) {
   const [activity, setActivity] = useState(false)
   return (
-    <div className="min-h-screen p-2 sm:p-4 lg:p-7">
+    <div className="min-h-screen p-3 sm:p-6 lg:px-10 lg:py-8">
       {/* The whole app floats in one pane on the gradient. `overflow-clip` and
           NOT `overflow-hidden`: hidden would make the frame a scroll container
           and break the header's stick. Clip lets the sticky header square its

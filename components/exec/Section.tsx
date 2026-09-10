@@ -56,7 +56,7 @@ export function HeadlineStrip({ cells }: {
   return (
     <div className={`mb-3 grid gap-2 ${cols}`}>
       {cells.map((c, i) => (
-        <div key={c.label} style={{ '--i': i } as React.CSSProperties}
+        <div key={c.label} style={{ '--i': i, '--tile-c': `var(--tile-${(i % 6) + 1})` } as React.CSSProperties}
              className="anim-fade-up lift glass-tile flex items-stretch gap-2.5 rounded-lg border py-2 pr-2.5 shadow-sm">
           <span aria-hidden className={`w-[3px] shrink-0 rounded-r ${TONE_BAR[c.tone]}`} />
           <div className="min-w-0 flex-1">
@@ -90,10 +90,10 @@ function ExecTile({ k, index, chart, notes }: {
       : k.meetsTarget === false ? 'critical'
       : undefined
   return (
-    <div style={{ '--i': index } as React.CSSProperties}
-         className={`anim-fade-up lift glass-tile flex flex-col rounded-lg border p-3 shadow-sm ${
+    <div style={{ '--i': index, '--tile-c': `var(--tile-${(index % 6) + 1})` } as React.CSSProperties}
+         className={`anim-fade-up lift glass-tile flex flex-col rounded-lg border p-3.5 shadow-sm ${
            k.provenance === 'illustrative' ? 'border-dashed !border-ink-3' : ''}`}>
-      <h3 className="text-[15px] font-bold leading-tight tracking-tight">{k.label}</h3>
+      <h3 className="text-[17px] font-bold leading-tight tracking-tight">{k.label}</h3>
 
       <p className="mt-1.5 flex flex-wrap items-baseline gap-x-2">
         <Num d={k.d} format={k.format} dp={k.dp} suffix={k.suffix} size="lg" tone={tone} />
@@ -133,10 +133,8 @@ function ExecTile({ k, index, chart, notes }: {
   )
 }
 
-export function ExecSection({ no, title, blurb, kpis, charts, notes, index = 0, hue, children }: {
+export function ExecSection({ no, title, blurb, kpis, charts, notes, index = 0, children }: {
   no: number; title: string; blurb: string; kpis: Kpi[]; index?: number
-  /** the colour this section's tiles are cut in — a CSS colour, usually a token */
-  hue?: string
   /** one chart per KPI id — a KPI with no entry keeps its bare headline figure */
   charts?: Record<string, React.ReactNode>
   /** the page-level switch: open every tile's note, and the section footer */
@@ -158,8 +156,7 @@ export function ExecSection({ no, title, blurb, kpis, charts, notes, index = 0, 
             </span>
           ) : null)}
       </div>}>
-      <div className="grid gap-2.5 p-3 md:grid-cols-2 xl:grid-cols-4"
-           style={hue ? { '--tile-c': hue } as React.CSSProperties : undefined}>
+      <div className="grid gap-3 p-3 md:grid-cols-2 xl:grid-cols-4">
         {kpis.map((k, i) => (
           <ExecTile key={k.id} k={k} index={i} chart={charts?.[k.id]} notes={notes} />
         ))}

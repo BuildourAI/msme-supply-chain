@@ -32,7 +32,7 @@
   --surface-3: #E9EBE8;
   --ink: #1C1F1E;
   --ink-2: #535D5A;
-  --ink-3: #586562;
+  --ink-3: #55625F;
   --line: #DCDFDB;
   --line-soft: #E8EAE6;
   --accent: #2C6B65;
@@ -40,7 +40,7 @@
   --on-accent: #FFFFFF;
   --critical: #A5382E;
   --critical-soft: #F4E2DE;
-  --warn: #835C12;
+  --warn: #7E580A;
   --warn-soft: #F3E8D2;
   --good: #2E6A4A;
   --good-soft: #DEEAE2;
@@ -97,8 +97,8 @@
      that sit behind everything, in the app's own hues, and shift as a card
      crosses them. Fixed to the viewport, so a sheet or a header drifting over
      them shows depth. */
-  --wash-1: color-mix(in oklab, var(--pastel-b) 70%, transparent);
-  --wash-2: color-mix(in oklab, var(--cat-1) 22%, transparent);
+  --wash-1: color-mix(in oklab, var(--pastel-b) 55%, transparent);
+  --wash-2: color-mix(in oklab, var(--pastel-a) 55%, transparent);
   --wash-3: color-mix(in oklab, var(--good) 26%, transparent);
   --wash-4: color-mix(in oklab, var(--cat-4) 16%, transparent);
 
@@ -110,8 +110,9 @@
   --thumb: color-mix(in oklab, var(--accent) 8%, var(--surface));
   /* the two poles of the ground: lavender at the top left, mint at the foot —
      the app sits on a diagonal between them, the way the reference does */
-  --pastel-a: #D3CFEC;
-  --pastel-b: #C4E8DB;
+  --pastel-a: #C6BFEA;    /* lavender, top left */
+  --pastel-mid: #C8DCE8;  /* the diagonal never passes through grey */
+  --pastel-b: #B5E5D3;    /* mint, bottom right */
 
   /* the frame — one big pane the whole app floats in, over the gradient.
      Translucent only: a backdrop-filter the size of the viewport re-blurs
@@ -125,10 +126,12 @@
      grey, which is what the tiles were. The rim takes a deeper mix of the same
      pastel; the glow is white, so the lit corner is lighter than the tile
      rather than — as it was — darker. */
-  --tile-1: #AFDDCF;   /* mint — inbound, the brand hue */
-  --tile-2: #CDE7BE;   /* sage — warehouse */
-  --tile-3: #C9D6F2;   /* lavender — outbound */
-  --tile-4: #F5DCB6;   /* peach — financials */
+  --tile-1: #A9DCCB;   /* mint     */
+  --tile-2: #C2D9F2;   /* sky      */
+  --tile-3: #CFC9F0;   /* lavender */
+  --tile-4: #F6DDB8;   /* peach    */
+  --tile-5: #C8E8BE;   /* sage     */
+  --tile-6: #B6E5E0;   /* aqua     */
   --tile-c: var(--tile-1);
   --tile-mix: 66%;
   --tile-edge-mix: 78%;
@@ -199,14 +202,17 @@
     --tint-2: color-mix(in oklab, var(--accent) 6%, transparent);
     --tint-head: color-mix(in oklab, var(--accent) 10%, var(--surface-2));
     --thumb: color-mix(in oklab, var(--accent) 12%, var(--surface-3));
-    --pastel-a: #262A44;
-    --pastel-b: #183732;
+    --pastel-a: #2A2550;
+    --pastel-mid: #1E2E43;
+    --pastel-b: #12403A;
     --frame: rgb(28 32 31 / .55);
     --frame-edge: rgb(255 255 255 / .08);
-    --tile-1: #142C27;
-    --tile-2: #172B20;
-    --tile-3: #16253A;
-    --tile-4: #2E2918;
+    --tile-1: #113029;
+    --tile-2: #15263C;
+    --tile-3: #221F3D;
+    --tile-4: #33291A;
+    --tile-5: #1B2E17;
+    --tile-6: #12302F;
     --tile-c: var(--tile-1);
     --tile-mix: 62%;
     --tile-edge-mix: 62%;
@@ -265,14 +271,17 @@
   --tint-2: color-mix(in oklab, var(--accent) 6%, transparent);
   --tint-head: color-mix(in oklab, var(--accent) 10%, var(--surface-2));
   --thumb: color-mix(in oklab, var(--accent) 12%, var(--surface-3));
-  --pastel-a: #262A44;
-  --pastel-b: #183732;
+  --pastel-a: #2A2550;
+  --pastel-mid: #1E2E43;
+  --pastel-b: #12403A;
   --frame: rgb(28 32 31 / .55);
   --frame-edge: rgb(255 255 255 / .08);
-  --tile-1: #142C27;
-  --tile-2: #172B20;
-  --tile-3: #16253A;
-  --tile-4: #2E2918;
+  --tile-1: #113029;
+  --tile-2: #15263C;
+  --tile-3: #221F3D;
+  --tile-4: #33291A;
+  --tile-5: #1B2E17;
+  --tile-6: #12302F;
   --tile-c: var(--tile-1);
   --tile-mix: 62%;
   --tile-edge-mix: 62%;
@@ -383,11 +392,9 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(56rem 40rem at 88% 4%, var(--wash-1), transparent 62%),
-    radial-gradient(44rem 34rem at -4% 62%, var(--wash-2), transparent 60%),
-    radial-gradient(64rem 40rem at 52% 104%, var(--wash-3), transparent 62%),
-    radial-gradient(34rem 26rem at 78% 66%, var(--wash-4), transparent 60%),
-    linear-gradient(135deg, var(--pastel-a) 0%, color-mix(in oklab, var(--pastel-a) 45%, var(--pastel-b)) 48%, var(--pastel-b) 100%);
+    radial-gradient(50rem 38rem at 82% 8%, var(--wash-1), transparent 60%),
+    radial-gradient(46rem 34rem at 10% 88%, var(--wash-2), transparent 60%),
+    linear-gradient(135deg, var(--pastel-a) 0%, var(--pastel-mid) 46%, var(--pastel-b) 100%);
 }
 
 /* §10 — tabular figures on every numeric column */

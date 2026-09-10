@@ -185,7 +185,7 @@ export default function Page() {
       )}
 
       <div className="mb-3 space-y-3">
-        <ExecSection no={1} index={0} hue="var(--tile-1)" title="Inbound procurement" kpis={inbound} charts={charts} notes={notes}
+        <ExecSection no={1} index={0} title="Inbound procurement" kpis={inbound} charts={charts} notes={notes}
           blurb="Supplier efficiency and risk — whether the people you buy from can be relied on to keep the line fed">
           <p className="border-t border-line-soft px-4 py-3 text-[12px] leading-relaxed text-ink-2">
             <strong className="text-ink">Two different promises, and the gap between them is the point.</strong>{' '}
@@ -201,10 +201,10 @@ export default function Page() {
           </p>
         </ExecSection>
 
-        <ExecSection no={2} index={1} hue="var(--tile-2)" title="Warehouse & inventory health" kpis={warehouse} charts={charts} notes={notes}
+        <ExecSection no={2} index={1} title="Warehouse & inventory health" kpis={warehouse} charts={charts} notes={notes}
           blurb="Whether the cash is rotting on shelves, or the line is about to stop" />
 
-        <ExecSection no={3} index={2} hue="var(--tile-3)" title="Outbound fulfilment" kpis={outbound} charts={charts} notes={notes}
+        <ExecSection no={3} index={2} title="Outbound fulfilment" kpis={outbound} charts={charts} notes={notes}
           blurb="Delivery to customers — scoped but not built, so every figure here is illustrative">
           <p className="border-t border-line-soft px-4 py-3 text-[12px] leading-relaxed text-ink-2">
             <strong className="text-ink">Nothing in this build ships anything.</strong> §2 scopes it to
@@ -215,7 +215,7 @@ export default function Page() {
           </p>
         </ExecSection>
 
-        <ExecSection no={4} index={3} hue="var(--tile-4)" title="Supply chain financials" kpis={financial} charts={charts} notes={notes}
+        <ExecSection no={4} index={3} title="Supply chain financials" kpis={financial} charts={charts} notes={notes}
           blurb="Cash flow and cost — every supply-chain decision lands on the runway">
           <p className="border-t border-line-soft px-4 py-3 text-[12px] leading-relaxed text-ink-2">
             <strong className="text-ink">The freight half that IS measured:</strong> inbound freight on
