@@ -1,11 +1,19 @@
 'use client'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 export function Dialog({ open, onClose, title, sub, children, wide }: {
   open: boolean; onClose: () => void; title: string; sub?: string
   children: React.ReactNode; wide?: boolean
 }) {
   const ref = useRef<HTMLDivElement>(null)
+  // Rendered into the body, not where it is written. Every Dialog here is
+  // written inside a card, and a card now carries a backdrop-filter — which
+  // makes it the containing block for `position: fixed`, so the scrim would
+  // cover the card instead of the viewport. Mounted state keeps the server
+  // and the first client render identical.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
 
   useEffect(() => {
     if (!open) return
@@ -17,8 +25,8 @@ export function Dialog({ open, onClose, title, sub, children, wide }: {
     return () => { document.removeEventListener('keydown', onKey); window.clearTimeout(t) }
   }, [open, onClose])
 
-  if (!open) return null
-  return (
+  if (!open || !mounted) return null
+  return createPortal(
     <div className="anim-backdrop fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/30 p-4 pt-[10vh]"
          onClick={onClose}>
       <div ref={ref} role="dialog" aria-modal="true" aria-label={title}
@@ -34,6 +42,7 @@ export function Dialog({ open, onClose, title, sub, children, wide }: {
         </header>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

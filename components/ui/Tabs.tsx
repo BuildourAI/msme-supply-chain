@@ -73,7 +73,7 @@ export function TabIndicator({ pos, settled, pill = 'top-0 bottom-[3px]' }: {
   const at = { transform: `translateX(${pos.left}px)`, width: pos.width }
   return (
     <>
-      <span aria-hidden className={`tab-ink pointer-events-none absolute left-0 rounded-md bg-tint ${pill} ${still}`} style={at} />
+      <span aria-hidden className={`tab-ink pointer-events-none absolute left-0 rounded-md bg-pill ${pill} ${still}`} style={at} />
       <span aria-hidden className={`tab-ink pointer-events-none absolute bottom-0 left-0 h-[2px] rounded-full bg-accent ${still}`} style={at} />
     </>
   )
@@ -105,7 +105,7 @@ export function Tabs<T extends string>({ items, value, onChange, label, classNam
   // longer takes up space, so the extra 2px keeps every page's height as it was
   const cls = (on: boolean) =>
     `tab-item relative z-10 shrink-0 rounded-md px-3 pb-2.5 pt-1 text-left transition-colors ${
-      on ? '' : 'bg-tint-2 hover:bg-tint'}`
+      on ? '' : 'bg-pill-2 hover:bg-pill'}`
 
   const list = items.map((t) => {
     const on = t.id === value

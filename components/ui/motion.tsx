@@ -55,12 +55,16 @@ export function useFlash(value: unknown): string {
   return on ? 'flash' : ''
 }
 
-/** Briefly cross-fades every colour on the page — used around a theme toggle. */
+/** Applies a theme change — used around the theme toggle. */
 export function crossfadeTheme(apply: () => void) {
-  // One compositor-driven crossfade of a page snapshot. The old approach put a
-  // CSS transition on every element in the document for 340ms; this hands the
-  // browser two snapshots and lets it fade between them.
-  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown }
-  if (reducedMotion() || typeof doc.startViewTransition !== 'function') { apply(); return }
-  doc.startViewTransition(() => { apply() })
+  // This used to hand the browser two page snapshots and let it crossfade
+  // between them. Once the panes became frosted, capturing a snapshot of a
+  // page with three layers of backdrop-filter took over a second before the
+  // theme even applied — measured at 1057, 1119 and 1154ms for three
+  // consecutive toggles, against 313ms before the frost. A toggle that lags
+  // a second is worse than one that does not fade, so it switches at once.
+  // (The ::view-transition rules left in globals.css are inert while this
+  // function does not start one; they are kept as the guard for reduced
+  // motion should it ever come back.)
+  apply()
 }
