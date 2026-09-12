@@ -298,7 +298,12 @@ export function lossValue(l: LossRecord, rate: number, uom: string): Derived {
   )
 }
 
-/** What the scrap sells for. Fired ceramic and ruined powder are worth nothing. */
+/**
+ * What the scrap is EXPECTED to sell for. Fired ceramic and ruined powder are
+ * worth nothing. This is the figure booked when the loss was recorded; what the
+ * scrap actually fetched is `realisedValue` below, and the two are separate
+ * columns on the ledger precisely so nobody has to take this one on trust.
+ */
 export function recoveryValue(l: LossRecord, uom: string): Derived {
   return D(
     round(l.qty * l.recoveryRate, 2),
@@ -314,19 +319,66 @@ export function recoveryValue(l: LossRecord, uom: string): Derived {
   )
 }
 
+/** What a settled record actually recovered: money in, or nothing. */
+export function settledRecovery(l: LossRecord): number {
+  if (l.noSaleOn) return 0
+  if (l.soldOn) return l.realised ?? round(l.qty * l.recoveryRate, 2)
+  return round(l.qty * l.recoveryRate, 2)
+}
+
+/** Whether a record is finished with — sold, or written off unsold. */
+export const isSettled = (l: LossRecord) => !!l.soldOn || !!l.noSaleOn
+
+/**
+ * The money that actually arrived, against the money that was booked. A sale
+ * below the booked rate is the common case and the reason this column exists:
+ * the estimate is what the ledger assumed, this is what the dealer paid.
+ */
+export function realisedValue(l: LossRecord, uom: string): Derived {
+  const expected = round(l.qty * l.recoveryRate, 2)
+  const actual = settledRecovery(l)
+  const variance = round(actual - expected, 2)
+  const rate = l.qty > 0 ? round(actual / l.qty, 2) : 0
+  return D(
+    actual,
+    l.noSaleOn ? 'Written off — no sale' : 'Realised on the scrap sale',
+    l.noSaleOn ? 'nothing recovered — the scrap never sold' : 'the amount received, entered at the sale',
+    [
+      { name: 'expected', value: expected, unit: '₹', source: `qty × scrap_rate — ${q(l.qty)} ${uom} × ₹${l.recoveryRate}/${uom}` },
+      { name: 'actual', value: actual, unit: '₹',
+        source: l.noSaleOn ? `written off ${l.noSaleOn} — nobody bought it` : l.realised != null ? 'typed in when the sale was recorded' : 'sold at the booked rate' },
+      { name: 'variance', value: variance, unit: '₹',
+        source: variance === 0 ? 'sold for exactly what was booked' : variance < 0 ? 'the scrap fetched less than the ledger assumed' : 'the scrap fetched more than the ledger assumed' },
+      { name: 'realised rate', value: rate, unit: `₹/${uom}`, source: 'what it actually went for, per unit' },
+      { name: 'settled', value: l.noSaleOn ?? l.soldOn ?? 'not yet', source: l.noSaleOn ? 'no sale' : l.soldOn ? 'a scrap sale is a movement out with money in' : 'still in the bin' },
+    ],
+    { unit: '₹', note: l.noSaleOn
+      ? 'A dead loss by decision rather than by material. The recoverable figure stays on the record as what was hoped for.'
+      : 'Net loss is computed on this figure once a record is settled, never on the estimate.' },
+  )
+}
+
 /** The honest headline: what it cost, less what came back. */
 export function netLoss(
   rows: { loss: LossRecord; rate: number }[], label = 'Net loss',
 ): Derived {
   const gross = rows.reduce((a, r) => a + r.loss.qty * r.rate, 0)
-  const rec = rows.reduce((a, r) => a + r.loss.qty * r.loss.recoveryRate, 0)
+  // settled records count the money that actually arrived; open ones still
+  // count the estimate, because nothing better is known yet
+  const rec = rows.reduce((a, r) => a + settledRecovery(r.loss), 0)
+  const settled = rows.filter((r) => isSettled(r.loss))
+  const drift = settled.reduce((a, r) => a + (settledRecovery(r.loss) - r.loss.qty * r.loss.recoveryRate), 0)
   return D(
     round(gross - rec, 2),
     label,
-    'Σ (qty × last_purchase_rate) − Σ (qty × scrap_rate)',
+    'Σ (qty × last_purchase_rate) − Σ recovered',
     [
       { name: 'gross loss', value: round(gross, 2), unit: '₹', source: 'valued at what we paid' },
-      { name: 'recoverable', value: round(rec, 2), unit: '₹', source: 'valued at what the scrap sells for' },
+      { name: 'recovered', value: round(rec, 2), unit: '₹',
+        source: 'what settled records actually fetched, plus the estimate on the ones still in the bin' },
+      { name: 'settled records', value: settled.length, source: `${settled.filter((r) => r.loss.noSaleOn).length} written off without a sale` },
+      { name: 'estimate vs actual', value: round(drift, 2), unit: '₹',
+        source: drift === 0 ? 'every settled record fetched exactly what was booked' : drift < 0 ? 'the settled scrap fetched less than the ledger had assumed' : 'the settled scrap fetched more than the ledger had assumed' },
       { name: 'records', value: rows.length },
     ],
     { unit: '₹', note: 'Steel, brass, nichrome and zinc come back as money. Fired ceramic, mineral wool and wet MgO do not.' },
@@ -379,7 +431,7 @@ export function lossByCause(
 export function unrealisedRecovery(
   rows: { loss: LossRecord; rate: number }[], today: string, policy: Policy,
 ): Derived {
-  const open = rows.filter((r) => r.loss.recoveryRate > 0 && !r.loss.soldOn)
+  const open = rows.filter((r) => r.loss.recoveryRate > 0 && !isSettled(r.loss))
   const v = open.reduce((a, r) => a + r.loss.qty * r.loss.recoveryRate, 0)
   const stale = open.filter((r) => daysBetween(r.loss.on, today) > policy.scrapUnrealisedDays)
   return D(
@@ -391,7 +443,7 @@ export function unrealisedRecovery(
           name: `${r.loss.id} · ${r.loss.itemId}`, value: round(r.loss.qty * r.loss.recoveryRate, 2), unit: '₹',
           source: `${LOSS_LABEL[r.loss.cause]}, ${r.loss.on}`,
         }))
-      : [{ name: 'unsold scrap', value: 0, source: 'every recoverable loss has been realised' }],
+      : [{ name: 'unsold scrap', value: 0, source: 'every recoverable loss is settled — sold, or written off unsold' }],
     { unit: '₹', note: stale.length
       ? `${stale.length} of these have been sitting past ${policy.scrapUnrealisedDays} days — recovery you have booked but not collected.`
       : 'Money you are owed by the scrap dealer, not money you have.' },

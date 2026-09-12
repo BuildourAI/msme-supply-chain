@@ -29,8 +29,12 @@ interface State {
   extraCounts: CycleCount[]
   extraLosses: LossRecord[]
   extraCuts: CutRecord[]
-  /** loss ids realised this session — a scrap sale */
-  sold: Record<string, string>
+  /**
+   * loss ids settled this session. A sale carries the money that actually
+   * arrived; a no-sale carries nothing and says so. Both are settlements —
+   * the difference is whether anyone bought it.
+   */
+  settled: Record<string, { on: string; realised: number; sale: boolean }>
   selectedLotId: string | null
   countingLotId: string | null
 }
@@ -38,7 +42,7 @@ interface State {
 const initial: State = {
   policy: DEFAULT_POLICY,
   extraMovements: [], extraCounts: [], extraLosses: [], extraCuts: [],
-  sold: {}, selectedLotId: null, countingLotId: null,
+  settled: {}, selectedLotId: null, countingLotId: null,
 }
 
 type Action =
@@ -47,7 +51,8 @@ type Action =
   | { t: 'loss'; loss: LossRecord }
   | { t: 'cut'; cut: CutRecord; movements: StockMovement[]; losses: LossRecord[] }
   | { t: 'useRemnant'; movement: StockMovement }
-  | { t: 'sell'; lossId: string; on: string }
+  | { t: 'sell'; lossId: string; on: string; realised: number }
+  | { t: 'noSale'; lossId: string; on: string }
   | { t: 'select'; id: string | null }
   | { t: 'counting'; id: string | null }
   | { t: 'reset' }
@@ -76,7 +81,9 @@ function reducer(s: State, a: Action): State {
     case 'useRemnant':
       return { ...s, extraMovements: [...s.extraMovements, a.movement] }
     case 'sell':
-      return { ...s, sold: { ...s.sold, [a.lossId]: a.on } }
+      return { ...s, settled: { ...s.settled, [a.lossId]: { on: a.on, realised: a.realised, sale: true } } }
+    case 'noSale':
+      return { ...s, settled: { ...s.settled, [a.lossId]: { on: a.on, realised: 0, sale: false } } }
     case 'select': return { ...s, selectedLotId: a.id }
     case 'counting': return { ...s, countingLotId: a.id }
     case 'reset': return initial
@@ -134,8 +141,15 @@ export interface LossRow {
   uom: string
   rate: number
   cost: Derived
+  /** what the scrap was booked to fetch */
   recovery: Derived
+  /** what it actually fetched, once settled */
+  realised: Derived
   sold: boolean
+  /** written off without a sale */
+  noSale: boolean
+  /** sold or written off — either way, finished with */
+  settled: boolean
 }
 
 export interface ScrapRow {
@@ -178,7 +192,8 @@ interface Ctx {
   useRemnant: (row: LotRow, qty: number, workOrder: string) => void
   /** INV-02 → SRC-01: remnants taken off the rack against an order at its approval. */
   issueRemnantToOrder: (itemId: string, qty: number, poRef: string) => void
-  sellScrap: (row: LossRow) => void
+  sellScrap: (row: LossRow, realised: number) => void
+  noSale: (row: LossRow) => void
   reset: () => void
 }
 
@@ -200,9 +215,14 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
   const counts = useMemo(() => [...seedCounts, ...state.extraCounts], [state.extraCounts])
   const cutList = useMemo(() => [...seedCuts, ...state.extraCuts], [state.extraCuts])
   const lossList = useMemo(
-    () => [...seedLosses, ...state.extraLosses].map((l) =>
-      state.sold[l.id] ? { ...l, soldOn: state.sold[l.id] } : l),
-    [state.extraLosses, state.sold],
+    () => [...seedLosses, ...state.extraLosses].map((l) => {
+      const st = state.settled[l.id]
+      if (!st) return l
+      return st.sale
+        ? { ...l, soldOn: st.on, realised: st.realised }
+        : { ...l, noSaleOn: st.on }
+    }),
+    [state.extraLosses, state.settled],
   )
 
   /* -------------------------------------------------------------- INV-01 --- */
@@ -307,7 +327,10 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       loss: l, item, uom, rate: item.lastPurchaseRate,
       cost: V.lossValue(l, item.lastPurchaseRate, uom),
       recovery: V.recoveryValue(l, uom),
+      realised: V.realisedValue(l, uom),
       sold: !!l.soldOn,
+      noSale: !!l.noSaleOn,
+      settled: V.isSettled(l),
     }
   }).sort((a, b) => b.loss.on.localeCompare(a.loss.on)), [lossList])
 
@@ -507,14 +530,46 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     })
   }, [log, today])
 
-  const sellScrap = useCallback((row: LossRow) => {
-    dispatch({ t: 'sell', lossId: row.loss.id, on: today })
+  /**
+   * A scrap sale records the money that actually arrived, not the money the
+   * ledger hoped for. The two are separate fields on the record, so a sale
+   * below the booked rate leaves a trail rather than quietly agreeing with the
+   * estimate.
+   */
+  const sellScrap = useCallback((row: LossRow, realised: number) => {
+    const expected = row.recovery.value as number
+    const amount = Math.max(0, Math.round(realised * 100) / 100)
+    const drift = Math.round((amount - expected) * 100) / 100
+    dispatch({ t: 'sell', lossId: row.loss.id, on: today, realised: amount })
     log({
       entity: 'loss_record', entityId: row.loss.id, action: 'Scrap sold',
-      detail: `${row.item.code} · ${qtyText(row.loss.qty, row.uom)} · ${money(row.recovery.value)} realised against a cost of ${money(row.cost.value)}`,
-      before: 'in the bin', after: `sold ${today}`,
+      detail: `${row.item.code} · ${qtyText(row.loss.qty, row.uom)} · ${money(amount)} received against ${money(expected)} booked, on a cost of ${money(row.cost.value)}`,
+      before: `in the bin · ${money(expected)} expected`,
+      after: `sold ${today} · ${money(amount)} received`,
+      reason: drift === 0 ? undefined
+        : `${money(Math.abs(drift))} ${drift < 0 ? 'less' : 'more'} than the booked scrap rate`,
     })
-    say(`${money(row.recovery.value)} recovered. The net loss figure moves, because net loss is what it cost less what came back.`)
+    say(drift === 0
+      ? `${money(amount)} recovered, exactly as booked. Net loss moves, because net loss is what it cost less what came back.`
+      : `${money(amount)} recovered — ${money(Math.abs(drift))} ${drift < 0 ? 'below' : 'above'} the ${money(expected)} booked. Net loss is computed on what arrived, not on the estimate.`)
+  }, [log, say, today])
+
+  /**
+   * Nobody bought it. The record settles at nothing recovered — a dead loss by
+   * decision, which is a different fact from a material that was never worth
+   * anything, and both are worth being able to tell apart later.
+   */
+  const noSale = useCallback((row: LossRow) => {
+    const expected = row.recovery.value as number
+    dispatch({ t: 'noSale', lossId: row.loss.id, on: today })
+    log({
+      entity: 'loss_record', entityId: row.loss.id, action: 'Written off — no sale',
+      detail: `${row.item.code} · ${qtyText(row.loss.qty, row.uom)} · ${money(expected)} booked as recoverable, nothing received`,
+      before: `in the bin · ${money(expected)} expected`,
+      after: `dead loss ${today}`,
+      reason: 'no sale — the scrap was never sold',
+    })
+    say(`${money(expected)} written off. The whole ${money(row.cost.value)} is now the loss, and the record says it was a decision rather than a material that was never worth selling.`)
   }, [log, say, today])
 
   const selected = useMemo(
@@ -531,7 +586,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     accuracy, staleValue, offcutValue, netLoss, unrealised, byCause, selected, counting,
     select: (id) => dispatch({ t: 'select', id }),
     startCount: (id) => dispatch({ t: 'counting', id }),
-    recordCount, writeOff, recordLoss, recordCut, useRemnant, issueRemnantToOrder, sellScrap,
+    recordCount, writeOff, recordLoss, recordCut, useRemnant, issueRemnantToOrder, sellScrap, noSale,
     reset: () => { dispatch({ t: 'reset' }); say('Inventory reset to the state the ledger seed describes.') },
   }
   return <InvCtx.Provider value={value}>{children}</InvCtx.Provider>

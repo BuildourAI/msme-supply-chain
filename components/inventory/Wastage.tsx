@@ -248,8 +248,84 @@ export function ScrapVsTarget() {
 
 /* --------------------------------------------------------- the loss records */
 
+/**
+ * One line of the ledger. A recoverable loss still in the bin carries an
+ * editable Actual: the money the scrap really fetched, which is the figure net
+ * loss is then computed on. It is prefilled with the booked estimate so a sale
+ * at the expected price stays one click, and it is a separate field from that
+ * estimate so a sale below it leaves a trail instead of quietly agreeing.
+ *
+ * Beside it, `No sale` settles the record at nothing recovered — a dead loss by
+ * decision, which is a different fact from a material that was never worth
+ * anything, and the record keeps the two apart.
+ */
+function LossRowLine({ r }: { r: LossRow }) {
+  const { sellScrap, noSale } = useInventory()
+  const expected = r.recovery.value as number
+  const recoverable = r.loss.recoveryRate > 0
+  const [actual, setActual] = useState('')
+  const typed = actual.trim() === '' ? expected : Number(actual)
+  const valid = Number.isFinite(typed) && typed >= 0
+
+  return (
+    <tr className="border-b border-line-soft">
+      <td className="whitespace-nowrap px-3 py-2 text-ink-3">{shortDate(r.loss.on)}</td>
+      <td className="px-3 py-2"><span className="mono text-[11px] text-ink-3">{r.item.code}</span></td>
+      <td className="num px-3 py-2 text-right">{num(r.loss.qty, 3)} {r.uom}</td>
+      <td className="px-3 py-2">
+        {LOSS_LABEL[r.loss.cause]}
+        <span className="mono block text-[10px] text-ink-3">
+          {CAUSE_MOVES_STOCK[r.loss.cause] ? 'carried its own movement' : 'inside a movement already posted'}
+        </span>
+      </td>
+      <td className="mono px-3 py-2 text-[11.5px] text-ink-3">{r.loss.sourceRef}</td>
+      <td className="num px-3 py-2 text-right"><Num d={r.cost} format="money" /></td>
+
+      {/* Recoverable — what the scrap was booked to fetch */}
+      <td className="num px-3 py-2 text-right">
+        {recoverable
+          ? <Num d={r.recovery} format="money" tone={r.settled ? 'neutral' : 'warn'} />
+          : <span className="text-ink-3">dead loss</span>}
+      </td>
+
+      {/* Actual — what it really fetched */}
+      <td className="num px-3 py-2 text-right">
+        {!recoverable ? (
+          <span className="text-ink-3">—</span>
+        ) : r.settled ? (
+          <Num d={r.realised} format="money" tone={r.noSale ? 'critical' : 'good'} />
+        ) : (
+          <span className="inline-flex items-center gap-1">
+            <span aria-hidden className="text-[11px] text-ink-3">₹</span>
+            <input type="number" step="0.01" min={0} value={actual} placeholder={String(expected)}
+              aria-label={`Actual received for ${r.item.code} scrap, in rupees`}
+              onChange={(e) => setActual(e.target.value)}
+              className="num w-24 rounded-md border border-line bg-surface px-1.5 py-1 text-right text-[12px] outline-none focus:border-accent" />
+          </span>
+        )}
+      </td>
+
+      <td className="whitespace-nowrap px-3 py-2 text-right">
+        {recoverable && (
+          r.settled ? (
+            r.noSale
+              ? <span className="text-[11px] text-critical">no sale · {shortDate(r.loss.noSaleOn!)}</span>
+              : <span className="text-[11px] text-good">sold {shortDate(r.loss.soldOn!)}</span>
+          ) : (
+            <span className="inline-flex gap-1.5">
+              <Button size="sm" disabled={!valid} onClick={() => sellScrap(r, typed)}>Record a scrap sale</Button>
+              <Button size="sm" variant="danger" title="Nobody bought it — settle this record at nothing recovered"
+                onClick={() => noSale(r)}>No sale</Button>
+            </span>
+          )
+        )}
+      </td>
+    </tr>
+  )
+}
+
 export function LossLedger() {
-  const { lossRows, sellScrap, unrealised } = useInventory()
+  const { lossRows, unrealised } = useInventory()
   const shown = lossRows.slice(0, 14)
   return (
     <Card index={3} className="mt-3" title="Loss records" live
@@ -258,50 +334,28 @@ export function LossLedger() {
         Unrealised <Num d={unrealised} format="money" tone={unrealised.value > 0 ? 'warn' : 'good'} />
       </span>}>
       <div className="scroll-x overflow-x-auto">
-        <table className="w-full min-w-[52rem] border-collapse text-[12.5px]">
+        <table className="w-full min-w-[60rem] border-collapse text-[12.5px]">
           <thead className="bg-surface-2">
             <tr className="text-[11px] uppercase tracking-wide text-ink-3">
-              {['Date', 'Material', 'Quantity', 'Cause', 'Document', 'Cost', 'Recoverable', ''].map((h, i) => (
+              {['Date', 'Material', 'Quantity', 'Cause', 'Document', 'Cost', 'Recoverable', 'Actual', ''].map((h, i) => (
                 <th key={h || i} className={`whitespace-nowrap border-b border-line px-3 py-2 font-medium ${
-                  i === 2 || i === 5 || i === 6 ? 'text-right' : 'text-left'}`}>{h}</th>
+                  i === 2 || i === 5 || i === 6 || i === 7 ? 'text-right' : 'text-left'}`}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {shown.map((r) => (
-              <tr key={r.loss.id} className="border-b border-line-soft">
-                <td className="whitespace-nowrap px-3 py-2 text-ink-3">{shortDate(r.loss.on)}</td>
-                <td className="px-3 py-2">
-                  <span className="mono text-[11px] text-ink-3">{r.item.code}</span>
-                </td>
-                <td className="num px-3 py-2 text-right">{num(r.loss.qty, 3)} {r.uom}</td>
-                <td className="px-3 py-2">
-                  {LOSS_LABEL[r.loss.cause]}
-                  <span className="mono block text-[10px] text-ink-3">
-                    {CAUSE_MOVES_STOCK[r.loss.cause] ? 'carried its own movement' : 'inside a movement already posted'}
-                  </span>
-                </td>
-                <td className="mono px-3 py-2 text-[11.5px] text-ink-3">{r.loss.sourceRef}</td>
-                <td className="num px-3 py-2 text-right"><Num d={r.cost} format="money" /></td>
-                <td className="num px-3 py-2 text-right">
-                  {r.loss.recoveryRate > 0
-                    ? <Num d={r.recovery} format="money" tone={r.sold ? 'good' : 'warn'} />
-                    : <span className="text-ink-3">dead loss</span>}
-                </td>
-                <td className="whitespace-nowrap px-3 py-2 text-right">
-                  {r.loss.recoveryRate > 0 && (
-                    r.sold
-                      ? <span className="text-[11px] text-good">sold {shortDate(r.loss.soldOn!)}</span>
-                      : <Button size="sm" onClick={() => sellScrap(r)}>Record a scrap sale</Button>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {shown.map((r) => <LossRowLine key={r.loss.id} r={r} />)}
           </tbody>
         </table>
       </div>
       <p className="border-t border-line-soft px-4 py-3 text-[11.5px] leading-relaxed text-ink-3">
         {lossRows.length > shown.length && `${lossRows.length - shown.length} older records not shown. `}
+        <strong className="text-ink">Recoverable is the estimate; Actual is the money.</strong> The
+        scrap rate is booked when the loss is recorded, so Recoverable is only what the ledger assumed.
+        Type what the dealer actually paid into Actual before recording the sale — net loss is then
+        computed on that figure, never on the estimate. If nobody bought it, <em>No sale</em> settles the
+        record at nothing recovered: a dead loss by decision, which the trail keeps distinct from a
+        material that was never worth selling.{' '}
         A loss record either carries its own stock movement — a write-off, a count shortage, a scrapped
         gate rejection — or it names a component of a movement already posted, like the kerf inside a
         cut’s issue. That is why the two ledgers never double-count, and why the stock balances still

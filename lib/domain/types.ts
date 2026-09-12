@@ -496,5 +496,19 @@ export interface LossRecord {
   recoveryRate: number
   /** set when the scrap was actually sold, not when it was expected to be */
   soldOn?: string
+  /**
+   * What the scrap ACTUALLY fetched, in rupees for the whole quantity — typed
+   * in when the sale is recorded, not computed from the rate above. The rate is
+   * an estimate made when the loss was booked; this is the money that arrived.
+   * They disagree more often than not, and the gap is the point.
+   */
+  realised?: number
+  /**
+   * Set when the scrap was written off without a sale: nobody bought it, or it
+   * was not worth the trip. The record is then settled at nothing recovered —
+   * a dead loss by decision, distinct from a dead loss by material (a zero
+   * recovery rate) and from scrap still sitting in the bin.
+   */
+  noSaleOn?: string
   actor: string
 }
