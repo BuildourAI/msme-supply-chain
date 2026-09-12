@@ -108,7 +108,6 @@ export const STAGES: Stage[] = [
       { label: 'Receiving & QC', href: '/inbound/receiving', note: 'INB-01 · inspection against spec, GRN, rejection buckets' },
       { label: 'Open orders', href: '/inbound/orders', note: 'INB-02 · PO versions, change notices, acknowledgements' },
       { label: 'Jobwork register', href: '/inbound/jobwork', note: 'INB-03 · challans, balance, returns, unaccounted' },
-      { label: 'Inspection specs', href: '/inbound/receiving#specs', note: 'what “inspected” means, written down once' },
       { label: 'Painkillers solved', href: '/inbound/painkillers', note: 'the four pains, and the mechanism that removes each' },
       { label: 'Vendor portal for acknowledgements', lock: { phase: 'Excluded', needs: '', excludedReason: 'A vendor who answers on WhatsApp will never open a portal. The buyer records the acknowledgement against a reply they can point to — a link can come later, once the vendors ask for one (§12).' } },
       { label: 'Vendor scorecard', lock: { phase: 'Excluded', needs: '', excludedReason: 'Deliberately not a screen (§12). On-time and rejection history feed ranking silently, and the rejection history now comes from closed GRNs rather than a stored constant.' } },
