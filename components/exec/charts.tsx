@@ -6,7 +6,6 @@ import { CAT } from '@/components/charts/kit'
 import { CellStrip, Donut, Dumbbell, Evidence, Gauge, Meter, RankedBars, Waterfall, type Cell } from '@/components/charts/exec-charts'
 import type { DerivedRow } from '@/lib/domain/derive'
 import type { Grn, LossCause } from '@/lib/domain/types'
-import { CARRIERS } from '@/lib/seed/exec'
 
 /**
  * One picture per KPI, chosen by what the figure is actually asking the reader.
@@ -48,6 +47,8 @@ export interface ChartCtx {
   procurementPerPo: number
   holdingRatePct: number
   customerOtifPct: number
+  carrierRows: { name: string; late: number; delivered: number; drift: number }[]
+  freightPerUnit: number
   fulfilmentCycleDays: number
   rmaRatePct: number
   /** the measured half of the freight question — inbound, as a share of order value */
@@ -284,49 +285,38 @@ export function execCharts(c: ChartCtx): Record<string, React.ReactNode> {
         segments={[
           { label: `Raw material · ${rs(c.rmValue)}`, value: c.rmValue, color: CAT[0] },
           { label: `At jobworkers · ${rs(c.wipValue)}`, value: c.wipValue, color: CAT[1] },
-          { label: `Finished goods · ${rs(c.fgValue)}`, value: c.fgValue, color: CAT[2], hatched: true },
+          { label: `Finished goods · ${rs(c.fgValue)}`, value: c.fgValue, color: CAT[2] },
         ]} />
     ),
 
-    /* 3 · outbound fulfilment — every one hatched, none of it measured */
-    cotif: <Gauge value={c.customerOtifPct} max={100} target={95} tone="critical" hatched
+    /* 3 · outbound fulfilment — measured since DSP-01 to DSP-04, so the hatching
+       that marked every one of these as invented has come off */
+    cotif: <Gauge value={c.customerOtifPct} max={100} target={95} tone="critical"
                   targetLabel="target 95%" />,
-    cycle: <Gauge value={c.fulfilmentCycleDays} max={20} tone="accent" hatched unit="" dp={1}
+    cycle: <Gauge value={c.fulfilmentCycleDays} max={20} tone="accent" unit="" dp={1}
                   sub="days, order to loading dock" />,
     // No chart for the headline, said out loud rather than left as a blank
     // space — and the measured half of the same question in its place.
-    freightOut: (
-      <>
-        <p className="rounded border border-dashed border-ink-3 bg-surface-2 px-2.5 py-2 text-[11px] leading-relaxed text-ink-3">
-          <span className="font-medium text-ink-2">No chart here, deliberately.</span> One assumed rupee
-          figure divided by another assumed count has no shape to draw. Drawing one anyway would give an
-          invented number the authority of a picture.
-        </p>
-        <div className="mt-3">
-          <p className="mb-1.5 text-[10.5px] uppercase tracking-wide text-ink-3">
-            the freight half that IS measured
-          </p>
-          <Meter value={c.inboundFreightPct} max={5} tone="good" unit="%" />
-          <p className="mt-1 text-[10.5px] leading-snug text-ink-3">
-            Inbound freight is <span className="num text-ink-2">{c.inboundFreightPct}%</span> of order
-            value — a share, not rupees per unit, because these orders are in metres, kilograms and
-            pieces.
-          </p>
-        </div>
-      </>
-    ),
+    // A gauge like the other three in this section. It used to carry a
+    // paragraph explaining why there was no chart, plus the inbound meter as a
+    // consolation — both were scaffolding around an invented number, and with
+    // the figure measured they only made this tile taller than its row.
+    freightOut: <Gauge value={c.freightPerUnit} max={Math.max(60, Math.ceil(c.freightPerUnit * 1.6))}
+                       tone="accent" unit="" dp={2} sub="rupees per unit shipped" />,
     carriers: (
-      <RankedBars format="pct" hatched rows={
-        [...CARRIERS]
+      <RankedBars format="pct" rows={
+        c.carrierRows
+          // same bar as the headline: two deliveries before a carrier is ranked
+          .filter((x) => x.delivered >= 2)
           .map((x) => ({
             label: short(x.name, 26),
-            value: (x.lateConsignments / x.consignments) * 100,
-            sub: `${x.lateConsignments} of ${x.consignments} late · ${x.avgDelayDays} days on average`,
+            value: (x.late / x.delivered) * 100,
+            sub: `${x.late} of ${x.delivered} late · ${x.drift}d vs the promise`,
           }))
           .sort((a, b) => b.value - a.value)
       } />
     ),
-    rma: <Gauge value={c.rmaRatePct} max={5} target={1.5} tone="critical" hatched targetLabel="target 1.5%" />,
+    rma: <Gauge value={c.rmaRatePct} max={5} target={1.5} tone="critical" targetLabel="target 1.5%" />,
 
     /* 4 · supply chain financials */
     holding: (

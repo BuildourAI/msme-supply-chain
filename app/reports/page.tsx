@@ -14,6 +14,11 @@ import {
   classOf, cuts as invCuts, cycleCounts, losses as invLosses, ledgerLots,
   movements as invMovements, offcutBands, scrapRemnantQty, TODAY_INVENTORY, usableRemnantQty,
 } from '@/lib/seed/inventory'
+import * as DSP from '@/lib/domain/dispatch'
+import {
+  consignments as dspConsignments, despatchNotes as dspNotes, fgItems, fgOpening,
+  fgProduction, fgReturns, orderLines, rmas as dspRmas,
+} from '@/lib/seed/dispatch'
 import { lakh, money, num } from '@/lib/domain/format'
 
 const seed: SeedBundle = {
@@ -23,6 +28,19 @@ const seed: SeedBundle = {
 const rows = buildRows(seed, DEFAULT_POLICY)
 const kpis = deskKpis(rows)
 const lw = buildLineWatch()
+const fgMovements = [...fgOpening, ...fgProduction, ...fgReturns, ...DSP.despatchMovements(dspNotes)]
+const dspRows = dspConsignments.map((c) => {
+  const note = dspNotes.find((n) => n.dnNo === c.dnNo)!
+  const ordered = orderLines.filter((l) => l.soNo === note.soNo).reduce((a, l) => a + l.qty, 0)
+  const onNote = note.lines.reduce((a, l) => a + l.qty, 0)
+  return {
+    consignment: c, note, carrier: null as never, customer: null as never,
+    delivered: !!c.deliveredOn,
+    onTime: c.deliveredOn ? c.deliveredOn <= c.promisedDate : false,
+    inFull: onNote >= ordered,
+    drift: 0, late: false, transitDays: null,
+  }
+})
 const row = (c: string) => rows.find((r) => r.item.code === c)!
 
 interface Check { group: string; label: string; source: string; expected: string; actual: string }
@@ -250,6 +268,48 @@ const CHECKS: Check[] = [
   { group: 'Wastage & loss (INV-03)', label: 'Losses with no cause', source: 'there is no “miscellaneous”',
     expected: '0',
     actual: String(invLosses.filter((l) => !V.LOSS_LABEL[l.cause]).length) },
+
+  // ---- DSP-01..04 · Dispatch
+  { group: 'Dispatch (DSP-01)', label: 'Every despatch note posts its own movement', source: 'one movement per note line, generated from the note',
+    expected: `${dspNotes.reduce((a, n) => a + n.lines.length, 0)} movements`,
+    actual: `${DSP.despatchMovements(dspNotes).length} movements` },
+  { group: 'Dispatch (DSP-01)', label: 'Despatched quantity ties to the movements out', source: 'Σ note lines vs Σ |despatch movements|',
+    expected: String(dspNotes.reduce((a, n) => a + n.lines.reduce((b, l) => b + l.qty, 0), 0)),
+    actual: String(DSP.despatchMovements(dspNotes).reduce((a, m) => a + Math.abs(m.qty), 0)) },
+  { group: 'Dispatch (DSP-01)', label: 'No finished good is despatched into a negative balance', source: 'opening + production + returns − despatches ≥ 0',
+    expected: `${fgItems.length} of ${fgItems.length} non-negative`,
+    actual: `${fgItems.filter((f) => (DSP.fgBalance(fgMovements, f).value as number) >= 0).length} of ${fgItems.length} non-negative` },
+  { group: 'Dispatch (DSP-01)', label: 'Nothing is despatched beyond what was ordered', source: 'Σ despatched ≤ Σ ordered, per order',
+    expected: '0 over-despatched',
+    actual: `${new Set(dspNotes.map((n) => n.soNo)).size > 0
+      ? [...new Set(dspNotes.map((n) => n.soNo))].filter((so) =>
+          dspNotes.filter((n) => n.soNo === so).reduce((a, n) => a + n.lines.reduce((b, l) => b + l.qty, 0), 0) >
+          orderLines.filter((l) => l.soNo === so).reduce((a, l) => a + l.qty, 0)).length
+      : 0} over-despatched` },
+  { group: 'Dispatch (DSP-01)', label: 'The three §8.5 orders keep their published values', source: 'Σ (line qty × line rate) vs the value Line Watch shows',
+    expected: lw.salesOrders.map((o) => money(o.value)).join(', '),
+    actual: lw.salesOrders.map((o) => money(DSP.orderValue(orderLines.filter((l) => l.soNo === o.soNo), o.soNo).value as number)).join(', ') },
+  { group: 'Dispatch (DSP-02)', label: 'Every despatch note can produce its pack', source: 'a note whose order has no lines cannot be documented',
+    expected: `${dspNotes.length} of ${dspNotes.length}`,
+    actual: `${dspNotes.filter((n) => orderLines.some((l) => l.soNo === n.soNo)).length} of ${dspNotes.length}` },
+  { group: 'Dispatch (DSP-03)', label: 'Every consignment belongs to a despatch note', source: 'no carrier leg without goods behind it',
+    expected: `${dspConsignments.length} of ${dspConsignments.length}`,
+    actual: `${dspConsignments.filter((c) => dspNotes.some((n) => n.dnNo === c.dnNo)).length} of ${dspConsignments.length}` },
+  { group: 'Dispatch (DSP-03)', label: 'Every delivered date carries a name', source: 'a date nobody confirmed is a guess with a timestamp',
+    expected: `${dspConsignments.filter((c) => c.deliveredOn).length} confirmed`,
+    actual: `${dspConsignments.filter((c) => c.deliveredOn && c.confirmedBy).length} confirmed` },
+  { group: 'Dispatch (DSP-03)', label: 'Customer OTIF counts only what has landed', source: 'consignments in transit are excluded, not counted on time',
+    expected: `${dspConsignments.filter((c) => c.deliveredOn).length} in the denominator`,
+    actual: `${(DSP.customerOtif(dspRows).inputs.find((i) => i.name === 'delivered consignments')?.value ?? 0)} in the denominator` },
+  { group: 'Dispatch (DSP-04)', label: 'No return is bigger than the despatch it came from', source: 'RMA qty ≤ qty on the note',
+    expected: '0 over-returned',
+    actual: `${dspRmas.filter((r) => {
+      const n = dspNotes.find((x) => x.dnNo === r.dnNo)
+      return n ? r.qty > n.lines.reduce((a, l) => a + l.qty, 0) : false
+    }).length} over-returned` },
+  { group: 'Dispatch (DSP-04)', label: 'Every return that is back came through the gate', source: 'a received RMA names the GRN it arrived on',
+    expected: `${dspRmas.filter((r) => r.state !== 'authorised').length} received`,
+    actual: `${dspRmas.filter((r) => r.state !== 'authorised' && r.grnRef).length} received` },
 
   // ---- §9.2 Line Watch
   { group: 'Line Watch (§9.2)', label: 'The line runs for', source: 'min(usable / floor_consumption_per_day)',

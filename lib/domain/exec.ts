@@ -13,7 +13,7 @@
 import { daysBetween, round } from './calc'
 import type { Derived, DerivationInput, Grn, LossRecord, StockMovement } from './types'
 import type { DerivedRow } from './derive'
-import { A, assumption, CARRIERS } from '@/lib/seed/exec'
+import { A, assumption } from '@/lib/seed/exec'
 
 export type Provenance = 'derived' | 'part' | 'illustrative'
 
@@ -266,17 +266,16 @@ export function shrinkageAndWaste(
 
 export function stockSplit(
   rmValue: number, wipValue: number, fgValue: number,
-  rmParts: DerivationInput[], wipParts: DerivationInput[],
+  rmParts: DerivationInput[], wipParts: DerivationInput[], fgParts: DerivationInput[] = [],
 ): Kpi {
   const total = rmValue + wipValue + fgValue
   const wipPct = pct(wipValue, total)
   return {
-    id: 'split', label: 'Raw material · WIP · finished goods', provenance: 'part',
+    id: 'split', label: 'Raw material · WIP · finished goods', provenance: 'derived',
     meaning: 'Where the stock is sitting. Too much WIP means a bottleneck on the floor.',
     format: 'lakh',
     target: 'WIP < 25%', meetsTarget: wipPct < 25,
     caption: `raw ${pct(rmValue, total)}% · WIP ${wipPct}% · finished ${pct(fgValue, total)}%`,
-    needs: 'A finished-goods table. This build models raw material and work in progress; the third leg is assumed.',
     d: D(
       round(total, 2), 'Stock across the three stages',
       'raw material on the shelf + material with jobworkers + finished goods',
@@ -285,86 +284,92 @@ export function stockSplit(
         ...rmParts,
         { name: 'work in progress', value: round(wipValue, 2), unit: '₹', source: 'material out at jobworkers — neither on the shelf nor consumed' },
         ...wipParts,
-        { name: 'finished goods', value: round(fgValue, 2), unit: '₹', source: `assumed — ${assumption('finishedGoodsValue').basis}` },
+        { name: 'finished goods', value: round(fgValue, 2), unit: '₹', source: 'the despatch bay, at standard cost — a balance summed from its movements, not a stored number' },
+        ...fgParts,
       ],
-      { unit: '₹', note: 'Two of the three legs are measured. The finished-goods leg is an assumption, and the ratio is only as good as it.' },
+      { unit: '₹', note: 'All three legs are measured now. The finished-goods leg was an assumption until DSP-01 gave the thing that ships an identity and a balance.' },
     ),
   }
 }
 
 /* ========================================================================== */
-/* 3 · Outbound fulfilment — everything here is illustrative (§2)             */
+/* 3 · Outbound fulfilment                                                    */
+/*                                                                            */
+/* Every figure in this section used to be illustrative, because §2 put Stage  */
+/* 5 out of scope and nothing in the build observed a delivery. DSP-01 to      */
+/* DSP-04 changed that: these now take the despatch, consignment and return    */
+/* records and are counted rather than assumed.                               */
 /* ========================================================================== */
 
-export function customerOtif(atRiskOrders: { soNo: string; customer: string; value: number; promisedDate: string }[]): Kpi {
-  const v = A.customerOtifPct
+export function customerOtif(
+  otif: Derived, delivered: number, inTransit: number,
+  atRiskOrders: { soNo: string; customer: string; value: number; promisedDate: string }[],
+): Kpi {
+  const v = otif.value as number
   return {
-    id: 'cotif', label: 'Customer OTIF', provenance: 'illustrative',
+    id: 'cotif', label: 'Customer OTIF', provenance: 'derived',
     meaning: 'Shipments delivered to customers when they expected them, with nothing missing.',
     format: 'raw', dp: 1, suffix: '%',
     target: '> 95%', meetsTarget: v > 95,
-    caption: `what IS measured: ${atRiskOrders.length} orders worth ₹${(atRiskOrders.reduce((a, s) => a + s.value, 0) / 100000).toFixed(2)} L are at risk from short material`,
-    needs: 'A despatch record carrying a promised date against each sales order. §2 puts Stage 5 out of scope, so nothing here observes a delivery.',
-    d: D(
-      v, 'Customer OTIF', 'assumed — no despatch data exists in this build',
-      [
-        { name: 'assumed OTIF', value: v, unit: '%', source: assumption('customerOtifPct').basis },
-        ...atRiskOrders.map((s) => ({
-          name: `${s.soNo} · ${s.customer}`, value: s.value, unit: '₹',
-          source: `promised ${s.promisedDate} — at risk from a short material, which IS measured`,
-        })),
-      ],
-      { unit: '%', note: 'The at-risk orders below the headline are real — Line Watch derives them from materials that are actually short. The delivered-on-time percentage is not.' },
-    ),
+    caption: `${delivered} deliveries observed · ${inTransit} still in transit and counted as neither · ${atRiskOrders.length} orders at risk from short material`,
+    d: otif,
   }
 }
 
-export function fulfilmentCycle(): Kpi {
-  const v = A.fulfilmentCycleDays
+export function fulfilmentCycle(cycle: Derived, notes: number): Kpi {
   return {
-    id: 'cycle', label: 'Order fulfilment cycle time', provenance: 'illustrative',
+    id: 'cycle', label: 'Order fulfilment cycle time', provenance: 'derived',
     meaning: 'From receiving a customer order to the moment it leaves the loading dock.',
     format: 'days', dp: 1, suffix: ' days',
-    caption: 'order to loading dock',
-    needs: 'A timestamp when the sales order is taken and another when it is despatched. Neither exists here.',
-    d: D(v, 'Order fulfilment cycle time', 'assumed',
-      [{ name: 'assumed cycle', value: v, unit: 'days', source: assumption('fulfilmentCycleDays').basis }],
-      { unit: 'days' }),
+    caption: `mean across ${notes} despatch notes — order taken to goods gone`,
+    d: cycle,
   }
 }
 
-export function carrierDelays(): Kpi {
-  const worst = [...CARRIERS].sort((a, b) => (b.lateConsignments / b.consignments) - (a.lateConsignments / a.consignments))[0]
-  const late = CARRIERS.reduce((a, c) => a + c.lateConsignments, 0)
-  const total = CARRIERS.reduce((a, c) => a + c.consignments, 0)
+export function carrierDelays(rows: {
+  name: string; shipped: number; delivered: number; late: number; drift: number
+}[]): Kpi {
+  // A carrier with one delivery has no rate, only an anecdote. Those are kept
+  // in the derivation and left out of the ranking, and the caption says which —
+  // a chart that silently drops a row reads as "this is everyone".
+  const RANKABLE = 2
+  const ranked = rows.filter((r) => r.delivered >= RANKABLE)
+  const thin = rows.filter((r) => r.delivered > 0 && r.delivered < RANKABLE)
+  const late = ranked.reduce((a, c) => a + c.late, 0)
+  const total = ranked.reduce((a, c) => a + c.delivered, 0)
+  const worst = [...ranked].sort((a, b) => (b.late / b.delivered) - (a.late / a.delivered))[0]
+  const thinNote = thin.length
+    ? ` · ${thin.map((t) => t.name).join(', ')} not ranked on ${thin[0].delivered} delivery`
+    : ''
   return {
-    id: 'carriers', label: 'Delays by carrier', provenance: 'illustrative',
+    id: 'carriers', label: 'Delays by carrier', provenance: 'derived',
     meaning: 'Which logistics partner is causing the most shipping delays.',
     format: 'raw', dp: 1, suffix: '%',
-    caption: `${worst.name} is the worst — ${pct(worst.lateConsignments, worst.consignments)}% late, ${worst.avgDelayDays} days on average`,
-    needs: 'A consignment record naming the carrier, the promised date and the delivered date. Nothing in this build ships anything.',
+    caption: (worst && worst.late > 0
+      ? `${worst.name} is the worst — ${pct(worst.late, worst.delivered)}% late, ${worst.drift} days against the promise`
+      : 'nothing late among the carriers with enough deliveries to rank') + thinNote,
     d: D(
-      pct(late, total), 'Consignments delivered late', 'late consignments ÷ consignments × 100',
-      CARRIERS.map((c) => ({
-        name: c.name, value: `${c.lateConsignments} of ${c.consignments} late`,
-        source: `${c.avgDelayDays} days late on average — illustrative`,
+      pct(late, total), 'Consignments delivered late', 'late deliveries ÷ delivered consignments × 100',
+      rows.map((c) => ({
+        name: c.name, value: `${c.late} of ${c.delivered} late`,
+        source: c.delivered >= RANKABLE
+          ? `${c.drift} days against the promise on average, across ${c.shipped} shipped`
+          : `not ranked — ${c.delivered} delivery is an anecdote, not a rate (${c.shipped} shipped)`,
       })),
-      { unit: '%', note: 'Made up whole. Kept because “which of my three couriers is losing me customers” is the question Stage 5 exists to answer, and the shape of the answer is worth showing before the data exists.' },
+      { unit: '%', note: 'Counted on consignments that have actually arrived. A carrier still in transit cannot be late yet, and counting it either way would be a guess.' },
     ),
   }
 }
 
-export function rmaRate(): Kpi {
-  const v = A.rmaRatePct
+export function rmaRate(rate: Derived, open: number, shippedUnits: number): Kpi {
+  const v = rate.value as number
   return {
-    id: 'rma', label: 'RMA rate', provenance: 'illustrative',
+    id: 'rma', label: 'RMA rate', provenance: 'derived',
     meaning: 'Shipped products returned by customers for delivery damage or wrong items.',
-    format: 'raw', dp: 1, suffix: '%',
+    format: 'raw', dp: 2, suffix: '%',
     target: '< 1.5%', meetsTarget: v < 1.5,
-    caption: 'returns as a share of what was shipped',
-    needs: 'A returns route with an owner and a deadline — the reverse-logistics gap the Dispatch stage already names.',
-    d: D(v, 'RMA rate', 'assumed',
-      [{ name: 'assumed rate', value: v, unit: '%', source: assumption('rmaRatePct').basis }], { unit: '%' }),
+    caption: `on ${shippedUnits.toLocaleString('en-IN')} units shipped · ${open} authorisation${open === 1 ? '' : 's'} still open`,
+    d: rate,
   }
 }
 
@@ -403,27 +408,13 @@ export function holdingCost(stockValue: number, nonUsableValue: number, jobworkV
  * measured number and an assumed one inside one figure is the thing the
  * provenance chip exists to prevent.
  */
-export function outboundFreightPerUnit(): Kpi {
-  const perConsignment = A.outboundFreightPerConsignment
-  const units = A.unitsPerConsignment
-  const perMonth = A.consignmentsPerMonth
-  const value = round(perConsignment / units, 2)
+export function outboundFreightPerUnit(freight: Derived, consignments: number): Kpi {
   return {
-    id: 'freightOut', label: 'Freight cost per unit shipped', provenance: 'illustrative',
+    id: 'freightOut', label: 'Freight cost per unit shipped', provenance: 'derived',
     meaning: 'Total shipping cost divided by units sent out. Keeps a check on rising fuel and transport surcharges.',
     format: 'money', dp: 2,
-    caption: `₹${Math.round(perConsignment * perMonth).toLocaleString('en-IN')} of outbound freight a month, assumed`,
-    needs: 'A despatch record with a consignment weight and a freight bill against it. §2 puts Stage 5 out of scope, so nothing here ships anything.',
-    d: D(
-      value, 'Outbound freight per unit shipped',
-      'freight per consignment ÷ units per consignment',
-      [
-        { name: 'freight per consignment', value: perConsignment, unit: '₹', source: assumption('outboundFreightPerConsignment').basis },
-        { name: 'units per consignment', value: units, source: assumption('unitsPerConsignment').basis },
-        { name: 'consignments a month', value: perMonth, source: assumption('consignmentsPerMonth').basis },
-      ],
-      { unit: '₹', note: 'Made up in all three parts. The inbound equivalent is measured and sits below this section.' },
-    ),
+    caption: `across ${consignments} consignments, from the carriers\u2019 own bills — inbound freight is measured as a share of order value, below`,
+    d: freight,
   }
 }
 

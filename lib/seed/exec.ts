@@ -23,6 +23,12 @@ export interface Assumption {
   unit: string
   /** why this number and not another — a client should be able to disagree */
   basis: string
+  /**
+   * Set once a system measures this for real. The assumption stays in the
+   * ledger rather than being deleted: what the build used to guess, and what
+   * observes it now, is the most useful thing this list can say.
+   */
+  retiredBy?: string
 }
 
 export const ASSUMPTIONS: Assumption[] = [
@@ -41,44 +47,48 @@ export const ASSUMPTIONS: Assumption[] = [
   {
     id: 'outboundFreightPerConsignment', label: 'Outbound freight per consignment', value: 4_850, unit: '₹',
     basis: 'A part-load consignment within the state. Illustrative — this build has no despatch table, so nothing here is measured.',
+    retiredBy: 'DSP-03 · the carriers’ own bills against ten consignments',
   },
   {
     id: 'consignmentsPerMonth', label: 'Consignments a month', value: 38, unit: 'consignments',
     basis: 'Illustrative. Sized to the sales orders §9.2 carries.',
+    retiredBy: 'DSP-03 · the consignment register counts them',
   },
   {
     id: 'unitsPerConsignment', label: 'Units a consignment', value: 26, unit: 'units',
     basis: 'Illustrative. Panels and heaters ship in small batches.',
+    retiredBy: 'DSP-01 · every line on every despatch note',
   },
   {
     id: 'customerOtifPct', label: 'Customer OTIF', value: 87.4, unit: '%',
     basis: 'Illustrative. Needs a despatch record with a promised date against each sales order — Stage 5, which §2 puts out of scope.',
+    retiredBy: 'DSP-03 · delivered on time and in full, counted on confirmed deliveries',
   },
   {
     id: 'fulfilmentCycleDays', label: 'Order fulfilment cycle time', value: 11.4, unit: 'days',
     basis: 'Illustrative. Order to loading dock. Needs a sales-order timestamp and a despatch timestamp; this build has neither.',
+    retiredBy: 'DSP-01 · order taken to goods gone, from the two timestamps that now exist',
   },
   {
     id: 'rmaRatePct', label: 'RMA rate', value: 2.1, unit: '%',
     basis: 'Illustrative. Needs a returns route with an owner and a deadline — the reverse-logistics gap the Dispatch stage already names.',
+    retiredBy: 'DSP-04 · authorisations raised against units shipped',
   },
   {
     id: 'finishedGoodsValue', label: 'Finished goods on hand', value: 3_20_000, unit: '₹',
     basis: 'Illustrative. This build models raw material and work in progress; there is no finished-goods table, so the third leg of the RM/WIP/FG split is assumed. Kept deliberately smaller than the two measured legs — an assumption that dominates the ratio it is part of makes the whole ratio an assumption.',
+    retiredBy: 'DSP-01 · the despatch-bay balance, summed from its movements',
   },
 ]
 
 export const A = Object.fromEntries(ASSUMPTIONS.map((a) => [a.id, a.value])) as Record<string, number>
-export const assumption = (id: string) => ASSUMPTIONS.find((a) => a.id === id)!
 
 /**
- * Illustrative carrier performance. There is no despatch table in this build, so
- * these are made up whole — kept because "which of my three couriers is losing
- * me customers" is the question a Stage 5 build has to answer, and it is worth
- * showing the shape of the answer even before the data exists.
+ * The assumptions still doing work, and the ones a measurement has replaced.
+ * A retired assumption is not deleted: what the build used to guess, and what
+ * now observes it instead, is the most useful thing this ledger can say.
  */
-export const CARRIERS = [
-  { name: 'Gati — surface', consignments: 17, lateConsignments: 1, avgDelayDays: 0.8 },
-  { name: 'VRL Logistics', consignments: 13, lateConsignments: 3, avgDelayDays: 2.4 },
-  { name: 'Local tempo (own arrangement)', consignments: 8, lateConsignments: 2, avgDelayDays: 1.1 },
-]
+export const LIVE_ASSUMPTIONS = ASSUMPTIONS.filter((a) => !a.retiredBy)
+export const RETIRED_ASSUMPTIONS = ASSUMPTIONS.filter((a) => a.retiredBy)
+export const assumption = (id: string) => ASSUMPTIONS.find((a) => a.id === id)!
+

@@ -512,3 +512,148 @@ export interface LossRecord {
   noSaleOn?: string
   actor: string
 }
+
+/* ========================================================================== */
+/* Stage 5 · Dispatch & logistics                                             */
+/*                                                                            */
+/* The outbound half of the gate. INB-01 instruments what arrives; until now  */
+/* nothing instrumented what leaves, so the ledger was accurate right up to    */
+/* the moment material walked out of the building.                            */
+/* ========================================================================== */
+
+/**
+ * A finished good. The prerequisite that gates the whole stage: this build
+ * models raw material and work in progress, and the thing that actually ships
+ * had no identity — no code, no unit, no balance. A despatch note cannot name
+ * what left until what leaves is a thing.
+ */
+export interface FgItem {
+  id: string
+  code: string
+  name: string
+  uom: Uom
+  /** what it costs us to build one — a despatch is valued at this, never at the selling price */
+  standardCost: number
+  /** the production jobs that make it, so a despatch traces back to the material */
+  builtBy: string[]
+  /** for the invoice and the e-way bill, both of which the accounts package raises */
+  hsn: string
+}
+
+export type FgMovementKind =
+  | 'opening'     // the balance when the finished-goods window opens
+  | 'production'  // a job closed and its output came to stores
+  | 'despatch'    // a despatch note raised — quantity leaves
+  | 'return_in'   // a customer return, booked back through the INB-01 gate
+
+/** Same shape as a stock movement, and for the same reason: a balance is a sum. */
+export interface FgMovement {
+  id: string
+  fgId: string
+  on: string
+  kind: FgMovementKind
+  /** signed: production and returns positive, despatches negative */
+  qty: number
+  /** the document behind it. A movement without one cannot be recorded. */
+  sourceRef: string
+  note?: string
+  actor: string
+}
+
+export interface Customer {
+  id: string
+  name: string
+  gstin: string
+  state: string
+  shipTo: string
+  /** what a freight rate is quoted per kilometre against */
+  distanceKm: number
+  /** days — the sales half of the cash cycle */
+  paymentTerms: number
+}
+
+export interface Carrier {
+  id: string
+  name: string
+  mode: string
+  ratePerKgKm: number
+}
+
+export interface SalesOrderLine {
+  id: string
+  soNo: string
+  fgId: string
+  qty: number
+  /** what the customer is charged, per unit */
+  rate: number
+  note?: string
+}
+
+/**
+ * The mirror of a goods receipt. It names what left, against which order, on
+ * whose authority — and it is what posts the finished-goods movement out.
+ * Without it the outbound gate has no system behind it at all.
+ */
+export interface DespatchNote {
+  id: string
+  dnNo: string
+  soNo: string
+  customerId: string
+  despatchedOn: string
+  lines: { fgId: string; qty: number }[]
+  /** kg — what the freight bill is raised against */
+  weightKg: number
+  /** who authorised the goods out. A despatch without a name is stock walking. */
+  authorisedBy: string
+  actor: string
+  note?: string
+}
+
+export type ConsignmentState = 'in_transit' | 'delivered'
+
+/**
+ * The carrier leg. This is the record that makes customer OTIF computable at
+ * all: a promised date the customer was given, and a delivered date somebody
+ * actually observed. No client in the source set captures the second one today,
+ * which is why the figure was illustrative before this stage existed.
+ */
+export interface Consignment {
+  id: string
+  dnNo: string
+  carrierId: string
+  /** the docket the carrier's own system knows it by */
+  lrNo: string
+  promisedDate: string
+  deliveredOn?: string
+  /** ₹ — the carrier's bill for this consignment */
+  freight: number
+  /** who confirmed the delivery, and how. A date with no name is a guess. */
+  confirmedBy?: string
+}
+
+export type RmaState = 'authorised' | 'received' | 'closed'
+
+/**
+ * A return authorisation. The goods themselves already have a route home — the
+ * INB-01 gate takes them back in with the same spec checks a purchase gets. The
+ * missing half was the record that says a return is expected, with an owner and
+ * a deadline, so a return stops being a phone call.
+ */
+export interface Rma {
+  id: string
+  rmaNo: string
+  soNo: string
+  dnNo: string
+  customerId: string
+  fgId: string
+  qty: number
+  reason: string
+  raisedOn: string
+  /** the deadline the customer was given, so a return can be late */
+  dueBy: string
+  owner: string
+  state: RmaState
+  receivedOn?: string
+  /** the GRN the returned goods came back through, once they are back */
+  grnRef?: string
+}

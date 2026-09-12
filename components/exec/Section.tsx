@@ -168,12 +168,14 @@ export function ExecSection({ no, title, blurb, kpis, charts, notes, index = 0, 
 
 /** The full list of assumptions, so a client can argue with every one of them. */
 export function AssumptionLedger({ assumptions }: {
-  assumptions: { id: string; label: string; value: number; unit: string; basis: string }[]
+  assumptions: { id: string; label: string; value: number; unit: string; basis: string; retiredBy?: string }[]
 }) {
   const [open, setOpen] = useState(false)
+  const live = assumptions.filter((a) => !a.retiredBy)
+  const retired = assumptions.filter((a) => a.retiredBy)
   return (
     <Card index={9} className="mt-3" title="Every assumption on this page"
-      sub={`The ${assumptions.length} figures the build does not measure, what was assumed, and why`}
+      sub={`${live.length} figures the build does not measure${retired.length ? `, and ${retired.length} a system has since replaced` : ''}`}
       actions={
         <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
           className="rounded border border-line px-2 py-0.5 text-[11px] font-medium text-ink-2 transition-colors hover:bg-surface-2">
@@ -182,7 +184,7 @@ export function AssumptionLedger({ assumptions }: {
       {open ? (
         <>
           <ul className="divide-y divide-line-soft">
-            {assumptions.map((a) => (
+            {live.map((a) => (
               <li key={a.id} className="flex flex-wrap gap-x-4 gap-y-1 px-4 py-2">
                 <span className="w-52 shrink-0">
                   <span className="block text-[12px] font-medium">{a.label}</span>
@@ -194,18 +196,42 @@ export function AssumptionLedger({ assumptions }: {
               </li>
             ))}
           </ul>
+          {retired.length > 0 && (
+            <>
+              <p className="mono border-y border-line-soft bg-surface-2 px-4 py-1 text-[9.5px] uppercase tracking-wider text-ink-2">
+                retired — a system measures these now
+              </p>
+              <ul className="divide-y divide-line-soft">
+                {retired.map((a) => (
+                  <li key={a.id} className="flex flex-wrap gap-x-4 gap-y-1 px-4 py-2">
+                    <span className="w-52 shrink-0">
+                      <span className="block text-[12px] font-medium text-ink-2">{a.label}</span>
+                      <span className="num block text-[12px] text-ink-3 line-through">
+                        {a.value.toLocaleString('en-IN')} <span className="text-[10.5px]">{a.unit}</span>
+                      </span>
+                    </span>
+                    <span className="min-w-0 flex-1 text-[11.5px] leading-relaxed text-ink-2">
+                      <span className="font-medium text-good">Measured by {a.retiredBy}.</span>{' '}
+                      <span className="text-ink-3">Was: {a.basis}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
           <p className="border-t border-line-soft px-4 py-2.5 text-[11px] leading-relaxed text-ink-3">
-            Ten assumptions carry four of the sixteen figures on this page outright and colour three more.
-            Every one of them is a line in the data-capture plan: the “what this means” note on each tile
-            says what would have to start being recorded for the number to become measured. Nothing here
-            is hidden inside a formula.
+            Every assumption is a line in the data-capture plan: the “what this means” note on each tile
+            says what would have to start being recorded for the number to become measured. The retired
+            list is that promise kept — those figures were assumptions until Stage 5 gave the build a
+            despatch note, a consignment and a return to observe. Nothing here is hidden inside a formula.
           </p>
         </>
       ) : (
         <p className="px-4 py-2.5 text-[11.5px] leading-relaxed text-ink-3">
-          Ten assumptions carry four of the sixteen figures outright and colour three more — the holding
-          rate, the collection period, the admin cost per order, the outbound freight and the
-          finished-goods leg among them. Open the list to argue with every one.
+          {live.length} assumptions still carry figures on this page — the holding rate, the collection
+          period and the admin cost per order among them.
+          {retired.length > 0 && ` ${retired.length} more have been retired, replaced by something that
+          observes them rather than guesses.`} Open the list to argue with every one.
         </p>
       )}
     </Card>

@@ -10,6 +10,7 @@ import { crossfadeTheme } from '@/components/ui/motion'
 import { DeskProvider } from '@/components/desk/store'
 import { InboundProvider } from '@/components/inbound/store'
 import { InventoryProvider } from '@/components/inventory/store'
+import { DispatchProvider } from '@/components/dispatch/store'
 
 function ActivityDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { audit } = useApp()
@@ -134,7 +135,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <DeskProvider>
         <InboundProvider>
           <InventoryProvider>
-            <Chrome>{children}</Chrome>
+            <DispatchProvider>
+              <Chrome>{children}</Chrome>
+            </DispatchProvider>
           </InventoryProvider>
         </InboundProvider>
       </DeskProvider>

@@ -18,6 +18,7 @@ import type { Derived } from '@/lib/domain/types'
 import { useDesk } from '@/components/desk/store'
 import { useInventory } from '@/components/inventory/store'
 import { useInbound } from '@/components/inbound/store'
+import { useDispatch } from '@/components/dispatch/store'
 import * as X from '@/lib/domain/exec'
 import { ASSUMPTIONS, A } from '@/lib/seed/exec'
 import { AssumptionLedger, ExecSection, HeadlineStrip, ProvenanceChip } from '@/components/exec/Section'
@@ -60,6 +61,10 @@ export default function Page() {
   const { intakeCounts: ic, kpis: deskKpi, state: deskState } = useDesk()
   const { lossRows, stockRows, offcutRows, netLoss, byCause } = useInventory()
   const { grns, challanRows } = useInbound()
+  // Stage 5. Five of the sixteen figures below were assumptions until this
+  // existed — everything in the outbound section, plus the finished-goods leg
+  // of the stock split.
+  const dsp = useDispatch()
   const halting = lw.jobs.filter((j) => j.status.value === 'will_halt').length
   const risky = lw.jobs.filter((j) => j.status.value === 'at_risk').length
   const pace = [...lw.materials].sort((a, b) => a.coverDays.value - b.coverDays.value)[0]
@@ -87,7 +92,7 @@ export default function Page() {
     X.stockoutRisk(halting, risky, lw.jobs.length, blockingMaterials),
     X.shrinkageAndWaste(lossRows.map((l) => l.loss), movements, rateOf),
     X.stockSplit(
-      usableValue, jobworkValue, A.finishedGoodsValue,
+      usableValue, jobworkValue, dsp.fgValue.value as number,
       rows.filter((r) => r.usable.value > 0).slice(0, 4).map((r) => ({
         name: r.item.code, value: Math.round(r.usable.value * r.item.lastPurchaseRate), unit: '₹',
       })),
@@ -98,15 +103,18 @@ export default function Page() {
     ),
   ]
   const outbound = [
-    X.customerOtif(lw.salesOrders),
-    X.fulfilmentCycle(),
-    X.carrierDelays(),
-    X.rmaRate(),
+    X.customerOtif(dsp.otif, dsp.consignmentRows.filter((r) => r.delivered).length, dsp.inTransit.length, lw.salesOrders),
+    X.fulfilmentCycle(dsp.cycleTime, dsp.notes.length),
+    X.carrierDelays(dsp.carrierRows.map((r) => ({
+      name: r.carrier.name, shipped: r.shipped, delivered: r.delivered, late: r.late,
+      drift: r.drift.value as number,
+    }))),
+    X.rmaRate(dsp.rmaRate, dsp.rmaRows.filter((r) => r.rma.state !== 'closed').length, dsp.shippedUnits),
   ]
   const inFreight = X.inboundFreight(rows)
   const financial = [
     X.holdingCost(usableValue, deskKpi.nonUsableValue.value, jobworkValue),
-    X.outboundFreightPerUnit(),
+    X.outboundFreightPerUnit(dsp.freightPerUnit, dsp.consignmentRows.length),
     X.cashToCash(dioKpi.d.value, S.vendors[0].paymentTermsDays),
     X.procurementCost(deskKpi.draftPoCount, rows.length),
   ]
@@ -118,14 +126,18 @@ export default function Page() {
     jobs: lw.jobs.map((j) => ({ jobNo: j.job.jobNo, product: j.job.product, status: j.status.value })),
     blocking: blockingMaterials,
     byCause,
-    rmValue: usableValue, wipValue: jobworkValue, fgValue: A.finishedGoodsValue,
+    rmValue: usableValue, wipValue: jobworkValue, fgValue: dsp.fgValue.value as number,
     nonUsableValue: deskKpi.nonUsableValue.value,
     dio: dioKpi.d.value, dso: A.dsoDays, dpo: S.vendors[0].paymentTermsDays,
     procurementPerPo: A.procurementCostPerPo,
     holdingRatePct: A.holdingRatePctPerMonth,
-    customerOtifPct: A.customerOtifPct,
-    fulfilmentCycleDays: A.fulfilmentCycleDays,
-    rmaRatePct: A.rmaRatePct,
+    customerOtifPct: dsp.otif.value as number,
+    fulfilmentCycleDays: dsp.cycleTime.value as number,
+    rmaRatePct: dsp.rmaRate.value as number,
+    carrierRows: dsp.carrierRows.map((r) => ({
+      name: r.carrier.name, late: r.late, delivered: r.delivered, drift: r.drift.value as number,
+    })),
+    freightPerUnit: dsp.freightPerUnit.value as number,
     inboundFreightPct: inFreight.value,
   })
   const all16 = [...inbound, ...warehouse, ...outbound, ...financial]
@@ -170,11 +182,13 @@ export default function Page() {
           <ProvenanceChip p="derived" /> number is computed from this build’s own data and opens into its
           arithmetic. A <ProvenanceChip p="part" /> number is a measured base times a stated assumption.
           An <ProvenanceChip p="illustrative" /> number is made up, and the tile says what would have to
-          start being recorded to make it real — §2 puts Stage 5 out of scope, so every outbound figure
-          is illustrative by construction. Sixteen figures where some are measured and some are assumed,
-          with nothing to tell them apart, would be worse than eight measured ones. The charts say it
-          again where the eye actually goes: <strong className="text-ink">a hatched fill is a made-up
-          number</strong>, a solid one is measured.
+          start being recorded to make it real. The outbound row was four of those until Stage 5 built a
+          despatch note, a consignment and a return to observe — the assumption ledger at the foot of
+          this page keeps the figures it replaced, and what replaced each. Sixteen figures where some are
+          measured and some are assumed, with nothing to tell them apart, would be worse than eight
+          measured ones. The charts say it again where the eye actually goes:
+          <strong className="text-ink"> a hatched fill is a made-up number</strong>, a solid one is
+          measured.
         </p>
       ) : (
         <p className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-ink-3">
@@ -205,13 +219,19 @@ export default function Page() {
           blurb="Whether the cash is rotting on shelves, or the line is about to stop" />
 
         <ExecSection no={3} index={2} title="Outbound fulfilment" kpis={outbound} charts={charts} notes={notes}
-          blurb="Delivery to customers — scoped but not built, so every figure here is illustrative">
+          blurb="Delivery to customers — measured since Stage 5, where every figure on this row used to be an assumption">
           <p className="border-t border-line-soft px-4 py-3 text-[12px] leading-relaxed text-ink-2">
-            <strong className="text-ink">Nothing in this build ships anything.</strong> §2 scopes it to
-            Stage 1 plus the shop-floor read of Stages 3–4, so there is no despatch table, no carrier
-            record and no returns route. These four are shown as the shape of the answer rather than the
-            answer — and the one real thing on this row is underneath the headline: the customer orders
-            Line Watch can already see are at risk, because a material behind them is genuinely short.
+            <strong className="text-ink">This row used to be four invented numbers.</strong> Nothing in
+            the build shipped anything, so there was no despatch table, no carrier record and no returns
+            route, and all four were shown as the shape of an answer rather than the answer. DSP-01 to
+            DSP-04 supply the three facts they were missing: a note that says what left and on whose
+            authority, a consignment carrying the date the customer was given and the date somebody
+            watched the goods arrive, and a return with an owner. OTIF is now
+            counted on <Num d={dsp.otif} format="raw" dp={1} suffix="%" /> of{' '}
+            {dsp.consignmentRows.filter((r) => r.delivered).length} confirmed deliveries, with{' '}
+            {dsp.inTransit.length} still in transit and excluded rather than flattered into the
+            numerator. The at-risk orders Line Watch derives are still underneath the headline, and
+            still real.
           </p>
         </ExecSection>
 
