@@ -124,7 +124,7 @@ function IntakePage() {
                 only the table makes the data usable by everything downstream.
               </p>
               <p className="border-t border-line-soft pt-2.5">
-                <Link href="/production#aliases" className="font-medium text-accent hover:underline">
+                <Link href="/production#aliases" className="font-medium text-accent-ink hover:underline">
                   See the aliases on the floor →
                 </Link>
               </p>
@@ -142,14 +142,14 @@ function IntakePage() {
                 dead click — "Mapped" appears the moment you accept one */}
             <button type="button" onClick={() => setFilter('all')} aria-pressed={filter === 'all'}
               className={`rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
-                filter === 'all' ? 'border-accent bg-accent-soft text-accent' : 'border-line text-ink-2 hover:bg-surface-2'}`}>
+                filter === 'all' ? 'border-accent bg-accent-soft text-accent-ink' : 'border-line text-ink-2 hover:bg-surface-2'}`}>
               All {c.total}
             </button>
             {ORDER.filter((s) => countOf(s) > 0).map((s) => (
               <button key={s} type="button" onClick={() => setFilter(s)} aria-pressed={filter === s}
                 title={STATE[s].why}
                 className={`rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
-                  filter === s ? 'border-accent bg-accent-soft text-accent' : 'border-line text-ink-2 hover:bg-surface-2'}`}>
+                  filter === s ? 'border-accent bg-accent-soft text-accent-ink' : 'border-line text-ink-2 hover:bg-surface-2'}`}>
                 {STATE[s].label} {countOf(s)}
               </button>
             ))}
@@ -174,7 +174,7 @@ function IntakePage() {
                     <td className="whitespace-nowrap px-3 py-1.5">{d.vendorName}</td>
                     <td className="max-w-[15rem] px-3 py-1.5">
                       <button type="button" onClick={(e) => { e.stopPropagation(); open(d.id) }}
-                        className="mono block max-w-full truncate text-left font-medium text-accent underline decoration-dotted underline-offset-2 hover:no-underline"
+                        className="mono block max-w-full truncate text-left font-medium text-accent-ink underline decoration-dotted underline-offset-2 hover:no-underline"
                         title={`Open ${d.fileName} — ${d.lineCount} line${d.lineCount === 1 ? '' : 's'} from ${d.vendorName}`}>
                         {d.fileName}
                       </button>
@@ -206,7 +206,7 @@ function IntakePage() {
         {shown.length === 0 && (
           <p className="px-4 py-3 text-[12px] text-ink-2">
             Nothing in that state right now.{' '}
-            <button type="button" onClick={() => setFilter('all')} className="font-medium text-accent hover:underline">
+            <button type="button" onClick={() => setFilter('all')} className="font-medium text-accent-ink hover:underline">
               Show all {c.total} →
             </button>
           </p>

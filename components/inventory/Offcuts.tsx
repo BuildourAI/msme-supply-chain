@@ -217,7 +217,7 @@ export function OffcutRegister() {
           <ul className="space-y-3">
             {offcutRows.map((r, i) => (
               <li key={r.lot.id} style={{ '--i': Math.min(i, 5) } as React.CSSProperties}
-                  className={`anim-fade-up lift glass-card shadow-sm rounded-lg border p-3.5 ${
+                  className={`anim-fade-up lift panel rounded-lg border p-3.5 ${
                     r.aged ? 'border-warn/40' : 'border-line'}`}>
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                   <span className="mono text-[12.5px] font-medium">{r.item.code}</span>
@@ -325,7 +325,7 @@ export function CutRecords() {
                       const min = MIN_USABLE_REMNANT[r.item.id] ?? 0
                       const use = rem.size >= min
                       return (
-                        <li key={j} className={use ? 'text-accent' : 'text-critical'}>
+                        <li key={j} className={use ? 'text-accent-ink' : 'text-critical'}>
                           {rem.pieces} × {num(rem.size, 4)} {r.uom} — {use ? 'to the register' : 'scrap at the cut'}
                         </li>
                       )
@@ -399,7 +399,7 @@ export function RepurchaseCheck({ needs }: {
               <strong className="text-ink">{money(total)} of material this factory already owns</strong>,
               on a desk that is about to buy it again. Not because anyone is careless — because until now
               a remnant on Rack B-4 was not in any system that the buyer could see.{' '}
-              <Link href="/sourcing/desk" className="font-medium text-accent hover:underline">Open the desk →</Link>
+              <Link href="/sourcing/desk" className="font-medium text-accent-ink hover:underline">Open the desk →</Link>
             </p>
           </>
         )}

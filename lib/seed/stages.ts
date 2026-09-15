@@ -40,6 +40,12 @@ export interface Stage {
   label: string
   navLabel: string
   href: string
+  /**
+   * The one sentence the stage is about, split so the middle can be set in
+   * the accent colour. It is the claim the stage has to earn, not a slogan:
+   * every word of it is enforced by a module on the page below it.
+   */
+  headline: { pre: string; key: string; post: string }
   summary: string
   problems: Problem[]
   modules: ModuleEntry[]
@@ -48,6 +54,7 @@ export interface Stage {
 export const STAGES: Stage[] = [
   {
     id: 'sourcing', no: 1, label: 'Sourcing & procurement', navLabel: 'Sourcing', href: '/sourcing',
+    headline: { pre: 'Buy on', key: 'landed cost', post: 'not on the quote.' },
     summary: 'The only stage this build covers in full. Four systems — SRC-01 to SRC-04 — behaving as one desk.',
     problems: [
       { title: 'Reactive buying', detail: 'The trigger is a person noticing, not a number.',
@@ -81,6 +88,7 @@ export const STAGES: Stage[] = [
   },
   {
     id: 'inbound', no: 2, label: 'Inbound & vendor/jobwork', navLabel: 'Inbound', href: '/inbound',
+    headline: { pre: 'Nothing becomes stock without a', key: 'closed receipt', post: '.' },
     summary: 'Three systems — INB-01 to INB-03 — covering what happens at the gate and after it: whether the material is any good, whether the vendor is even making the right quantity, and where material went once it left again.',
     problems: [
       { title: 'Inbound QC and inspection gaps',
@@ -115,6 +123,7 @@ export const STAGES: Stage[] = [
   },
   {
     id: 'inventory', no: 4, label: 'Inventory & warehousing', navLabel: 'Inventory', href: '/inventory',
+    headline: { pre: 'A quantity is a', key: 'balance', post: 'not a number you type.' },
     summary: 'Three systems — INV-01 to INV-03 — over one ledger. A quantity is a balance rather than a stored number, a remnant is stock rather than a list, and a loss has a cause rather than a shrug.',
     problems: [
       { title: 'No live or accurate stock visibility',
@@ -144,6 +153,7 @@ export const STAGES: Stage[] = [
   },
   {
     id: 'production', no: 3, label: 'Production & material flow', navLabel: 'Production Material Flow', href: '/production',
+    headline: { pre: 'The line runs until the', key: 'tightest material', post: 'stops it.' },
     summary: 'The owner’s floor view. Same data as the buyer’s desk, read as a manufacturing statement rather than an inventory number.',
     problems: [
       { title: 'A few late components hold the whole order', detail: 'One hinge stops forty enclosures.',
@@ -175,6 +185,7 @@ export const STAGES: Stage[] = [
   },
   {
     id: 'dispatch', no: 5, label: 'Dispatch & logistics', navLabel: 'Dispatch', href: '/dispatch',
+    headline: { pre: 'Goods leave against a', key: 'document', post: 'or they do not leave.' },
     summary: 'Four systems — DSP-01 to DSP-04 — closing the gate the ledger stopped at. Goods now leave against a document, the paperwork is typed once, a delivery is something the record observes rather than assumes, and a return has an owner and a deadline.',
     problems: [
       { title: 'Dispatch documents typed by hand', detail: 'The same figures re-keyed into a challan, an invoice and an e-way bill.',

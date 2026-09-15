@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { PageHeader } from '@/components/shell/PageHeader'
 import { Card, Pill, StatusPill } from '@/components/ui/bits'
 import { Num } from '@/components/ui/Num'
+import { Icon } from '@/components/ui/icons'
 import { CoverBar } from '@/components/charts/kit'
 import { Donut } from '@/components/charts/exec-charts'
 import { buildRows, deskKpis, needsDecision, type SeedBundle } from '@/lib/domain/derive'
@@ -150,30 +151,41 @@ export default function Page() {
   return (
     <>
       <PageHeader eyebrow="Level 1 · end-to-end material view" title="Executive Dashboard"
+        sub="Sixteen figures, each one saying where it came from."
         meta={<>
-          <Pill mono>{longDate(seed.today)}</Pill>
-          <Pill tone="accent">Stage 1 live · Stages 2–5 scoped</Pill>
+          <Pill tone="accent">All five stages live</Pill>
           <Pill tone="good" title="Computed from this build’s own data.">{mix.derived} measured</Pill>
           <Pill tone="warn" title="A measured base figure times a stated assumption.">{mix.part} part measured</Pill>
-          <Pill tone="neutral" title="Nothing here measures it — §2 puts Stage 5 out of scope.">{mix.illustrative} illustrative</Pill>
+          <Pill tone="neutral" title="Nothing here measures it.">{mix.illustrative} illustrative</Pill>
+        </>}
+        actions={<>
+          {/* the reference puts a date control here; ours is a stamp, because
+              the data is a fixed sample set and a picker that changes nothing
+              is a lie with a calendar on it */}
+          <span className="mono inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1 text-[11px] text-ink-2"
+                title="This build reads one fixed sample day. There is no range to pick.">
+            <Icon name="calendar" className="size-3.5 text-ink-3" />
+            {longDate(seed.today)}
+          </span>
           <button type="button" onClick={() => setNotes((v) => !v)} aria-pressed={notes}
-            className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
-              notes ? 'border-accent bg-accent-soft text-accent' : 'border-line text-ink-2 hover:bg-surface-2'}`}>
+            className={`press inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+              notes ? 'border-accent bg-accent-soft text-accent-ink' : 'border-line text-ink-2 hover:bg-surface-2'}`}>
+            <Icon name="report" className="size-3.5" />
             {notes ? 'Hide the notes' : 'Explain every figure'}
           </button>
         </>} />
 
       <HeadlineStrip cells={[
         { label: 'Lines needing a decision', d: kpis.linesNeedingDecision, format: 'int', tone: 'critical',
-          caption: '3 at risk · 1 late on timing' },
+          icon: 'alert', caption: '3 at risk · 1 late on timing' },
         { label: 'Cash to release', d: kpis.toRelease, format: 'lakh', tone: 'accent',
-          caption: `${kpis.draftPoCount} draft POs · ${kpis.heldCount} held by the guardrail` },
+          icon: 'cash', caption: `${kpis.draftPoCount} draft POs · ${kpis.heldCount} held by the guardrail` },
         { label: 'Blocked capital', d: blockedD, format: 'lakh', tone: 'warn',
-          caption: `${blockedStock.length} lots · MOQ forced is the top cause` },
+          icon: 'lock', caption: `${blockedStock.length} lots · MOQ forced is the top cause` },
         { label: 'Stock you cannot use', d: kpis.nonUsableValue, format: 'money', tone: 'warn',
-          caption: `on hand, not issuable · at ${VALUATION_BASIS}` },
+          icon: 'boxes', caption: `on hand, not issuable · at ${VALUATION_BASIS}` },
         { label: 'Revenue at risk', d: revenueD, format: 'lakh', tone: 'critical',
-          caption: '3 customer orders behind short materials' },
+          icon: 'truck', caption: '3 customer orders behind short materials' },
       ]} />
 
       {notes ? (
@@ -264,7 +276,7 @@ export default function Page() {
                 <p className="mono mt-0.5 flex flex-wrap gap-x-3 text-[10.5px] text-ink-3">
                   {r.reorderQty.value > 0 ? (
                     <>
-                      <span className="text-accent">{money(r.landedTotal.value)} landed</span>
+                      <span className="text-accent-ink">{money(r.landedTotal.value)} landed</span>
                       {/* an order-by date already behind us is the finding, not a typo */}
                       <span className={r.orderBy.value < seed.today ? 'text-critical' : ''}>
                         order by {r.orderBy.value}{r.orderBy.value < seed.today ? ' — passed' : ''}
@@ -279,7 +291,7 @@ export default function Page() {
             ))}
           </ul>
           <div className="border-t border-line-soft px-4 py-2.5">
-            <Link href="/sourcing/desk" className="text-[12px] font-medium text-accent hover:underline">
+            <Link href="/sourcing/desk" className="text-[12px] font-medium text-accent-ink hover:underline">
               Open the Sourcing Desk →
             </Link>
           </div>
@@ -322,7 +334,7 @@ export default function Page() {
                 ))}
               </ul>
             </div>
-            <Link href="/production/line-watch" className="inline-block text-[12px] font-medium text-accent hover:underline">
+            <Link href="/production/line-watch" className="inline-block text-[12px] font-medium text-accent-ink hover:underline">
               Open Line Watch →
             </Link>
           </div>
@@ -368,7 +380,7 @@ export default function Page() {
               Ships first, because it needs no historical data and no ERP — only an inbox — and it
               produces the price history the landed-cost comparison runs on.
             </p>
-            <Link href="/sourcing/intake" className="mt-2 inline-block text-[12px] font-medium text-accent hover:underline">
+            <Link href="/sourcing/intake" className="mt-2 inline-block text-[12px] font-medium text-accent-ink hover:underline">
               Review the queue →
             </Link>
           </div>

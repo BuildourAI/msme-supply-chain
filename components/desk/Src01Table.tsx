@@ -14,13 +14,13 @@ function Th({ children, col, right, sticky }: {
   const active = col && state.sort.col === col
   return (
     <th scope="col"
-      className={`whitespace-nowrap border-b border-line px-2.5 py-2 text-[11px] font-medium uppercase tracking-wide text-ink-3 ${
+      className={`whitespace-nowrap border-b border-line px-2 py-2 text-[11px] font-medium uppercase tracking-wide text-ink-3 ${
         right ? 'text-right' : 'text-left'} ${sticky ? 'sticky left-0 z-20 bg-surface-2' : ''}`}>
       {col ? (
         <button type="button" onClick={() => toggleSort(col)}
           className="inline-flex items-center gap-1 hover:text-ink">
           {children}
-          <span aria-hidden className={active ? 'text-accent' : 'opacity-25'}>
+          <span aria-hidden className={active ? 'text-accent-ink' : 'opacity-25'}>
             {active && state.sort.dir === 'desc' ? '↓' : '↑'}
           </span>
         </button>
@@ -64,14 +64,14 @@ export function SummaryTable() {
             const coverShort = r.coverDays.value < r.leadTime.value
             return (
               <tr key={r.item.id} className={rowCls(sel)} onClick={() => select(r.item.id)}>
-                <td className="px-2.5 py-2">
+                <td className="px-2 py-2">
                   <span className="mono block text-[11.5px] text-ink-2">{r.item.code}</span>
-                  <span className="block max-w-[15rem] truncate text-[12.5px]">{r.item.name}</span>
+                  <span className="block max-w-[9rem] truncate text-[12.5px]">{r.item.name}</span>
                 </td>
-                <td className="px-2.5 py-2 text-right">
+                <td className="px-2 py-2 text-right">
                   <Num d={r.truePosition} tone={posLow ? 'critical' : undefined} />
                 </td>
-                <td className="px-2.5 py-2 text-right">
+                <td className="px-2 py-2 text-right">
                   <Num d={r.usable} />
                   {r.nonUsable.value > 0 && (
                     // §8.1 — non-usable is named under the usable figure, not given a column.
@@ -80,24 +80,24 @@ export function SummaryTable() {
                     </span>
                   )}
                 </td>
-                <td className="px-2.5 py-2 text-right"><Num d={r.reorderPoint} /></td>
-                <td className="px-2.5 py-2 text-right">
+                <td className="px-2 py-2 text-right"><Num d={r.reorderPoint} /></td>
+                <td className="px-2 py-2 text-right">
                   <Num d={r.coverDays} format="days" tone={coverShort ? 'critical' : undefined} suffix="d" />
                   <span className="mono block text-[10px] text-ink-3">lead {r.leadTime.value}d</span>
                 </td>
-                <td className="px-2.5 py-2 text-right">
+                <td className="px-2 py-2 text-right">
                   {r.reorderQty.value > 0
                     ? <Num d={r.reorderQty} />
                     : <span className="text-ink-3">—</span>}
                 </td>
-                <td className="px-2.5 py-2" onClick={(e) => e.stopPropagation()}>
+                <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
                   <VendorSelect row={r} />
                 </td>
-                <td className="num px-2.5 py-2 text-right">
+                <td className="num px-2 py-2 text-right">
                   <Num d={r.chosen.landedPerUnit} format="money" dp={2} />
                 </td>
-                <td className="px-2.5 py-2 text-right"><OrderValue row={r} /></td>
-                <td className="px-2.5 py-2">
+                <td className="px-2 py-2 text-right"><OrderValue row={r} /></td>
+                <td className="px-2 py-2">
                   <StatusPill label={STATUS_LABEL[r.status.value]} tone={STATUS_TONE[r.status.value]}
                               explain={r.status.note} />
                   {r.held.value && (
@@ -106,7 +106,11 @@ export function SummaryTable() {
                     </span>
                   )}
                 </td>
-                <td className="px-2.5 py-2" onClick={(e) => e.stopPropagation()}>
+                {/* the action cell holds buttons and sign-off flags side by
+                    side. Left to the browser it collapses to the narrowest
+                    column in the table and wraps four words onto five lines,
+                    which is how a one-line row became 234px tall. */}
+                <td className="min-w-[144px] px-2 py-2" onClick={(e) => e.stopPropagation()}>
                   <RowActions row={r} />
                 </td>
               </tr>
@@ -177,55 +181,55 @@ export function DetailTable() {
             const late = r.estimatedArrival.value > r.stockoutDate.value
             return (
               <tr key={r.item.id} className={rowCls(sel)} onClick={() => select(r.item.id)}>
-                <td className={`mono sticky left-0 z-10 border-r border-line-soft px-2.5 py-2 text-[11.5px] ${sel ? 'bg-[color-mix(in_srgb,var(--accent-soft)_45%,var(--surface))]' : 'bg-surface'}`}>
+                <td className={`mono sticky left-0 z-10 border-r border-line-soft px-2 py-2 text-[11.5px] ${sel ? 'bg-[color-mix(in_srgb,var(--accent-soft)_45%,var(--surface))]' : 'bg-surface'}`}>
                   {r.item.code}
                 </td>
-                <td className="max-w-[16rem] truncate px-2.5 py-2 text-[12.5px]" title={r.item.name}>{r.item.name}</td>
-                <td className="px-2.5 py-2">
+                <td className="max-w-[16rem] truncate px-2 py-2 text-[12.5px]" title={r.item.name}>{r.item.name}</td>
+                <td className="px-2 py-2">
                   {r.item.feeds.map((f) => (
                     <span key={f} className="mr-1 inline-block rounded border border-line bg-surface-2 px-1.5 py-px text-[10.5px] text-ink-2">{f}</span>
                   ))}
                 </td>
-                <td className="border-r border-line-soft px-2.5 py-2" onClick={(e) => e.stopPropagation()}>
+                <td className="border-r border-line-soft px-2 py-2" onClick={(e) => e.stopPropagation()}>
                   <VendorSelect row={r} detail />
                 </td>
-                <td className="px-2.5 py-2 text-right"><Num d={r.usable} /></td>
-                <td className="px-2.5 py-2 text-right">
+                <td className="px-2 py-2 text-right"><Num d={r.usable} /></td>
+                <td className="px-2 py-2 text-right">
                   {r.nonUsable.value > 0
                     ? <><Num d={r.nonUsable} tone="warn" />
                         <span className="block max-w-[9rem] truncate text-[10px] leading-tight text-ink-3"
                               title={r.nonUsableReasons.join(' · ')}>{r.nonUsableReasons[0]}</span></>
                     : <span className="text-ink-3">—</span>}
                 </td>
-                <td className="px-2.5 py-2 text-right">
+                <td className="px-2 py-2 text-right">
                   {r.inTransit.value > 0 ? <Num d={r.inTransit} /> : <span className="text-ink-3">—</span>}
                 </td>
-                <td className="px-2.5 py-2 text-right">
+                <td className="px-2 py-2 text-right">
                   {r.openPoQty.value > 0 ? <Num d={r.openPoQty} /> : <span className="text-ink-3">—</span>}
                 </td>
-                <td className="border-r border-line-soft px-2.5 py-2 text-right">
+                <td className="border-r border-line-soft px-2 py-2 text-right">
                   <Num d={r.truePosition} tone={posLow ? 'critical' : undefined} />
                 </td>
-                <td className="px-2.5 py-2 text-right"><Num d={r.reorderPoint} /></td>
-                <td className="num px-2.5 py-2 text-right text-[12.5px] text-ink-2">{qtyText(r.item.moq, '')}</td>
-                <td className="border-r border-line-soft px-2.5 py-2 text-right">
+                <td className="px-2 py-2 text-right"><Num d={r.reorderPoint} /></td>
+                <td className="num px-2 py-2 text-right text-[12.5px] text-ink-2">{qtyText(r.item.moq, '')}</td>
+                <td className="border-r border-line-soft px-2 py-2 text-right">
                   {r.reorderQty.value > 0 ? <Num d={r.reorderQty} /> : <span className="text-ink-3">—</span>}
                 </td>
-                <td className="px-2.5 py-2 text-right">
+                <td className="px-2 py-2 text-right">
                   {r.reorderQty.value > 0 ? <Num d={r.poCost} format="money" /> : <span className="text-ink-3">—</span>}
                 </td>
-                <td className="px-2.5 py-2 text-right">
+                <td className="px-2 py-2 text-right">
                   {r.reorderQty.value > 0 ? <Num d={r.shipmentCost} format="money" /> : <span className="text-ink-3">—</span>}
                 </td>
-                <td className="px-2.5 py-2 text-right">
+                <td className="px-2 py-2 text-right">
                   {r.reorderQty.value > 0 ? <Num d={r.otherCosts} format="money" /> : <span className="text-ink-3">—</span>}
                 </td>
-                <td className="border-r border-line-soft px-2.5 py-2 text-right">
+                <td className="border-r border-line-soft px-2 py-2 text-right">
                   {r.reorderQty.value > 0
                     ? <Num d={r.landedTotal} format="money" className="font-semibold" />
                     : <span className="text-ink-3">—</span>}
                 </td>
-                <td className="px-2.5 py-2">
+                <td className="px-2 py-2">
                   <span className={`mono text-[11.5px] ${late ? 'text-critical' : ''}`}>
                     {shortDate(r.estimatedArrival.value)}
                   </span>
@@ -238,7 +242,7 @@ export function DetailTable() {
                          tone={r.orderBy.value < SEED.today ? 'critical' : undefined} />
                   </span>
                 </td>
-                <td className="px-2.5 py-2">
+                <td className="px-2 py-2">
                   <StatusPill label={STATUS_LABEL[r.status.value]} tone={STATUS_TONE[r.status.value]}
                               explain={r.status.note} />
                   {r.held.value && (
@@ -247,7 +251,11 @@ export function DetailTable() {
                     </span>
                   )}
                 </td>
-                <td className="px-2.5 py-2" onClick={(e) => e.stopPropagation()}>
+                {/* the action cell holds buttons and sign-off flags side by
+                    side. Left to the browser it collapses to the narrowest
+                    column in the table and wraps four words onto five lines,
+                    which is how a one-line row became 234px tall. */}
+                <td className="min-w-[144px] px-2 py-2" onClick={(e) => e.stopPropagation()}>
                   <RowActions row={r} />
                 </td>
               </tr>

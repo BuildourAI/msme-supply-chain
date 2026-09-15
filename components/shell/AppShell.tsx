@@ -1,12 +1,11 @@
 'use client'
 import { useState } from 'react'
-import { AppProvider, useApp } from '@/state/app-store'
-import { useTheme } from '@/state/theme-provider'
+import { ACTOR, AppProvider, useApp } from '@/state/app-store'
 import { Inspector } from '@/components/ui/Inspector'
 import { Sheet } from '@/components/ui/Sheet'
-import { TopNav } from './TopNav'
-import { Segmented } from '@/components/ui/bits'
-import { crossfadeTheme } from '@/components/ui/motion'
+import { Sidebar } from './Sidebar'
+import { CommandSearch } from './CommandSearch'
+import { Icon } from '@/components/ui/icons'
 import { DeskProvider } from '@/components/desk/store'
 import { InboundProvider } from '@/components/inbound/store'
 import { InventoryProvider } from '@/components/inventory/store'
@@ -60,69 +59,82 @@ function Toast() {
   if (!toast) return null
   return (
     <div role="status" aria-live="polite"
-      className="anim-toast glass fixed bottom-5 left-1/2 z-[70] w-[min(30rem,calc(100vw-2rem))] rounded-xl border px-4 py-2.5 text-[13px] leading-snug shadow-xl">
+      className="anim-toast overlay fixed bottom-5 left-1/2 z-[70] w-[min(30rem,calc(100vw-2rem))] rounded-lg border px-4 py-2.5 text-[13px] leading-snug">
       {toast}
     </div>
   )
 }
 
-function TopBar({ onActivity }: { onActivity: () => void }) {
-  const { theme, setTheme } = useTheme()
+function TopBar({ onMenu, onActivity }: { onMenu: () => void; onActivity: () => void }) {
   const { audit } = useApp()
+  const [who, role] = ACTOR.split(' · ')
+  const initials = who.split(/[\s.]+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase()
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line-soft/60 px-4 py-2">
-      <div className="flex items-center gap-2">
-        <span aria-hidden className="grid size-6 place-items-center rounded-md bg-accent text-[11px] font-bold text-on-accent shadow-sm">B</span>
-        <span className="text-[13px] font-semibold tracking-tight">BuildOur</span>
-        <span className="text-ink-3">·</span>
-        <span className="text-[13px] text-ink-2">Material Flow</span>
-      </div>
+    <header className="sticky top-0 z-20 flex items-center gap-2 border-b border-line bg-surface px-3 py-2">
+      <button type="button" onClick={onMenu} aria-label="Open navigation"
+        className="press rounded-md p-1.5 text-ink-3 hover:bg-surface-2 hover:text-ink lg:hidden">
+        <Icon name="menu" />
+      </button>
 
-      <span className="mono hidden rounded-full border border-line bg-surface/70 px-2.5 py-0.5 text-[10.5px] text-ink-3 lg:inline">
+      <CommandSearch />
+
+      <span className="mono hidden shrink-0 rounded-full border border-line bg-ground px-2.5 py-0.5 text-[10.5px] text-ink-3 xl:inline">
         sample data · not any client’s real trading data
       </span>
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        {/* The name is sr-only text rather than an aria-label, so that the
+            activity SHEET keeps sole ownership of [aria-label=Activity] — the
+            drawer is what a reader wants when they ask for the trail, not the
+            button that opens it. */}
         <button type="button" onClick={onActivity}
-          className="press inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1 text-[12px] font-medium shadow-sm hover:bg-surface-2">
-          Activity
-          <span className={`mono rounded-full px-1.5 text-[10px] ${audit.length ? 'bg-accent text-on-accent' : 'bg-surface-3 text-ink-2'}`}>
+          className="press relative flex items-center gap-1.5 rounded-md px-2 py-1.5 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink">
+          <Icon name="bell" />
+          <span className="sr-only">Activity</span>
+          <span className={`mono rounded-full px-1.5 text-[10px] leading-[18px] ${
+            audit.length ? 'bg-accent-ink text-on-accent' : 'bg-surface-2 text-ink-3'}`}>
             {audit.length}
           </span>
+          {audit.length > 0 && (
+            <span aria-hidden className="absolute right-1.5 top-1 size-1.5 rounded-full bg-accent" />
+          )}
         </button>
-        <Segmented label="Theme" value={theme} onChange={(t) => crossfadeTheme(() => setTheme(t))}
-          options={[{ id: 'system', label: 'Auto' }, { id: 'light', label: 'Light' }, { id: 'dark', label: 'Dark' }]} />
+
+        <span className="flex items-center gap-2 rounded-md py-1 pl-1 pr-1.5">
+          <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-full bg-accent-tint text-[11px] font-bold text-accent-ink">
+            {initials}
+          </span>
+          <span className="hidden min-w-0 sm:block">
+            <span className="block truncate text-[12px] font-semibold leading-tight">{who}</span>
+            <span className="block truncate text-[10.5px] leading-tight text-ink-3">{role}</span>
+          </span>
+          <Icon name="chevron" className="hidden size-3 rotate-90 text-ink-4 sm:block" />
+        </span>
       </div>
-    </div>
+    </header>
   )
 }
 
 function Chrome({ children }: { children: React.ReactNode }) {
   const [activity, setActivity] = useState(false)
+  const [drawer, setDrawer] = useState(false)
   return (
-    <div className="min-h-screen p-3 sm:p-6 lg:px-10 lg:py-8">
-      {/* The whole app floats in one pane on the gradient. `overflow-clip` and
-          NOT `overflow-hidden`: hidden would make the frame a scroll container
-          and break the header's stick. Clip lets the sticky header square its
-          own top corners while the frame keeps its round ones — otherwise page
-          content shows through two notches once you scroll. The nav dropdown
-          still escapes downward, which is why neither element hides overflow. */}
-      <div className="glass-frame mx-auto max-w-[1600px] overflow-clip rounded-2xl border">
-        <header className="glass sticky top-0 z-40 border-b">
-          <TopBar onActivity={() => setActivity(true)} />
-          <TopNav />
-        </header>
-        <main className="px-4 pb-3 pt-5">{children}</main>
-        <footer className="px-4 pb-4 pt-1 text-[11px] leading-relaxed text-ink-3">
-          The system suggests, holds and recommends. It never places an order, never contacts a
-          supplier, never edits a customer record. All figures are illustrative sample data prepared
-          for demonstration — none of it is any client’s real trading data.
-        </footer>
+    <>
+      {/* Rail beside content, and nothing between the content and the edge of
+          the screen. The app used to float in a rounded pane with a margin on
+          every side; on a dashboard that margin is width a table could have
+          been using. */}
+      <div className="flex min-h-screen">
+        <Sidebar drawer={drawer} onClose={() => setDrawer(false)} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TopBar onMenu={() => setDrawer(true)} onActivity={() => setActivity(true)} />
+          <main className="min-w-0 flex-1 px-3 py-3 lg:px-4">{children}</main>
+        </div>
       </div>
       <ActivityDrawer open={activity} onClose={() => setActivity(false)} />
       <Inspector />
       <Toast />
-    </div>
+    </>
   )
 }
 

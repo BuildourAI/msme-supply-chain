@@ -91,7 +91,7 @@ export function Tabs<T extends string>({ items, value, onChange, label, classNam
   const inner = (t: TabItem<T>, on: boolean) => (
     <>
       <span className="flex items-center gap-2">
-        <span className={`text-[13px] font-medium transition-colors ${on ? 'text-accent' : 'text-ink-2'}`}>{t.label}</span>
+        <span className={`text-[13px] font-semibold transition-colors ${on ? 'text-accent-ink' : 'text-ink-2'}`}>{t.label}</span>
         {t.badge}
       </span>
       {t.sub && <span className="mono block text-[10.5px] text-ink-3">{t.sub}</span>}
@@ -105,7 +105,7 @@ export function Tabs<T extends string>({ items, value, onChange, label, classNam
   // longer takes up space, so the extra 2px keeps every page's height as it was
   const cls = (on: boolean) =>
     `tab-item relative z-10 shrink-0 rounded-md px-3 pb-2.5 pt-1 text-left transition-colors ${
-      on ? '' : 'bg-pill-2 hover:bg-pill'}`
+      on ? '' : 'hover:bg-surface-2'}`
 
   const list = items.map((t) => {
     const on = t.id === value

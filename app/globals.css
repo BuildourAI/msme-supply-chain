@@ -1,22 +1,26 @@
 @import "tailwindcss";
 
 /* ============================================================================
-   BuildOur design system — CONTEXT.md §10, restyled.
+   BuildOur design system — CONTEXT.md §10, on the Buildour AI brand.
 
-   Surfaces are Apple-quiet: muted tones, rounded corners, layered low-alpha
-   shadows, and glass only where content actually scrolls underneath. The hue
-   is the one the app always had — a teal-green at ~175° — with the chroma
-   pulled down so it sits back instead of shouting.
+   White ground, one orange accent, near-black heavy type, flat white cards
+   with a hairline border. No gradient, no frost, no floating frame: the
+   reference is a working tool, and everything that is not information has
+   been taken out of the way.
 
-   Full light palette on bare :root; redefined under prefers-color-scheme: dark
-   guarded as :root:not([data-theme="light"]); and again under [data-theme="dark"]
-   so an explicit toggle wins in both directions. The two dark blocks are
-   duplicated on purpose (there is no way to share them in plain CSS) — edit
-   both, always.
+   LIGHT ONLY. There is no dark theme and no toggle.
 
-   Two things here are load-bearing for the browser suites, not just for looks:
-   `rounded-lg` and `border-dashed` are selectors the checks walk. So a radius
-   changes by changing the token below, never by renaming a class.
+   TWO ORANGES, and the reason matters. The brand orange #FF5000 measures
+   3.28:1 on white — fine for a fill, an icon, a rule or a 40px headline
+   word, and below the 4.5 floor for every piece of text this app actually
+   runs at (9.5px to 13px). So --accent is the fill grade and --accent-ink
+   is the text grade. Anything smaller than about 18px that wants to be
+   orange takes --accent-ink. The same split is why --ink-3 is a step
+   deeper than the grey the reference uses for its micro labels.
+
+   Two things here are load-bearing for the browser suites, not just for
+   looks: `rounded-lg` and `border-dashed` are selectors the checks walk. So
+   a radius changes by changing the token below, never by renaming a class.
    ========================================================================== */
 
 :root {
@@ -26,162 +30,105 @@
   --font-plex-sans: var(--font-inter);
   --font-plex-cond: var(--font-inter);
 
-  --ground: #EEF0ED;
-  --surface: #FCFCFB;
-  --surface-2: #F4F5F3;
-  --surface-3: #E9EBE8;
-  --ink: #1C1F1E;
-  --ink-2: #4B5552;
-  --ink-3: #4A5754;
-  --line: #DCDFDB;
-  --line-soft: #E8EAE6;
-  --accent: #27615C;
-  --accent-soft: #DDE9E6;
+  /* ---------------------------------------------------------- surfaces --- */
+  --ground: #F6F7F9;      /* the cool off-white page ground */
+  --surface: #FFFFFF;     /* cards, the sidebar, the top bar */
+  --surface-2: #F3F4F7;   /* table headers, row hover, the neutral pill */
+  --surface-3: #E9EAEF;   /* bar tracks, gauge tracks */
+
+  /* -------------------------------------------------------------- ink --- */
+  --ink: #0A0A0A;
+  --ink-2: #5D5D65;       /* 6.5:1 — secondary body text */
+  --ink-3: #65666D;       /* 5.7:1 — micro labels. The reference's #777779 is
+                             4.47 on white and dips under the floor on the
+                             grey table header, so it moves one step deeper. */
+  --ink-4: #8B8C91;       /* NON-TEXT ONLY: placeholder glyphs, chevrons */
+
+  --line: #E8E9EE;
+  --line-soft: #EFF0F3;
+
+  /* ----------------------------------------------------------- accent --- */
+  /* fill grade: squares, icons, rails, bars, the glow, figures over 24px */
+  --accent: #FF5000;
+  /* Text grade: any orange text under 18px, links, the primary button fill.
+     #C43D00 was the first pick and measured 4.46 against the accent pill —
+     four hundredths under the floor, on every "live" badge in the app. One
+     step deeper clears it on all four grounds it lands on. */
+  --accent-ink: #BD3B00;
+  --accent-soft: #FFE8E2;   /* hover wash, ::selection */
+  --accent-tint: #FFF0ED;   /* the sidebar's active row, the active tab pill */
+  --accent-icon: #FFDCC8;   /* the KPI icon square */
   --on-accent: #FFFFFF;
-  --critical: #A5382E;
-  --critical-soft: #F4E2DE;
-  --warn: #77530A;
-  --warn-soft: #F3E8D2;
-  --good: #2E6A4A;
-  --good-soft: #DEEAE2;
 
-  /* validated categorical slots — §10. Never invent hues. Muted from the
-     originals by ~15% chroma and re-validated against these surfaces with the
-     dataviz validator; CVD separation sits in the 6–8 band, which is legal
-     because every chart ships direct labels, a value table and hatching. */
-  --cat-1: #3d7ec9;
-  --cat-2: #dd7048;
-  --cat-3: #2fa77e;
-  --cat-4: #d9a020;
-  --cat-5: #db86a8;
+  /* The tinted-bar ramp, for bars that sit BEHIND ink text — a ranked list
+     where the longest bar is the deepest. These are UI tints, not chart
+     marks: a chart mark takes --cat-* or --seq-*. */
+  --ramp-1: #FF5000;
+  --ramp-2: #FFA274;
+  --ramp-3: #FFC1A0;
+  --ramp-4: #FDD7C4;
+  --ramp-5: #FFE8E2;
 
-  /* sequential blue ramp for ordered magnitudes — the upper three steps
-     muted like the categorical slots; lightness stays monotonic, and seq-4
-     is still cat-1's blue */
-  --seq-1: #d3e3f7;
-  --seq-2: #a7c7ef;
-  --seq-3: #71a3dc;
-  --seq-4: #3d7ec9;
-  --seq-5: #225186;
+  /* ----------------------------------------------------------- status --- */
+  /* §10 — reserved, and never used for a series. Text grade, because these
+     are almost always a word in a pill rather than a fill. */
+  /* one step deeper than the reference's delta red: on its own soft pill the
+     lighter value measured 4.34, and "At risk" is an 11px word */
+  --critical: #C43318;
+  --critical-soft: #FDE8E3;
+  --warn: #9A4A0A;
+  --warn-soft: #FEF0D9;
+  --good: #0B7A4F;
+  --good-soft: #E3FFF1;
+
+  /* validated categorical slots — §10. Never invent hues. Checked with the
+     dataviz validator on #FFFFFF: lightness band, chroma floor, CVD
+     separation and the normal-vision floor all pass. Deliberately no second
+     orange, so the accent stays reserved for the brand rather than becoming
+     "series 1". */
+  --cat-1: #2A78D6;
+  --cat-2: #1BAF7A;
+  --cat-3: #4A3AA7;
+  --cat-4: #EDA100;
+  --cat-5: #E87BA4;
+
+  /* sequential — one hue, light to dark, for ordered magnitudes. The brand
+     orange, which is what the reference ranks its bars with. --seq-1 is a
+     tint step for backgrounds; a mark starts at --seq-2. */
+  --seq-1: #FFE8E2;
+  --seq-2: #FF9A5C;
+  --seq-3: #FF7526;
+  --seq-4: #E84800;
+  --seq-5: #A83400;
 
   /* radii — named --r-* so the @theme bridge below can map them onto
      Tailwind's --radius-* without a variable referring to itself */
   --r-xs: 4px;
   --r-sm: 6px;
   --r-md: 8px;
-  --r-lg: 16px;
-  --r-xl: 20px;
-  --r-2xl: 24px;
+  --r-lg: 12px;
+  --r-xl: 16px;
 
-  /* elevation — two or three low-alpha layers, never one heavy drop */
-  --sh-1: inset 0 1px 0 var(--material-edge), 0 1px 2px rgb(20 24 22 / .05), 0 0 0 1px rgb(20 24 22 / .04);
-  --sh-2: 0 2px 6px rgb(20 24 22 / .06), 0 8px 24px -8px rgb(20 24 22 / .10);
-  --sh-3: 0 4px 12px rgb(20 24 22 / .08), 0 24px 48px -12px rgb(20 24 22 / .18);
-
-  /* glass — a translucent surface plus blur and a little saturation, so what
-     scrolls beneath reads as depth rather than noise */
-  --glass-bg: rgb(252 252 251 / .50);
-  --glass-border: rgb(28 31 30 / .08);
-  --glass-blur: 14px;
-  --glass-sat: 125%;
-
-  /* the material every card and tile is cut from: translucent enough that
-     the wash beneath shows through, opaque enough that text on it holds its
-     contrast in the greenest corner of the page (computed, not guessed) */
-  --material: rgb(252 252 251 / .54);
-  --material-edge: rgb(255 255 255 / .7);
-  --material-sheen: rgb(255 255 255 / .42);
-
-  /* the wash — the reason any of this reads as glass. Glass over a flat
-     colour is indistinguishable from paint. These are the soft colour fields
-     that sit behind everything, in the app's own hues, and shift as a card
-     crosses them. Fixed to the viewport, so a sheet or a header drifting over
-     them shows depth. */
-  --wash-1: color-mix(in oklab, var(--pastel-b) 55%, transparent);
-  --wash-2: color-mix(in oklab, var(--pastel-a) 55%, transparent);
-  --wash-3: color-mix(in oklab, var(--good) 26%, transparent);
-  --wash-4: color-mix(in oklab, var(--cat-4) 16%, transparent);
+  /* elevation — the hairline border does the work now. A shadow appears only
+     on something floating over the page. */
+  --sh-1: 0 1px 2px rgb(10 10 10 / .04);
+  --sh-2: 0 4px 12px rgb(10 10 10 / .06);
+  --sh-3: 0 12px 32px rgb(10 10 10 / .12);
 
   /* the tab tint — the accent at a whisper, for the pill behind the tab you
-     are on and the fainter one under the pointer */
-  --tint: color-mix(in oklab, var(--accent) 16%, transparent);
-  --tint-2: color-mix(in oklab, var(--accent) 7%, transparent);
-  --tint-head: color-mix(in oklab, var(--accent) 7%, var(--surface-2));
-  --thumb: color-mix(in oklab, var(--accent) 8%, var(--surface));
-  --pill: color-mix(in oklab, var(--accent) 15%, var(--surface));
-  --pill-2: color-mix(in oklab, var(--accent) 6%, var(--surface));
-  /* the two poles of the ground: lavender at the top left, mint at the foot —
-     the app sits on a diagonal between them, the way the reference does */
-  --pastel-a: #BDB4E6;    /* lavender, top left */
-  --pastel-mid: #BCD5E5;  /* the diagonal never passes through grey */
-  --pastel-b: #A8E0CC;    /* mint, bottom right */
+     are on and the row the sidebar has you standing in */
+  --tint: var(--accent-tint);
+  --tint-2: #FFF7F4;
+  --tint-head: var(--surface-2);
+  --pill: var(--accent-tint);
+  --pill-2: transparent;
 
-  /* the frame — one big pane the whole app floats in, over the gradient.
-     Translucent only: a backdrop-filter the size of the viewport re-blurs
-     the fixed wash on every scrolled frame, and over a smooth gradient it
-     shows nothing a plain alpha does not. */
-  --frame: rgb(255 255 255 / .22);
-  --frame-edge: rgb(255 255 255 / .85);
-  --frame-top: rgb(255 255 255 / .95);
-  --frame-sheen: rgb(255 255 255 / .10);
-  --frame-ring: rgb(255 255 255 / .18);
-
-  /* the light orbs — the soft discs of light the reference has behind its
-     pane. Fixed to the viewport with the gradient, so the content scrolls
-     over them and a translucent tile crossing one shows it through. Drawn
-     already soft, so they read as light rather than as shapes and no blur
-     is needed to frost them. */
-  --orb-1: color-mix(in oklab, var(--pastel-a) 72%, white);
-  --orb-1-a: 60%;
-  --orb-2: color-mix(in oklab, var(--tile-1) 78%, white);
-  --orb-2-a: 60%;
-  --orb-3: color-mix(in oklab, var(--tile-2) 72%, white);
-  --orb-3-a: 62%;
-  /* a fourth and fifth disc, in the app's own hues, so the frost has colour
-     to smear and not only white */
-  --orb-4: color-mix(in oklab, var(--pastel-a) 55%, white);
-  --orb-5: color-mix(in oklab, var(--tile-4) 70%, white);
-  /* how sharply a disc ends. The discs were drawn pre-softened back when
-     nothing blurred them; now the blur does that job, so they get an edge. */
-  --orb-edge: 68%;
-
-  /* the frost itself */
-  --blur-tile: 12px;
-  --blur-card: 14px;
-  --frost-sat: 150%;
-
-  /* A tile takes its colour from --tile-c, set per section. These are real
-     pastels, not the dark brand hues: mixing a dark accent into white gives
-     grey, which is what the tiles were. The rim takes a deeper mix of the same
-     pastel; the glow is white, so the lit corner is lighter than the tile
-     rather than — as it was — darker. */
-  --tile-1: #B0E0D0;   /* mint     */
-  --tile-2: #CBDAEA;   /* sky — grey-blue, so it never rhymes with cat-1 */
-  --tile-3: #D5D0F5;   /* lavender */
-  --tile-4: #F6DDB8;   /* peach    */
-  --tile-5: #C8E8BE;   /* sage     */
-  --tile-6: #B6E5E0;   /* aqua     */
-  --tile-c: var(--tile-1);
-  /* the glass itself: the pastel at this alpha over whatever is behind it —
-     not mixed into an opaque white, which is what made the tiles read as
-     paint. The rim is white, as on real glass, with a second fainter ring
-     just inside it and a bright hairline along the top edge; the sheen is a
-     diagonal reflection from the top left. */
-  --tile-mix: 62%;
-  --tile-rim: rgb(255 255 255 / .86);
-  --tile-rim-hover: rgb(255 255 255 / 1);
-  --tile-ring: rgb(255 255 255 / .44);
-  --tile-top: rgb(255 255 255 / .95);
-  --tile-left: rgb(255 255 255 / .55);
-  --tile-sheen: .40;
-  --tile-glow: .16;
-  /* the far corner deepens toward the pure pastel, so a tile is lit from one
-     side and shaded on the other — a flat pastel with a light edge is a card */
-  --tile-shade: 26%;
-  /* the 1px dark contact halo is what makes the white rim read as a crisp
-     line rather than a soft edge on a light pane */
-  --tile-shadow: 0 0 0 1px rgb(20 24 22 / .05), 0 1px 2px rgb(20 24 22 / .05), 0 14px 30px -12px rgb(20 24 22 / .20);
-  --tile-shadow-hover: 0 0 0 1px rgb(20 24 22 / .07), 0 2px 6px rgb(20 24 22 / .07), 0 18px 36px -10px rgb(20 24 22 / .24);
+  /* slide furniture — the dot grid, the connector lines of the node diagram,
+     and the glow behind the centre node */
+  --dot: #CACACA;
+  --dot-pitch: 18px;
+  --connector: #7E7E80;
+  --glow: color-mix(in srgb, var(--accent) 38%, transparent);
 
   /* motion — one house curve, one settle curve, one spring; three durations */
   --ease-std: cubic-bezier(.2, .7, .2, 1);
@@ -191,211 +138,17 @@
   --dur-2: 240ms;
   --dur-3: 440ms;
 
-  /* hatch — the mark of an invented figure, one definition for every swatch */
+  /* the hatch that marks an invented number */
   --hatch-pitch: 3px;
   --hatch-w: 1.5px;
 
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --ground: #1A1D1C;
-    --surface: #242827;
-    --surface-2: #2C3130;
-    --surface-3: #363B3A;
-    --ink: #ECEEEB;
-    --ink-2: #BDC4C1;
-    --ink-3: #BCC4C1;
-    --line: #3A403E;
-    --line-soft: #303534;
-    --accent: #8ACBBE;
-    --accent-soft: #243D39;
-    --on-accent: #10201E;
-    --critical: #EAA89B;
-    --critical-soft: #3E2723;
-    --warn: #D6B061;
-    --warn-soft: #392F1A;
-    --good: #8CC29F;
-    --good-soft: #22372B;
-
-    --cat-1: #4a8ddc;
-    --cat-2: #cf6636;
-    --cat-3: #2f9d74;
-    --cat-4: #bc861a;
-    --cat-5: #cc6088;
-
-    --seq-1: #17314f;
-    --seq-2: #1d4a7a;
-    --seq-3: #376ca6;
-    --seq-4: #4a8ddc;
-    --seq-5: #87b8f3;
-
-    --sh-1: inset 0 1px 0 var(--material-edge), 0 1px 2px rgb(0 0 0 / .35);
-    --sh-2: 0 2px 8px rgb(0 0 0 / .40), 0 12px 28px -8px rgb(0 0 0 / .55);
-    --sh-3: 0 6px 16px rgb(0 0 0 / .45), 0 32px 64px -12px rgb(0 0 0 / .65), inset 0 1px 0 rgb(255 255 255 / .05);
-
-    --glass-bg: rgb(36 40 39 / .60);
-    --glass-border: rgb(236 238 235 / .09);
-    --material: rgb(36 40 39 / .54);
-    --material-edge: rgb(255 255 255 / .09);
-    --material-sheen: rgb(255 255 255 / .05);
-    --wash-1: color-mix(in oklab, var(--accent) 30%, transparent);
-    --wash-2: color-mix(in oklab, var(--cat-1) 22%, transparent);
-    --wash-3: color-mix(in oklab, var(--good) 20%, transparent);
-    --wash-4: color-mix(in oklab, var(--cat-4) 14%, transparent);
-    --tint: color-mix(in oklab, var(--accent) 14%, transparent);
-    --tint-2: color-mix(in oklab, var(--accent) 6%, transparent);
-    --tint-head: color-mix(in oklab, var(--accent) 10%, var(--surface-2));
-    --thumb: color-mix(in oklab, var(--accent) 12%, var(--surface-3));
-    --pill: color-mix(in oklab, var(--accent) 16%, var(--surface-2));
-    --pill-2: color-mix(in oklab, var(--accent) 7%, var(--surface-2));
-    --pastel-a: #1F1F35;
-    --pastel-mid: #182432;
-    --pastel-b: #10312C;
-    /* the pane is a faint LIFT, never a dim: glass in a dark scene is
-       lighter than what it sits on, which is the whole cue */
-    --frame: rgb(255 255 255 / .022);
-    --frame-edge: rgb(255 255 255 / .14);
-    --frame-top: rgb(255 255 255 / .20);
-    --frame-sheen: rgb(255 255 255 / .04);
-    --frame-ring: rgb(255 255 255 / .05);
-    --orb-1: color-mix(in oklab, var(--pastel-a) 40%, white);
-    --orb-1-a: 5%;
-    --orb-2: color-mix(in oklab, var(--accent) 55%, white);
-    --orb-2-a: 4%;
-    --orb-3: color-mix(in oklab, var(--cat-1) 60%, white);
-    --orb-3-a: 5%;
-    --orb-4: color-mix(in oklab, var(--pastel-a) 70%, white);
-    --orb-5: color-mix(in oklab, var(--tile-4) 60%, white);
-    --orb-edge: 68%;
-    --frost-sat: 130%;
-    /* one step above the pane, not below it */
-    --tile-1: #16352E;
-    --tile-2: #1A2B42;
-    --tile-3: #262244;
-    --tile-4: #362C1E;
-    --tile-5: #1F331B;
-    --tile-6: #173634;
-    --tile-c: var(--tile-1);
-    --tile-mix: 48%;
-    --tile-rim: rgb(255 255 255 / .16);
-    --tile-rim-hover: rgb(255 255 255 / .30);
-    --tile-ring: rgb(255 255 255 / .07);
-    /* the hairline is twice the rim, or the two collapse into one even border */
-    --tile-top: rgb(255 255 255 / .30);
-    --tile-left: rgb(255 255 255 / .12);
-    --tile-sheen: .16;
-    --tile-glow: .09;
-    --tile-shade: 34%;
-    /* on dark glass the lift comes from a luminous outer hair, not a black drop */
-    --tile-shadow: 0 0 0 1px rgb(255 255 255 / .03), 0 1px 2px rgb(0 0 0 / .35), 0 14px 30px -14px rgb(0 0 0 / .60);
-    --tile-shadow-hover: 0 0 0 1px rgb(255 255 255 / .05), 0 2px 8px rgb(0 0 0 / .40), 0 18px 34px -12px rgb(0 0 0 / .65);
-
-    color-scheme: dark;
-  }
-}
-
-:root[data-theme="dark"] {
-  --ground: #1A1D1C;
-  --surface: #242827;
-  --surface-2: #2C3130;
-  --surface-3: #363B3A;
-  --ink: #ECEEEB;
-  --ink-2: #BDC4C1;
-  --ink-3: #BCC4C1;
-  --line: #3A403E;
-  --line-soft: #303534;
-  --accent: #8ACBBE;
-  --accent-soft: #243D39;
-  --on-accent: #10201E;
-  --critical: #EAA89B;
-  --critical-soft: #3E2723;
-  --warn: #D6B061;
-  --warn-soft: #392F1A;
-  --good: #8CC29F;
-  --good-soft: #22372B;
-
-  --cat-1: #4a8ddc;
-  --cat-2: #cf6636;
-  --cat-3: #2f9d74;
-  --cat-4: #bc861a;
-  --cat-5: #cc6088;
-
-  --seq-1: #17314f;
-  --seq-2: #1d4a7a;
-  --seq-3: #376ca6;
-  --seq-4: #4a8ddc;
-  --seq-5: #87b8f3;
-
-  --sh-1: inset 0 1px 0 var(--material-edge), 0 1px 2px rgb(0 0 0 / .35);
-  --sh-2: 0 2px 8px rgb(0 0 0 / .40), 0 12px 28px -8px rgb(0 0 0 / .55);
-  --sh-3: 0 6px 16px rgb(0 0 0 / .45), 0 32px 64px -12px rgb(0 0 0 / .65), inset 0 1px 0 rgb(255 255 255 / .05);
-
-  --glass-bg: rgb(36 40 39 / .60);
-  --glass-border: rgb(236 238 235 / .09);
-  --material: rgb(36 40 39 / .54);
-  --material-edge: rgb(255 255 255 / .09);
-  --material-sheen: rgb(255 255 255 / .05);
-  --wash-1: color-mix(in oklab, var(--accent) 30%, transparent);
-  --wash-2: color-mix(in oklab, var(--cat-1) 22%, transparent);
-  --wash-3: color-mix(in oklab, var(--good) 20%, transparent);
-  --wash-4: color-mix(in oklab, var(--cat-4) 14%, transparent);
-  --tint: color-mix(in oklab, var(--accent) 14%, transparent);
-  --tint-2: color-mix(in oklab, var(--accent) 6%, transparent);
-  --tint-head: color-mix(in oklab, var(--accent) 10%, var(--surface-2));
-  --thumb: color-mix(in oklab, var(--accent) 12%, var(--surface-3));
-  --pill: color-mix(in oklab, var(--accent) 16%, var(--surface-2));
-  --pill-2: color-mix(in oklab, var(--accent) 7%, var(--surface-2));
-  --pastel-a: #1F1F35;
-  --pastel-mid: #182432;
-  --pastel-b: #10312C;
-  /* the pane is a faint LIFT, never a dim: glass in a dark scene is
-     lighter than what it sits on, which is the whole cue */
-  --frame: rgb(255 255 255 / .022);
-  --frame-edge: rgb(255 255 255 / .14);
-  --frame-top: rgb(255 255 255 / .20);
-  --frame-sheen: rgb(255 255 255 / .04);
-  --frame-ring: rgb(255 255 255 / .05);
-  --orb-1: color-mix(in oklab, var(--pastel-a) 40%, white);
-  --orb-1-a: 5%;
-  --orb-2: color-mix(in oklab, var(--accent) 55%, white);
-  --orb-2-a: 4%;
-  --orb-3: color-mix(in oklab, var(--cat-1) 60%, white);
-  --orb-3-a: 5%;
-  --orb-4: color-mix(in oklab, var(--pastel-a) 70%, white);
-  --orb-5: color-mix(in oklab, var(--tile-4) 60%, white);
-  --orb-edge: 68%;
-  --frost-sat: 130%;
-  /* one step above the pane, not below it */
-  --tile-1: #16352E;
-  --tile-2: #1A2B42;
-  --tile-3: #262244;
-  --tile-4: #362C1E;
-  --tile-5: #1F331B;
-  --tile-6: #173634;
-  --tile-c: var(--tile-1);
-  --tile-mix: 48%;
-  --tile-rim: rgb(255 255 255 / .16);
-  --tile-rim-hover: rgb(255 255 255 / .30);
-  --tile-ring: rgb(255 255 255 / .07);
-  /* the hairline is twice the rim, or the two collapse into one even border */
-  --tile-top: rgb(255 255 255 / .30);
-  --tile-left: rgb(255 255 255 / .12);
-  --tile-sheen: .16;
-  --tile-glow: .09;
-  --tile-shade: 34%;
-  /* on dark glass the lift comes from a luminous outer hair, not a black drop */
-  --tile-shadow: 0 0 0 1px rgb(255 255 255 / .03), 0 1px 2px rgb(0 0 0 / .35), 0 14px 30px -14px rgb(0 0 0 / .60);
-  --tile-shadow-hover: 0 0 0 1px rgb(255 255 255 / .05), 0 2px 8px rgb(0 0 0 / .40), 0 18px 34px -12px rgb(0 0 0 / .65);
-
-  color-scheme: dark;
-}
-
 /* Map the live custom properties onto Tailwind utilities. `inline` keeps the
-   reference to var(--x) rather than snapshotting the value, so the theme
-   switch above continues to drive every utility. The radius and shadow rows
-   are why 189 rounded-* and 10 shadow-* usages restyle with no edits. */
+   reference to var(--x) rather than snapshotting the value. The radius and
+   shadow rows are why a card's corner changes by editing --r-lg above and
+   nothing else. */
 @theme inline {
   --color-ground: var(--ground);
   --color-surface: var(--surface);
@@ -404,11 +157,20 @@
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
   --color-ink-3: var(--ink-3);
+  --color-ink-4: var(--ink-4);
   --color-line: var(--line);
   --color-line-soft: var(--line-soft);
   --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
   --color-accent-soft: var(--accent-soft);
+  --color-accent-tint: var(--accent-tint);
+  --color-accent-icon: var(--accent-icon);
   --color-on-accent: var(--on-accent);
+  --color-ramp-1: var(--ramp-1);
+  --color-ramp-2: var(--ramp-2);
+  --color-ramp-3: var(--ramp-3);
+  --color-ramp-4: var(--ramp-4);
+  --color-ramp-5: var(--ramp-5);
   --color-critical: var(--critical);
   --color-critical-soft: var(--critical-soft);
   --color-warn: var(--warn);
@@ -420,8 +182,7 @@
   --color-cat-3: var(--cat-3);
   --color-cat-4: var(--cat-4);
   --color-cat-5: var(--cat-5);
-  --color-glass: var(--glass-bg);
-  --color-glass-border: var(--glass-border);
+  --color-connector: var(--connector);
   --color-tint: var(--tint);
   --color-tint-2: var(--tint-2);
   --color-tint-head: var(--tint-head);
@@ -434,7 +195,6 @@
   --radius-md: var(--r-md);
   --radius-lg: var(--r-lg);
   --radius-xl: var(--r-xl);
-  --radius-2xl: var(--r-2xl);
 
   --shadow-sm: var(--sh-1);
   --shadow-md: var(--sh-2);
@@ -455,22 +215,20 @@
 
 /* These sit in @layer base on purpose. Unlayered CSS beats every layered rule
    in Tailwind v4 — the whole utilities layer included — so an unlayered
-   `* { border-color }` silently cancelled all 130 border-* utilities and both
-   glass classes, and an unlayered `button { font: inherit }` overrode
-   text-[30px] / text-on-accent / font-medium on every button in the app: the
-   display figures were rendering at 14px and the primary button was dark ink
-   on dark green. In the base layer they are what they were meant to be —
-   defaults that anything more specific overrides. */
+   `* { border-color }` silently cancelled all 130 border-* utilities, and an
+   unlayered `button { font: inherit }` overrode text-[30px] / text-on-accent
+   on every button in the app. In the base layer they are what they were meant
+   to be: defaults that anything more specific overrides. */
 @layer base {
   * { border-color: var(--line); }
   button { font: inherit; color: inherit; }
   h1, h2, h3, h4 {
     font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-    font-weight: 600;
-    letter-spacing: -0.012em;
+    font-weight: 700;
+    letter-spacing: -0.02em;
     margin: 0;
   }
-  h1 { letter-spacing: -0.02em; }
+  h1 { letter-spacing: -0.03em; }
 }
 
 html { -webkit-text-size-adjust: 100%; }
@@ -478,37 +236,11 @@ html { -webkit-text-size-adjust: 100%; }
 body {
   background: var(--ground);
   color: var(--ink);
-  /* the wash is a fixed layer behind everything, so the body colour the
-     theme checks read stays exactly the ground */
-  position: relative;
-  z-index: 0;
   font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   font-size: 14px;
   line-height: 1.45;
   margin: 0;
   -webkit-font-smoothing: antialiased;
-}
-
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    /* Five discs of light with real edges — flat almost to their rim, then a
-       short fall. That edge is the whole point: frost is only visible when
-       something behind it has detail to smear, and a smooth gradient has
-       none. The panes above blur these; without the blur they would read as
-       shapes, which is why they arrived only now. */
-    radial-gradient(30rem 28rem at 12% 64%, color-mix(in oklab, var(--orb-1) var(--orb-1-a), transparent) 0 var(--orb-edge), transparent 100%),
-    radial-gradient(34rem 32rem at 88% 56%, color-mix(in oklab, var(--orb-2) var(--orb-2-a), transparent) 0 var(--orb-edge), transparent 100%),
-    radial-gradient(16rem 16rem at 56% 90%, color-mix(in oklab, var(--orb-3) var(--orb-3-a), transparent) 0 var(--orb-edge), transparent 100%),
-    radial-gradient(20rem 20rem at 34% 96%, color-mix(in oklab, var(--orb-4) 50%, transparent) 0 var(--orb-edge), transparent 100%),
-    radial-gradient(13rem 13rem at 96% 88%, color-mix(in oklab, var(--orb-5) 44%, transparent) 0 var(--orb-edge), transparent 100%),
-    radial-gradient(50rem 38rem at 82% 8%, var(--wash-1), transparent 60%),
-    radial-gradient(46rem 34rem at 10% 88%, var(--wash-2), transparent 60%),
-    linear-gradient(135deg, var(--pastel-a) 0%, var(--pastel-mid) 46%, var(--pastel-b) 100%);
 }
 
 /* §10 — tabular figures on every numeric column */
@@ -521,16 +253,37 @@ body::before {
   font-variant-numeric: tabular-nums;
 }
 
-/* Headline/figure face */
+/* Headline/figure face — heavy and tight, as the reference sets its numbers */
 .figure {
   font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+/* the micro label: uppercase, tracked, small, grey — in the margins of every
+   slide and above every KPI figure */
+.micro {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+}
+/* …with the reference's short orange rule under it */
+.micro-rule::after {
+  content: '';
+  display: block;
+  width: 20px;
+  height: 2px;
+  margin-top: 6px;
+  background: var(--accent);
 }
 
 :focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: var(--r-xs);
 }
@@ -551,86 +304,47 @@ body::before {
 @layer components {
   /* data tables: the twelve .scroll-x wrappers, and only those, so the paper
      facsimile, the inspector and the chart value tables keep their own look */
-  .scroll-x > table > thead > tr > th { background: var(--tint-head); }
+  .scroll-x > table > thead > tr > th { background: var(--surface-2); }
   .scroll-x > table > tbody > tr { transition: background-color var(--dur-1) var(--ease-std); }
-  .scroll-x > table > tbody > tr:hover { background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+  .scroll-x > table > tbody > tr:hover { background: var(--surface-2); }
   .scroll-x > table > tbody > tr:last-child > td { border-bottom-color: transparent; }
 
   /* a table that opens a card needs its header to follow the card's corner */
   .scroll-x:first-child > table > thead > tr:first-child > th:first-child { border-top-left-radius: calc(var(--r-lg) - 1px); }
   .scroll-x:first-child > table > thead > tr:first-child > th:last-child { border-top-right-radius: calc(var(--r-lg) - 1px); }
 
-  /* the card material: frosted, translucent, with the lit top edge. The
-     dialogs that render inside these cards are portalled to the body now,
-     so the filter no longer traps them in a containing block. */
-  .glass-card {
-    background:
-      linear-gradient(180deg, var(--material-sheen), transparent 46%),
-      var(--material);
-    -webkit-backdrop-filter: blur(var(--blur-card)) saturate(var(--frost-sat));
-    backdrop-filter: blur(var(--blur-card)) saturate(var(--frost-sat));
+  /* The card. Flat white with a hairline — the reference has no shadow on a
+     resting card, and a border at this weight is enough to separate one from
+     the ground without any of them shouting. */
+  .panel {
+    background: var(--surface);
+    border-color: var(--line);
   }
 
-  /* The tile: a slab of frosted pastel glass. The fill is the pastel at an
-     alpha over what is behind it — the pane, and the orbs of light behind
-     the pane — never mixed into an opaque white. A white rim with a fainter
-     ring inside it, a bright hairline along the top, and a diagonal
-     reflection from the top left. The shadow is owned here (not by a
-     utility) so the hover below can replace it without dropping the rings.
-     And it is frosted: a real backdrop-filter, which is what the reference
-     has and what was asked for. The earlier measurement against it (29 fps
-     versus 60) came from a container with no GPU, where every blurred pixel
-     is composited on the CPU; it is the pessimistic end, not the number a
-     machine with a graphics card produces. The discs behind the pane are
-     drawn with edges precisely so this blur has something to soften. */
-  .glass-tile {
-    background:
-      /* the glint: brightest at the top-left corner, gone within a third of
-         the tile — a wash across half of it bleaches the pastel instead */
-      linear-gradient(135deg, rgb(255 255 255 / var(--tile-sheen)) 0%, rgb(255 255 255 / calc(var(--tile-sheen) * .3)) 26%, rgb(255 255 255 / 0) 46%),
-      radial-gradient(70% 55% at 100% 0%, rgb(255 255 255 / var(--tile-glow)), transparent 70%),
-      /* and the far corner in shade, so the slab is lit from one side */
-      linear-gradient(135deg, transparent 54%, color-mix(in oklab, var(--tile-c) var(--tile-shade), transparent) 100%),
-      color-mix(in oklab, var(--tile-c) var(--tile-mix), transparent);
-    border-color: var(--tile-rim);
-    box-shadow:
-      inset 0 1px 0 var(--tile-top),
-      inset 1px 0 0 var(--tile-left),
-      inset 0 0 0 1px var(--tile-ring),
-      var(--tile-shadow);
-    -webkit-backdrop-filter: blur(var(--blur-tile)) saturate(var(--frost-sat));
-    backdrop-filter: blur(var(--blur-tile)) saturate(var(--frost-sat));
+  /* The KPI tile. The same material as a card; its own hook so a tile-only
+     change never has to reach into every card in the app. */
+  .kpi {
+    background: var(--surface);
+    border-color: var(--line);
   }
 
-  /* The frame the whole app floats in: white glass over the gradient and the
-     discs, with the white rim and the bright top hairline the reference pane
-     has. This one is NOT frosted, and it is the only surface that isn't:
-     a backdrop-filter the size of the viewport re-blurs the whole ground on
-     every scrolled frame. Measured on the overview, scrolling: 14 fps with
-     the pane frosted, 30 with it plain and the tiles and cards still frosted,
-     60 with no frost at all. It cost half the frame rate on its own, for a
-     blur that the tiles and cards then apply again on top. */
-  .glass-frame {
-    background:
-      linear-gradient(180deg, var(--frame-sheen), rgb(255 255 255 / 0) 9rem),
-      var(--frame);
-    border-color: var(--frame-edge);
-    box-shadow:
-      var(--sh-3),
-      inset 0 1px 0 var(--frame-top),
-      inset 0 0 0 1px var(--frame-ring);
+  /* Anything floating over the page: a dialog, a sheet, the toast. Opaque,
+     because a menu you can read the page through is a menu you cannot read. */
+  .overlay {
+    background: var(--surface);
+    border-color: var(--line);
+    box-shadow: var(--sh-3);
   }
 
-  /* glass: only where something scrolls beneath — the sticky header, menus,
-     dialogs, sheets, the toast. */
-  .glass {
-    background: var(--glass-bg);
-    border-color: var(--glass-border);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
-    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  /* the slide ground: the reference's faint dot grid */
+  .dots {
+    background-image: radial-gradient(var(--dot) 1px, transparent 1.2px);
+    background-size: var(--dot-pitch) var(--dot-pitch);
   }
-  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    .glass { background: var(--surface); }
+
+  /* the centre node of a stage diagram, lit from behind */
+  .glow {
+    box-shadow: 0 0 0 6px var(--accent-tint), 0 0 48px var(--glow);
   }
 
   /* the hatch swatch beside a hatched series; --hatch-c is set inline */
@@ -640,41 +354,10 @@ body::before {
   }
 }
 
-/* Fourteen tables carry `bg-surface-2` on their <thead>, which on a
-   translucent card painted as an opaque grey strip. This sits outside every
-   layer so it wins over that utility — the single deliberate exception — and
-   puts the same green on every column header as the tabs wear. */
-.glass-card .scroll-x > table > thead { background-color: var(--tint-head); }
-/* and one step deeper on the label: ink-3 on the green header sat at 3.95,
-   under the floor for 11px type. Here rather than in fourteen files. */
+/* Fourteen tables carry `bg-surface-2` on their <thead>, which is now exactly
+   what the rule above paints, so the old unlayered override is gone. This one
+   stays: ink-3 is the micro-label grey and a table header is 11px. */
 .scroll-x > table > thead > tr > th { color: var(--ink-2); }
-
-/* A divider inside a tile: the opaque grey hairline was the one thing left
-   saying "card". Scoped here so the fourteen `border-line-soft` sites need
-   no edit; the border-line utilities keep the grey they need elsewhere. */
-.glass-tile { --color-line-soft: rgb(255 255 255 / .60); }
-:root[data-theme="dark"] .glass-tile { --color-line-soft: rgb(255 255 255 / .12); }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .glass-tile { --color-line-soft: rgb(255 255 255 / .12); }
-}
-
-/* someone who asked the OS for less transparency gets the same tiles with
-   the pastel over the surface instead of over whatever lies behind it */
-@media (prefers-reduced-transparency: reduce) {
-  .glass-tile, .glass-card {
-    -webkit-backdrop-filter: none; backdrop-filter: none;
-  }
-  .glass-tile { background-color: color-mix(in oklab, var(--tile-c) var(--tile-mix), var(--surface)); }
-  .glass-card { background-color: var(--surface); }
-  .glass-frame { background-color: var(--surface); }
-}
-
-/* a browser without backdrop-filter gets the panes opaque enough to read,
-   since the discs behind them would otherwise show through unsoftened */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .glass-card { background-color: color-mix(in oklab, var(--surface) 88%, transparent); }
-  .glass-frame { background-color: color-mix(in oklab, var(--surface) 80%, transparent); }
-}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -685,9 +368,6 @@ body::before {
        on a theme switch and blocked the main thread for a third of a second —
        a slowdown aimed squarely at the people this guard exists for. */
     transition-property: none !important;
-  }
-  ::view-transition-group(*), ::view-transition-old(root), ::view-transition-new(root) {
-    animation: none !important;
   }
 }
 
@@ -737,10 +417,7 @@ body::before {
 .lift { transition: transform var(--dur-2) var(--ease-quint), box-shadow var(--dur-2) var(--ease-quint), border-color var(--dur-2) var(--ease-std) }
 /* only the two things that actually slide get a permanent layer */
 .tab-ink, .seg-thumb { will-change: transform }
-.lift:hover { transform: translateY(-1px); box-shadow: var(--sh-2); border-color: color-mix(in srgb, var(--line) 55%, var(--accent)) }
-/* a glass tile lifts the same way, but keeps its inner rings and its rim
-   goes brighter rather than greener */
-.glass-tile.lift:hover { box-shadow: inset 0 1px 0 var(--tile-top), inset 1px 0 0 var(--tile-left), inset 0 0 0 1px var(--tile-ring), var(--tile-shadow-hover); border-color: var(--tile-rim-hover) }
+.lift:hover { transform: translateY(-1px); box-shadow: var(--sh-2); border-color: #D5D6DB }
 
 .press { transition: transform var(--dur-1) var(--ease-std), background-color var(--dur-1) var(--ease-std), border-color var(--dur-1) var(--ease-std), color var(--dur-1) var(--ease-std), opacity var(--dur-1) var(--ease-std) }
 .press:active:not(:disabled) { transform: scale(.98) }
@@ -750,20 +427,12 @@ body::before {
 .tab-ink { transition: transform 320ms var(--ease-spring), width 320ms var(--ease-spring) }
 .tab-ink-still { transition: none }
 
-/* the segmented control's thumb — a raised pill that slides */
+/* the segmented control's thumb — a raised pill that slides. Its label is
+   12px white, so the thumb takes the text-grade orange. */
 .seg-thumb {
   position: absolute; top: 1px; bottom: 1px; left: 0;
   border-radius: 999px;
-  background: var(--accent);
+  background: var(--accent-ink);
   box-shadow: var(--sh-1);
   transition: transform 260ms var(--ease-spring), width 260ms var(--ease-spring);
-}
-
-/* Theme cross-fade, done by the compositor. The old rule put a transition on
-   every element in the document, which meant ~5,000 CSSTransitions and a third
-   of a second of blocked main thread for one attribute write. A view
-   transition fades one snapshot instead; browsers without it just switch. */
-::view-transition-old(root), ::view-transition-new(root) {
-  animation-duration: var(--dur-2);
-  animation-timing-function: var(--ease-std);
 }

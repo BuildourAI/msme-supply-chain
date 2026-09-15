@@ -3,6 +3,9 @@ import { useEffect, useState } from 'react'
 import { Button, Card, StatusPill } from '@/components/ui/bits'
 import { Dialog } from '@/components/ui/Dialog'
 import { Num } from '@/components/ui/Num'
+import { Sparkbars } from '@/components/ui/Sparkbars'
+import { Icon, type IconName } from '@/components/ui/icons'
+import { ICON_BG, TONE_WORD } from '@/components/exec/Section'
 import { money, num, shortDate } from '@/lib/domain/format'
 import { useDispatch } from './store'
 
@@ -73,30 +76,43 @@ function DeliveryDialog() {
 export function OtifStrip() {
   const { otif, cycleTime, freightPerUnit, inTransit } = useDispatch()
   const cells = [
-    { label: 'Customer OTIF', d: otif, format: 'raw' as const, dp: 1, suffix: '%',
+    { label: 'Customer OTIF', d: otif, format: 'raw' as const, dp: 1, suffix: '%', icon: 'check' as IconName,
       caption: 'delivered on time and in full', tone: (otif.value as number) >= 95 ? 'good' as const : 'critical' as const },
-    { label: 'Order to dock', d: cycleTime, format: 'raw' as const, dp: 1, suffix: 'days',
+    { label: 'Order to dock', d: cycleTime, format: 'raw' as const, dp: 1, suffix: 'days', icon: 'clock' as IconName,
       caption: 'order taken to goods gone', tone: 'neutral' as const },
-    { label: 'Freight per unit', d: freightPerUnit, format: 'money' as const, dp: 2, suffix: undefined,
+    { label: 'Freight per unit', d: freightPerUnit, format: 'money' as const, dp: 2, suffix: undefined, icon: 'cash' as IconName,
       caption: 'carrier bills ÷ units shipped', tone: 'neutral' as const },
     { label: 'Still in transit', d: { value: inTransit.length, label: 'Consignments in transit', formula: 'consignments with no confirmed delivery date',
         inputs: inTransit.map((r) => ({ name: r.note.dnNo, value: r.consignment.promisedDate, source: `${r.carrier.name} · ${r.customer.name}${r.late ? ' — already past the promise' : ''}` })),
         note: 'Excluded from OTIF rather than counted as on time, which is the usual way that figure gets flattered.' },
-      format: 'int' as const, dp: 0, suffix: undefined,
+      format: 'int' as const, dp: 0, suffix: undefined, icon: 'truck' as IconName,
       caption: `${inTransit.filter((r) => r.late).length} already past the promise`,
       tone: inTransit.some((r) => r.late) ? 'warn' as const : 'neutral' as const },
   ]
   return (
     <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
       {cells.map((c, i) => (
-        <div key={c.label} style={{ '--i': i, '--tile-c': `var(--tile-${(i % 6) + 1})` } as React.CSSProperties}
-             className="anim-fade-up lift glass-tile rounded-lg border px-3 py-2">
-          <span className="mono block text-[9.5px] uppercase tracking-wider text-ink-2">{c.label}</span>
-          <span className="mt-0.5 block">
-            <Num d={c.d} format={c.format} dp={c.dp} suffix={c.suffix} size="display"
-                 tone={c.tone === 'neutral' ? undefined : c.tone} />
+        <div key={c.label} style={{ '--i': i } as React.CSSProperties}
+             className="anim-fade-up lift kpi relative flex flex-col rounded-lg border p-3">
+          <Sparkbars d={c.d} className="absolute right-3 top-3 w-12 opacity-90" />
+          {/* the tone rides the icon square, not the figure: a 30px number in
+              status red reads as an alarm even when the status is "on target" */}
+          <span aria-hidden className={`grid size-7 shrink-0 place-items-center rounded-md ${ICON_BG[c.tone]}`}>
+            <Icon name={c.icon} className="size-4" />
           </span>
-          <span className="block text-[10.5px] leading-tight text-ink-2">{c.caption}</span>
+          <span className="mono mt-2 flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-ink-3">
+            <span className="truncate">{c.label}</span>
+            {/* §10 — a status colour always arrives with the word that explains it */}
+            {TONE_WORD[c.tone] && (
+              <span className={`shrink-0 rounded-full px-1.5 text-[9px] font-semibold leading-[15px] ${ICON_BG[c.tone]}`}>
+                {TONE_WORD[c.tone]}
+              </span>
+            )}
+          </span>
+          <span className="mt-0.5 block">
+            <Num d={c.d} format={c.format} dp={c.dp} suffix={c.suffix} size="display" />
+          </span>
+          <span className="mt-1 block text-[11.5px] leading-snug text-ink-2">{c.caption}</span>
         </div>
       ))}
     </div>

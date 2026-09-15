@@ -38,7 +38,7 @@ function DocumentPack() {
       sub={`${order.soNo} · ${order.customer.name} · despatched ${shortDate(note.despatchedOn)}`}>
       <div className="space-y-3 px-4 py-4">
         <div className="rounded-md border border-accent/30 bg-accent-soft px-3 py-2">
-          <p className="text-[12px] leading-relaxed text-accent">
+          <p className="text-[12px] leading-relaxed text-accent-ink">
             <strong>Prepared here, raised there.</strong> Every figure below comes off the despatch note,
             so it is typed once instead of three times. The pack goes to the accounting system the
             factory already runs. This build never allocates an invoice number, never computes a tax and

@@ -72,7 +72,7 @@ export interface StackRow {
 
 const BADGE_CLS = {
   good: 'border-good/30 bg-good-soft text-good',
-  accent: 'border-accent/30 bg-accent-soft text-accent',
+  accent: 'border-accent/30 bg-accent-soft text-accent-ink',
   warn: 'border-warn/30 bg-warn-soft text-warn',
 }
 

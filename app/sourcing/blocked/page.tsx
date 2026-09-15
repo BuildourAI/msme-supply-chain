@@ -137,7 +137,7 @@ export default function Page() {
               <button key={x.id} type="button" onClick={() => setBy(x.id)}
                 aria-pressed={by === x.id}
                 className={`rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
-                  by === x.id ? 'border-accent bg-accent-soft text-accent' : 'border-line text-ink-2 hover:bg-surface-2'}`}>
+                  by === x.id ? 'border-accent bg-accent-soft text-accent-ink' : 'border-line text-ink-2 hover:bg-surface-2'}`}>
                 {x.label}
               </button>
             ))}
@@ -223,7 +223,7 @@ export default function Page() {
               week, and then it is measuring nothing.
             </p>
             <a href="/sourcing/desk#guardrail"
-               className="inline-block pt-0.5 text-[12px] font-medium text-accent hover:underline">
+               className="inline-block pt-0.5 text-[12px] font-medium text-accent-ink hover:underline">
               See the guardrail on the desk →
             </a>
           </div>

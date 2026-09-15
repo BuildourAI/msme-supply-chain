@@ -33,7 +33,7 @@ function Filters() {
           <button key={c.id} type="button" onClick={() => setFilter(c.id)}
             className={`rounded-full border px-2.5 py-0.5 text-[11.5px] transition-colors ${
               state.statusFilter === c.id
-                ? 'border-accent bg-accent-soft text-accent'
+                ? 'border-accent bg-accent-soft text-accent-ink'
                 : 'border-line text-ink-2 hover:bg-surface-2'}`}>
             {c.label}
           </button>
@@ -54,13 +54,13 @@ function DeskTab() {
     <>
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <KpiTile index={0} label="Lines needing a decision" d={kpis.linesNeedingDecision} format="int"
-          tone="critical" active={state.statusFilter === 'needs_decision'}
+          tone="critical" icon="alert" active={state.statusFilter === 'needs_decision'}
           onClick={() => setFilter(state.statusFilter === 'needs_decision' ? 'all' : 'needs_decision')}
           actionLabel="Show only these"
           caption="3 at risk · 1 covered on quantity but late on timing" />
-        <KpiTile index={1} label="Cash to release" d={kpis.toRelease} format="lakh" tone="accent"
+        <KpiTile index={1} label="Cash to release" d={kpis.toRelease} format="lakh" tone="accent" icon="cash"
           caption={`across ${kpis.draftPoCount} draft POs · ${kpis.heldCount} held by the guardrail`} />
-        <KpiTile index={2} label="Non-usable stock" d={kpis.nonUsableValue} format="money" tone="warn"
+        <KpiTile index={2} label="Non-usable stock" d={kpis.nonUsableValue} format="money" tone="warn" icon="boxes"
           caption={`on hand but not issuable · valued at ${VALUATION_BASIS}`} />
       </div>
 

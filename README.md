@@ -55,9 +55,10 @@ Where §9.1's quoted rejection allowance disagrees with the §5 rule (8 of 27 qu
 landed-cost inspector and the SRC-03 rejection figure both show the quoted value and the rule's
 value and name the drift, instead of silently picking one.
 
-Three dark-theme tokens — `--critical-soft`, `--warn-soft`, `--good-soft` — are not in §10's dark
-block, which defines no soft colours. They are chosen so status pills keep their contrast on the
-dark ground; without them the light softs would leak through.
+The interface is light only. §10's dark block, the theme provider and the toggle were removed when
+the app was restyled to the client's own brand — a flat orange on white, with a left rail — and a
+second palette nobody had specified was two sets of contrast numbers to keep true instead of one.
+Every colour is now defined once, on `:root`, and swept at real pixels against a 4.5:1 floor.
 
 Still open, and stated on the desk's Policy tab: unit conversion (§13-6) is not modelled, every
 action is attributed to one demo buyer because there is no login, and safety stock is a per-item

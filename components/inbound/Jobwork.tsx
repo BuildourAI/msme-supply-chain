@@ -211,7 +211,7 @@ function ChallanCard({ row, onReturn, onClose, onExtend }: {
   const closed = c.status === 'closed'
 
   return (
-    <li className={`anim-fade-up lift glass-card shadow-sm rounded-lg border p-3.5 ${
+    <li className={`anim-fade-up lift panel rounded-lg border p-3.5 ${
       row.overdue ? 'border-critical/40' : closed ? 'border-line-soft' : 'border-line'}`}>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="mono text-[12.5px] font-medium">{c.challanNo}</span>
@@ -353,7 +353,7 @@ export function JobworkRegister() {
           </p>
           <p className="mb-2 text-[11.5px] leading-relaxed text-ink-3">
             These three are the source of the “with jobworker” quantities on{' '}
-            <Link href="/production/line-watch" className="text-accent hover:underline">Line Watch</Link>.
+            <Link href="/production/line-watch" className="text-accent-ink hover:underline">Line Watch</Link>.
             That page flags late jobwork; this is the challan behind the flag. It runs on §9.2’s own
             Monday, five days after the heater factory’s date — two floors, two run dates, one register.
           </p>

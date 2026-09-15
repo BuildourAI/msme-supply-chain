@@ -43,15 +43,15 @@ export function StageStrip({ stage }: { stage: StageId }) {
     const blocked = blockedStock.reduce((a, b) => a + b.value, 0)
     const decided = Object.keys(state.decisions).length
     return <HeadlineStrip cells={[
-      { label: 'Lines needing a decision', d: kpis.linesNeedingDecision, format: 'int', tone: 'critical',
+      { label: 'Lines needing a decision', d: kpis.linesNeedingDecision, format: 'int', tone: 'critical', icon: 'alert',
         caption: '3 at risk · 1 late on timing' },
-      { label: 'Cash to release', d: kpis.toRelease, format: 'lakh', tone: 'accent',
+      { label: 'Cash to release', d: kpis.toRelease, format: 'lakh', tone: 'accent', icon: 'cash',
         caption: `${kpis.draftPoCount} draft POs · ${kpis.heldCount} held by the guardrail` },
       { label: 'Blocked capital', d: D(blocked, 'Blocked capital', 'Σ blocked_stock.value',
           blockedStock.map((b) => ({ name: b.itemCode, value: b.value, unit: '₹' })), '₹',
           'Usable material bought for the wrong job — a different population from non-usable stock.'),
-        format: 'lakh', tone: 'warn', caption: `${blockedStock.length} lots · MOQ forced is the top cause` },
-      { label: 'Stock you cannot use', d: kpis.nonUsableValue, format: 'money', tone: 'warn',
+        format: 'lakh', tone: 'warn', icon: 'lock', caption: `${blockedStock.length} lots · MOQ forced is the top cause` },
+      { label: 'Stock you cannot use', d: kpis.nonUsableValue, format: 'money', tone: 'warn', icon: 'boxes',
         caption: `on hand, not issuable${decided ? ` · ${decided} decided this session` : ' · counted as cover never'}` },
     ]} />
   }
@@ -63,31 +63,31 @@ export function StageStrip({ stage }: { stage: StageId }) {
     const out = challanRows.filter((c) => c.challan.status === 'out')
     const atJobworkers = out.reduce((a, c) => a + c.valueOut.value, 0)
     return <HeadlineStrip cells={[
-      { label: 'Supplier OTIF', d: otif.d, format: 'raw', tone: otif.meetsTarget ? 'good' : 'critical',
+      { label: 'Supplier OTIF', d: otif.d, format: 'raw', tone: otif.meetsTarget ? 'good' : 'critical', icon: 'check',
         caption: otif.caption },
-      { label: 'Supplier defect rate', d: defect.d, format: 'raw', tone: defect.meetsTarget ? 'good' : 'critical',
+      { label: 'Supplier defect rate', d: defect.d, format: 'raw', tone: defect.meetsTarget ? 'good' : 'critical', icon: 'alert',
         caption: 'mean of rejection rates across closed purchase receipts' },
-      { label: 'Lead time, measured', d: lead.d, format: 'days', tone: lead.meetsTarget ? 'good' : 'warn',
+      { label: 'Lead time, measured', d: lead.d, format: 'days', tone: lead.meetsTarget ? 'good' : 'warn', icon: 'clock',
         caption: lead.caption },
       { label: 'Out at jobworkers', d: D(atJobworkers, 'Material at jobworkers',
           'Σ (qty still out × last_purchase_rate) over open challans',
           out.map((c) => ({ name: c.challan.challanNo, value: Math.round(c.valueOut.value), unit: '₹',
                             source: `at ${c.challan.jobworkerName}` })), '₹',
           'Neither on the shelf nor consumed. Counted as cover it inflates stock; ignored it disappears.'),
-        format: 'money', tone: 'warn', caption: `${out.length} open challans · their shed, our money` },
+        format: 'money', tone: 'warn', icon: 'tray', caption: `${out.length} open challans · their shed, our money` },
     ]} />
   }
 
   if (stage === 'inventory') {
     const dio = X.daysInventoryOutstanding(staticRows)
     return <HeadlineStrip cells={[
-      { label: 'Record accuracy', d: inv.accuracy, format: 'raw', tone: inv.accuracy.value >= 98 ? 'good' : 'critical',
+      { label: 'Record accuracy', d: inv.accuracy, format: 'raw', tone: inv.accuracy.value >= 98 ? 'good' : 'critical', icon: 'check',
         caption: 'counted against book, over every cycle count' },
-      { label: 'Days inventory outstanding', d: dio.d, format: 'days', tone: dio.meetsTarget ? 'good' : 'critical',
+      { label: 'Days inventory outstanding', d: dio.d, format: 'days', tone: dio.meetsTarget ? 'good' : 'critical', icon: 'clock',
         caption: 'usable stock at cost ÷ what the floor draws a day' },
-      { label: 'Remnants on the rack', d: inv.offcutValue, format: 'money', tone: 'good',
+      { label: 'Remnants on the rack', d: inv.offcutValue, format: 'money', tone: 'good', icon: 'boxes',
         caption: 'usable offcuts — stock, not a list' },
-      { label: 'Loss, net of scrap value', d: inv.netLoss, format: 'money', tone: 'warn',
+      { label: 'Loss, net of scrap value', d: inv.netLoss, format: 'money', tone: 'warn', icon: 'alert',
         caption: 'seven named causes · what is actually gone' },
     ]} />
   }
@@ -95,14 +95,14 @@ export function StageStrip({ stage }: { stage: StageId }) {
   if (stage === 'production') {
     const halting = lw.jobs.filter((j) => j.status.value === 'will_halt').length
     return <HeadlineStrip cells={[
-      { label: 'The line runs for', d: lw.tiles.lineRunsFor, format: 'raw', tone: 'critical',
+      { label: 'The line runs for', d: lw.tiles.lineRunsFor, format: 'raw', tone: 'critical', icon: 'clock',
         caption: 'days, before the tightest material stops it' },
       { label: 'Jobs that will not run', d: lw.tiles.jobsStopping, format: 'int',
-        tone: halting ? 'critical' : 'good',
+        tone: halting ? 'critical' : 'good', icon: 'factory',
         caption: `${halting} short of material · the rest waiting on a jobworker` },
-      { label: 'Cash needed this week', d: lw.tiles.cashNeeded, format: 'lakh', tone: 'accent',
+      { label: 'Cash needed this week', d: lw.tiles.cashNeeded, format: 'lakh', tone: 'accent', icon: 'cash',
         caption: 'to keep every job on the week fed' },
-      { label: 'Stock you cannot use', d: lw.tiles.unusableValue, format: 'money', tone: 'warn',
+      { label: 'Stock you cannot use', d: lw.tiles.unusableValue, format: 'money', tone: 'warn', icon: 'boxes',
         caption: `${lw.tiles.unusableLotCount} lots · on hand, not issuable` },
     ]} />
   }
@@ -114,20 +114,20 @@ export function StageStrip({ stage }: { stage: StageId }) {
   return <HeadlineStrip cells={[
     { label: 'Modules live here', d: D(0, 'Modules live in Stage 5', 'count(modules with a screen)',
         [{ name: 'live', value: 0, source: '§2 scopes this build to Stage 1 plus the shop-floor read of Stages 3–4' }]),
-      format: 'int', tone: 'neutral', caption: 'nothing built, and nothing faked' },
+      format: 'int', tone: 'neutral', icon: 'boxes', caption: 'nothing built, and nothing faked' },
     { label: 'Pains stated, none answered', d: D(4, 'Stage 5 pains', 'count(problems where nothing answers them)',
         [{ name: 'documents by hand', value: 'unanswered' }, { name: 'goods leave unrecorded', value: 'unanswered' },
          { name: 'no milestones', value: 'unanswered' }, { name: 'no reverse logistics', value: 'unanswered' }]),
-      format: 'int', tone: 'critical', caption: 'each one names what it would need first' },
+      format: 'int', tone: 'critical', icon: 'alert', caption: 'each one names what it would need first' },
     { label: 'Tables that do not exist', d: D(4, 'Missing tables', 'count(tables Stage 5 needs)',
         [{ name: 'dispatch_note', value: 'missing' }, { name: 'shipment + shipment_milestone', value: 'missing' },
          { name: 'return_authorisation', value: 'missing' }, { name: 'e_way_bill', value: 'missing' }]),
-      format: 'int', tone: 'warn', caption: 'the honest shape of the gap' },
+      format: 'int', tone: 'warn', icon: 'report', caption: 'the honest shape of the gap' },
     { label: 'Revenue at risk — measured', d: D(atRisk, 'Revenue at risk',
         'Σ sales_order.value where a material behind the order is short',
         lw.salesOrders.map((s) => ({ name: `${s.soNo} · ${s.customer}`, value: s.value, unit: '₹',
                                      source: `promised ${s.promisedDate}` })), '₹',
         'The one thing about Stage 5 this build can actually see, and it sees it from the material side.'),
-      format: 'lakh', tone: 'critical', caption: `${lw.salesOrders.length} customer orders behind short materials` },
+      format: 'lakh', tone: 'critical', icon: 'truck', caption: `${lw.salesOrders.length} customer orders behind short materials` },
   ]} />
 }

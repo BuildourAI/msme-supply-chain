@@ -43,9 +43,9 @@ export function Inspector() {
           </table>
         </div>
 
-        <div className="flex items-baseline justify-between rounded-md border border-accent/30 bg-accent-soft px-3 py-2.5">
-          <span className="text-[12px] font-medium text-accent">Result</span>
-          <span className="figure text-[22px] text-accent">
+        <div className="flex items-baseline justify-between rounded-md border border-accent/30 bg-accent-tint px-3 py-2.5">
+          <span className="text-[12px] font-medium text-accent-ink">Result</span>
+          <span className="figure text-[22px] text-accent-ink">
             {shown}{d.unit && <span className="ml-1 text-[12px] font-normal">{d.unit}</span>}
           </span>
         </div>

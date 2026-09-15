@@ -217,7 +217,7 @@ function QueueCard({ row }: { row: GrnRow }) {
   const g = row.grn
   return (
     <li style={{ '--i': 0 } as React.CSSProperties}
-        className={`anim-fade-up lift glass-card shadow-sm rounded-lg border p-3.5 ${
+        className={`anim-fade-up lift panel rounded-lg border p-3.5 ${
           row.state === 'overdue' ? 'border-critical/40' : 'border-line'}`}>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="mono text-[12.5px] font-medium">{g.grnNo}</span>
@@ -232,7 +232,7 @@ function QueueCard({ row }: { row: GrnRow }) {
       <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] text-ink-3">
         <span>{g.challanId ? 'Jobwork return from' : 'From'} {g.vendorName}</span>
         {g.poNo && <span className="mono">{g.poNo}{g.againstVersion ? ` · shipped against v${g.againstVersion}` : ''}</span>}
-        {g.challanId && <Link href="/inbound/jobwork" className="mono text-accent hover:underline">challan {g.challanId}</Link>}
+        {g.challanId && <Link href="/inbound/jobwork" className="mono text-accent-ink hover:underline">challan {g.challanId}</Link>}
         <span>received {shortDate(g.receivedOn)}</span>
         <span>issuable from {shortDate(row.issuable.value)} if closed on time</span>
       </p>
@@ -262,7 +262,7 @@ function QueueCard({ row }: { row: GrnRow }) {
           {qtyText(row.staleAgainst.internal, g.uom)} — and the notice never went out. That is{' '}
           {qtyText(row.staleAgainst.internal - row.staleAgainst.received, g.uom)} short, and it is a
           communication failure, not a supply failure.{' '}
-          <Link href="/inbound/orders" className="font-medium text-accent hover:underline">Open INB-02 →</Link>
+          <Link href="/inbound/orders" className="font-medium text-accent-ink hover:underline">Open INB-02 →</Link>
         </p>
       )}
 

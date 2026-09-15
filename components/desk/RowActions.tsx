@@ -139,13 +139,13 @@ export function RowActions({ row, size = 'sm' }: { row: DerivedRow; size?: 'sm' 
         {label[decided.decision] ?? decided.decision}
         <span className="mono text-[10px] text-ink-3">· figures frozen</span>
         {decided.offcutApplied != null && decided.offcutApplied > 0 && (
-          <span className="text-[10.5px] text-accent"
+          <span className="text-[10.5px] text-accent-ink"
                 title="Remnants already on the rack were netted off this order at the approval (INV-02).">
             · {num(decided.offcutApplied, 3)} {row.item.uom === 'm2' ? 'm²' : row.item.uom} off the rack
           </span>
         )}
         <button type="button" onClick={() => undo(row)}
-          className="ml-1 text-[11px] font-medium text-accent hover:underline"
+          className="ml-1 text-[11px] font-medium text-accent-ink hover:underline"
           title="Every automated action is reversible (§11). Nothing was sent, so nothing needs recalling.">
           Undo
         </button>
@@ -195,7 +195,7 @@ export function RowActions({ row, size = 'sm' }: { row: DerivedRow; size?: 'sm' 
             {row.needsOwnerSignoff.value ? 'Draft PO for owner sign-off' : 'Approve draft PO'}
           </Button>
           {hasRemnants && (
-            <span className="basis-full text-[10.5px] leading-tight text-accent"
+            <span className="basis-full text-[10.5px] leading-tight text-accent-ink"
                   title="The offcut register holds material for this item. The approval will show it.">
               {num(onRack, 3)} {row.item.uom === 'm2' ? 'm²' : row.item.uom} already on the rack
             </span>

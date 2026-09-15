@@ -64,7 +64,7 @@ export default function Page() {
         <div className="grid gap-3 p-4 lg:grid-cols-3">
           {systems.map((s, i) => (
             <Link key={s.code} href={s.href} style={{ '--i': i } as React.CSSProperties}
-              className="anim-fade-up lift glass-card shadow-sm block rounded-lg border border-line p-3.5 hover:border-accent/50">
+              className="anim-fade-up lift panel block rounded-lg border border-line p-3.5 hover:border-accent/50">
               <div className="flex items-baseline gap-2">
                 <span className="mono text-[10.5px] uppercase tracking-wider text-ink-3">{s.code}</span>
                 <span className="ml-auto"><StatusPill tone={s.tone} label={s.status} /></span>
@@ -78,7 +78,7 @@ export default function Page() {
                   <li key={l} className="text-[11.5px] text-ink-2">{l}</li>
                 ))}
               </ul>
-              <p className="mt-2 text-[11px] font-medium text-accent">Open {s.code} →</p>
+              <p className="mt-2 text-[11px] font-medium text-accent-ink">Open {s.code} →</p>
             </Link>
           ))}
         </div>

@@ -269,13 +269,13 @@ export default function Page() {
       </p>
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiTile index={0} label="The line runs for" d={t.lineRunsFor} format="days" tone="critical" suffix=" days"
+        <KpiTile index={0} label="The line runs for" d={t.lineRunsFor} format="days" tone="critical" icon="clock" suffix=" days"
           caption={`the shortest material sets the pace — ${PACE.m.name.toLowerCase()}`} />
-        <KpiTile index={1} label="Jobs stopping this week" d={t.jobsStopping} format="int" tone="critical" suffix={` of ${lw.jobs.length}`}
+        <KpiTile index={1} label="Jobs stopping this week" d={t.jobsStopping} format="int" tone="critical" icon="factory" suffix={` of ${lw.jobs.length}`}
           caption={`${HALTING} will halt · ${AT_RISK} at risk, of ${lw.jobs.length} scheduled`} />
-        <KpiTile index={2} label="Cash needed for reorders" d={t.cashNeeded} format="lakh" tone="accent"
+        <KpiTile index={2} label="Cash needed for reorders" d={t.cashNeeded} format="lakh" tone="accent" icon="cash"
           caption={`across the ${lw.needsAttention.length} materials needing attention`} />
-        <KpiTile index={3} label="Stock you cannot use" d={t.unusableValue} format="money" tone="warn"
+        <KpiTile index={3} label="Stock you cannot use" d={t.unusableValue} format="money" tone="warn" icon="boxes"
           caption={`across ${t.unusableLotCount} materials · QC hold, damaged and expired`} />
       </div>
 

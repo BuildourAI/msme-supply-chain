@@ -31,7 +31,7 @@ export function Dialog({ open, onClose, title, sub, children, wide }: {
          onClick={onClose}>
       <div ref={ref} role="dialog" aria-modal="true" aria-label={title}
            onClick={(e) => e.stopPropagation()}
-           className={`anim-pop glass w-full rounded-xl border shadow-xl ${wide ? 'max-w-3xl' : 'max-w-lg'}`}>
+           className={`anim-pop overlay w-full rounded-lg border ${wide ? 'max-w-3xl' : 'max-w-lg'}`}>
         <header className="flex items-start gap-3 border-b border-line-soft px-4 py-3">
           <div className="min-w-0">
             <h2 className="text-[15px]">{title}</h2>

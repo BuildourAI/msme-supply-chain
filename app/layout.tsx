@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import { IBM_Plex_Mono, Inter } from 'next/font/google'
-import { ThemeProvider } from '@/state/theme-provider'
 import { AppShell } from '@/components/shell/AppShell'
 import './globals.css'
 
@@ -23,19 +22,11 @@ export const metadata: Metadata = {
     'Sourcing, inbound, inventory, production material flow and dispatch for Indian MSME manufacturers.',
 }
 
-/** Sets the stored theme before first paint so the page never flashes the wrong one. */
-const noFlash = `(function(){try{var t=localStorage.getItem('theme');
-if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}})()`
-
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning
-          className={`${sans.variable} ${mono.variable}`}>
-      <head><script dangerouslySetInnerHTML={{ __html: noFlash }} /></head>
+    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
       <body>
-        <ThemeProvider>
-          <AppShell>{children}</AppShell>
-        </ThemeProvider>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   )

@@ -161,7 +161,7 @@ export function GuardrailPanel() {
           This guardrail is the preventive half of SRC-04. What it failed to prevent in the past —
           {' '}{lakh(blockedStock.reduce((a, b) => a + b.value, 0))} across {blockedStock.length} lots,
           with an owner and a route out on each — is on the{' '}
-          <Link href="/sourcing/blocked" className="font-medium text-accent hover:underline">
+          <Link href="/sourcing/blocked" className="font-medium text-accent-ink hover:underline">
             blocked-capital register
           </Link>.
         </p>
@@ -204,7 +204,7 @@ export function IntakeQueue() {
                     {' '}of {docOf(l.documentId).lineCount} on
                   </span>
                   <button type="button" onClick={() => open(l.documentId)}
-                    className="mono font-medium text-accent underline decoration-dotted underline-offset-2 hover:no-underline">
+                    className="mono font-medium text-accent-ink underline decoration-dotted underline-offset-2 hover:no-underline">
                     {docOf(l.documentId).fileName}
                   </button>
                   <span>

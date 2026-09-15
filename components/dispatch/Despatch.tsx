@@ -3,6 +3,9 @@ import { useEffect, useState } from 'react'
 import { Button, Card, Pill, StatusPill } from '@/components/ui/bits'
 import { Dialog } from '@/components/ui/Dialog'
 import { Num } from '@/components/ui/Num'
+import { Sparkbars } from '@/components/ui/Sparkbars'
+import { Icon } from '@/components/ui/icons'
+import { ICON_BG } from '@/components/exec/Section'
 import { money, num, shortDate } from '@/lib/domain/format'
 import { useDispatch } from './store'
 
@@ -184,23 +187,37 @@ export function FinishedGoods() {
         Valued at cost <Num d={fgValue} format="money" />
       </span>}>
       <div className="grid gap-2.5 p-3 sm:grid-cols-2 xl:grid-cols-4">
-        {fgRows.map((r, i) => (
-          <div key={r.fg.id} style={{ '--i': i, '--tile-c': `var(--tile-${(i % 6) + 1})` } as React.CSSProperties}
-               className="anim-fade-up lift glass-tile rounded-lg border p-3">
-            <span className="mono block text-[10px] uppercase tracking-wider text-ink-2">{r.fg.code}</span>
-            <span className="mt-0.5 block text-[13px] font-medium leading-tight">{r.fg.name}</span>
-            <span className="mt-1.5 block">
-              <Num d={r.balance} format="qty" dp={0} size="lg" suffix={r.fg.uom}
-                   tone={(r.balance.value as number) <= 0 ? 'critical' : undefined} />
-            </span>
-            <span className="mt-1 block text-[11px] leading-snug text-ink-2">
-              {money((r.balance.value as number) * r.fg.standardCost)} at cost · built by {r.fg.builtBy.join(', ')}
-            </span>
-            <span className="mono mt-1.5 block border-t border-line-soft pt-1.5 text-[10px] text-ink-2">
-              {r.movements.length} movements · HSN {r.fg.hsn}
-            </span>
-          </div>
-        ))}
+        {fgRows.map((r, i) => {
+          const out = (r.balance.value as number) <= 0
+          return (
+            <div key={r.fg.id} style={{ '--i': i } as React.CSSProperties}
+                 className="anim-fade-up lift kpi relative flex flex-col rounded-lg border p-3">
+              <Sparkbars d={r.balance} className="absolute right-3 top-3 w-12 opacity-90" />
+              <span aria-hidden className={`grid size-7 shrink-0 place-items-center rounded-md ${
+                ICON_BG[out ? 'critical' : 'accent']}`}>
+                <Icon name="boxes" className="size-4" />
+              </span>
+              <span className="mono mt-2 flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-ink-3">
+                <span className="truncate">{r.fg.code}</span>
+                {out && (
+                  <span className={`shrink-0 rounded-full px-1.5 text-[9px] font-semibold leading-[15px] ${ICON_BG.critical}`}>
+                    Nothing on the bay
+                  </span>
+                )}
+              </span>
+              <span className="mt-0.5 block text-[13px] font-medium leading-tight">{r.fg.name}</span>
+              <span className="mt-1.5 block">
+                <Num d={r.balance} format="qty" dp={0} size="lg" suffix={r.fg.uom} />
+              </span>
+              <span className="mt-1 block text-[11px] leading-snug text-ink-2">
+                {money((r.balance.value as number) * r.fg.standardCost)} at cost · built by {r.fg.builtBy.join(', ')}
+              </span>
+              <span className="mono mt-auto block border-t border-line-soft pt-1.5 text-[10px] text-ink-2">
+                {r.movements.length} movements · HSN {r.fg.hsn}
+              </span>
+            </div>
+          )
+        })}
       </div>
       <p className="border-t border-line-soft px-4 py-3 text-[11.5px] leading-relaxed text-ink-3">
         A balance here is the sum of its movements — an opening figure, the jobs the floor closed, the

@@ -179,7 +179,7 @@ export function StockLedger() {
                     </td>
                     <td className="px-3 py-2">
                       <button type="button" onClick={() => select(r.lot.id)}
-                        className="text-[12px] text-accent underline decoration-dotted underline-offset-[3px] hover:no-underline">
+                        className="text-[12px] text-accent-ink underline decoration-dotted underline-offset-[3px] hover:no-underline">
                         {r.movements.length} document{r.movements.length === 1 ? '' : 's'}
                       </button>
                     </td>

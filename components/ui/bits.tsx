@@ -6,12 +6,12 @@ export const TONE_BG: Record<Tone, string> = {
   critical: 'bg-critical-soft text-critical border-critical/25',
   warn: 'bg-warn-soft text-warn border-warn/25',
   good: 'bg-good-soft text-good border-good/25',
-  accent: 'bg-accent-soft text-accent border-accent/25',
+  accent: 'bg-accent-tint text-accent-ink border-accent/25',
   neutral: 'bg-surface-3 text-ink-2 border-line',
 }
 export const TONE_FG: Record<Tone, string> = {
   critical: 'text-critical', warn: 'text-warn', good: 'text-good',
-  accent: 'text-accent', neutral: 'text-ink-2',
+  accent: 'text-accent-ink', neutral: 'text-ink-2',
 }
 export const TONE_BAR: Record<Tone, string> = {
   critical: 'bg-critical', warn: 'bg-warn', good: 'bg-good',
@@ -66,16 +66,16 @@ export function Card({ title, sub, live, annotation, actions, children, id, clas
   return (
     <section id={id} style={{ '--i': index } as React.CSSProperties}
              className={`anim-fade-up min-w-0 rounded-lg border ${
-               flat ? 'border-transparent' : 'glass-card border-line shadow-sm'} ${className}`}>
+               flat ? 'border-transparent' : 'panel border-line'} ${className}`}>
       {(title || actions) && (
-        <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line-soft px-4 py-3">
+        <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line-soft px-3.5 py-2.5">
           <div className="min-w-0">
-            <h2 className="text-[15px] leading-tight">{title}</h2>
+            <h2 className="text-[14.5px] font-bold leading-tight tracking-tight">{title}</h2>
             {sub && <p className="mt-0.5 text-[12px] text-ink-3">{sub}</p>}
           </div>
           {live && (
-            <span className="mono rounded border border-accent/30 bg-accent-soft px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-accent">
-              live
+            <span className="mono inline-flex items-center gap-1 rounded-full bg-good-soft px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-good">
+              <span aria-hidden className="size-1.5 rounded-full bg-good" />live
             </span>
           )}
           {annotation && (
@@ -126,8 +126,8 @@ export function Button({ children, onClick, variant = 'default', size = 'md', di
   disabled?: boolean; title?: string; type?: 'button' | 'submit'
 }) {
   const v = {
-    default: 'border-line bg-surface hover:bg-surface-2 text-ink shadow-sm',
-    primary: 'border-accent bg-accent text-on-accent hover:bg-[color-mix(in_srgb,var(--accent)_88%,var(--ink))] shadow-sm',
+    default: 'border-line bg-surface hover:bg-surface-2 text-ink',
+    primary: 'border-accent-ink bg-accent-ink text-on-accent hover:bg-accent',
     ghost: 'border-transparent hover:bg-surface-2 text-ink-2',
     danger: 'border-critical/30 bg-critical-soft text-critical hover:bg-critical-soft/70',
   }[variant]

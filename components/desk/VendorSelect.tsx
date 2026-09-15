@@ -73,7 +73,7 @@ export function VendorSelect({ row, detail = false }: { row: DerivedRow; detail?
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[12.5px] font-medium">
                       {q.vendor.name}
-                      {rec && <span className="font-normal text-accent"> · recommended</span>}
+                      {rec && <span className="font-normal text-accent-ink"> · recommended</span>}
                     </span>
                     {detail ? (
                       <span className="mono block text-[10px] text-ink-3">

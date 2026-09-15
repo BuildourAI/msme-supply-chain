@@ -2,6 +2,8 @@
 import Link from 'next/link'
 import { PageHeader } from '@/components/shell/PageHeader'
 import { Card, Pill } from '@/components/ui/bits'
+import { Icon } from '@/components/ui/icons'
+import { ICON_BG } from '@/components/exec/Section'
 import type { Problem, Stage } from '@/lib/seed/stages'
 import type { Tone } from '@/lib/domain/format'
 
@@ -26,6 +28,9 @@ const STATE: Record<NonNullable<Problem['state']>, {
 }
 
 const stateOf = (p: Problem) => p.state ?? (p.answeredBy ? 'live' : 'unsolved')
+
+/** the tinted square each count tile wears */
+const TILE_TONE = { live: 'good', planned: 'warn', unsolved: 'critical' } as const
 
 function PainRow({ p, index }: { p: Problem; index: number }) {
   const st = STATE[stateOf(p)]
@@ -56,14 +61,14 @@ function PainRow({ p, index }: { p: Problem; index: number }) {
           {stateOf(p) === 'unsolved' ? 'what it would take' : 'what removes it'}
         </p>
         {p.answeredBy && (
-          <p className={`mt-0.5 text-[13px] font-medium ${stateOf(p) === 'live' ? 'text-accent' : 'text-warn'}`}>
+          <p className={`mt-0.5 text-[13px] font-medium ${stateOf(p) === 'live' ? 'text-accent-ink' : 'text-warn'}`}>
             {p.answeredBy}
           </p>
         )}
         <p className="mt-1 text-[12px] leading-relaxed text-ink-2">{p.how}</p>
         {p.href && (
           <Link href={p.href}
-            className="mt-2 inline-flex items-center gap-1 rounded border border-line px-2 py-0.5 text-[11.5px] font-medium text-accent transition-colors hover:bg-accent-soft">
+            className="mt-2 inline-flex items-center gap-1 rounded border border-line px-2 py-0.5 text-[11.5px] font-medium text-accent-ink transition-colors hover:bg-accent-soft">
             See it working →
           </Link>
         )}
@@ -88,20 +93,28 @@ export function Painkillers({ stage }: { stage: Stage }) {
           <Pill mono>{stage.problems.length} pains stated</Pill>
         </>} />
 
-      {/* the honest headline: how many of the stated pains this stage actually removes */}
+      {/* the honest headline: how many of the stated pains this stage actually
+          removes. A count of zero is dimmed, never dashed — a dashed border
+          means "this figure is illustrative" everywhere else in the app, and
+          zero here is measured. */}
       <div className="mb-3 grid gap-2 sm:grid-cols-3">
         {(['live', 'planned', 'unsolved'] as const).map((k, i) => (
           <div key={k} style={{ '--i': i } as React.CSSProperties}
-               className={`anim-fade-up glass-card rounded-lg border px-3 py-2 ${
-                 counts[k] ? 'border-line' : 'border-dashed border-line opacity-60'}`}>
-            <p className="flex items-baseline gap-2">
-              <span className="figure text-[22px] leading-none">{counts[k]}</span>
-              <span className={`text-[12px] font-medium ${
-                k === 'live' ? 'text-good' : k === 'planned' ? 'text-warn' : 'text-critical'}`}>
-                {STATE[k].label.toLowerCase()}
+               className={`anim-fade-up kpi flex items-start gap-2.5 rounded-lg border border-line p-2.5 ${
+                 counts[k] ? '' : 'opacity-55'}`}>
+            <span aria-hidden className={`grid size-7 shrink-0 place-items-center rounded-md ${ICON_BG[TILE_TONE[k]]}`}>
+              <Icon name={k === 'live' ? 'check' : k === 'planned' ? 'clock' : 'alert'} className="size-4" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="flex items-baseline gap-2">
+                <span className="figure text-[22px] leading-none">{counts[k]}</span>
+                <span className={`text-[12px] font-semibold ${
+                  k === 'live' ? 'text-good' : k === 'planned' ? 'text-warn' : 'text-critical'}`}>
+                  {STATE[k].label.toLowerCase()}
+                </span>
               </span>
-            </p>
-            <p className="mt-0.5 text-[10.5px] leading-snug text-ink-3">{STATE[k].blurb}</p>
+              <span className="mt-0.5 block text-[10.5px] leading-snug text-ink-3">{STATE[k].blurb}</span>
+            </span>
           </div>
         ))}
       </div>
@@ -126,7 +139,7 @@ export function Painkillers({ stage }: { stage: Stage }) {
                       <span className="block text-[12.5px] font-medium">{m.label}</span>
                       {m.note && <span className="block text-[11px] text-ink-3">{m.note}</span>}
                     </span>
-                    <span className="ml-auto shrink-0 text-[11px] font-medium text-accent">Open →</span>
+                    <span className="ml-auto shrink-0 text-[11px] font-medium text-accent-ink">Open →</span>
                   </Link>
                 </li>
               ))}

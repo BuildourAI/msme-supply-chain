@@ -2,6 +2,8 @@
 import { useEffect, useState } from 'react'
 import { Card, TONE_BAR } from '@/components/ui/bits'
 import { Num, type NumFormat } from '@/components/ui/Num'
+import { Sparkbars } from '@/components/ui/Sparkbars'
+import { Icon, type IconName } from '@/components/ui/icons'
 import type { Derived } from '@/lib/domain/types'
 import type { Kpi, Provenance } from '@/lib/domain/exec'
 import { PROVENANCE_LABEL } from '@/lib/domain/exec'
@@ -45,8 +47,25 @@ const PROVENANCE_TITLE: Record<Provenance, string> = {
  * size and one line, and the whole strip now costs about what one of the old
  * tiles did.
  */
+/** the tinted square behind a tile's icon, carrying the tone */
+export const ICON_BG: Record<Tone, string> = {
+  critical: 'bg-critical-soft text-critical',
+  warn: 'bg-warn-soft text-warn',
+  good: 'bg-good-soft text-good',
+  accent: 'bg-accent-icon text-accent-ink',
+  neutral: 'bg-surface-2 text-ink-2',
+}
+
+/** §10 — a status colour always arrives with the word that explains it */
+export const TONE_WORD: Partial<Record<Tone, string>> = {
+  critical: 'Act now', warn: 'Watch', good: 'On target',
+}
+
 export function HeadlineStrip({ cells }: {
-  cells: { label: string; d: Derived<unknown>; format?: NumFormat; tone: Tone; caption: string }[]
+  cells: {
+    label: string; d: Derived<unknown>; format?: NumFormat; tone: Tone; caption: string
+    icon?: IconName
+  }[]
 }) {
   // five cells in a 2- or 3-column grid leaves an orphan slot for 640px of
   // width; let the fifth span the row until there is room for all five
@@ -56,12 +75,31 @@ export function HeadlineStrip({ cells }: {
   return (
     <div className={`mb-3 grid gap-2 ${cols}`}>
       {cells.map((c, i) => (
-        <div key={c.label} style={{ '--i': i, '--tile-c': `var(--tile-${(i % 6) + 1})` } as React.CSSProperties}
-             className="anim-fade-up lift glass-tile flex items-stretch gap-2.5 rounded-lg border py-2 pr-2.5">
-          <span aria-hidden className={`w-[3px] shrink-0 rounded-r ${TONE_BAR[c.tone]}`} />
-          <div className="min-w-0 flex-1">
-            <span className="mono block truncate text-[9.5px] uppercase tracking-wider text-ink-2">{c.label}</span>
-            <Num d={c.d} format={c.format} size="lg" tone={c.tone === 'neutral' ? undefined : c.tone} />
+        <div key={c.label} style={{ '--i': i } as React.CSSProperties}
+             className="anim-fade-up lift kpi relative flex flex-col rounded-lg border p-2.5">
+          {/* the figure's own inputs, at the figure's own scale. Top right,
+              level with the icon square — at the bottom it sat on top of the
+              caption, and a chart drawn over a sentence is worse than no chart.
+              It is FIRST in the DOM because it is absolutely positioned: as the
+              last child it would leave the card's last laid-out box up at the
+              top, which reads to a density probe as 80px of empty card. */}
+          <Sparkbars d={c.d} className="absolute right-2.5 top-2.5 w-12 opacity-90" />
+          <span aria-hidden className={`grid size-6 shrink-0 place-items-center rounded-md ${ICON_BG[c.tone]}`}>
+            <Icon name={c.icon ?? 'activity'} className="size-3.5" />
+          </span>
+          <div className="mt-1.5 min-w-0">
+            {/* the label span carries `mono` itself and sits as a DIRECT child
+                of this div: exec-drive identifies a strip cell by exactly that
+                shape, and a wrapper row around the label would hide it */}
+            <span className="mono flex items-center gap-1.5 truncate text-[9.5px] uppercase tracking-wider text-ink-3">
+              <span className="truncate">{c.label}</span>
+              {TONE_WORD[c.tone] && (
+                <span className={`shrink-0 rounded-full px-1.5 text-[9px] font-semibold leading-[15px] ${ICON_BG[c.tone]}`}>
+                  {TONE_WORD[c.tone]}
+                </span>
+              )}
+            </span>
+            <Num d={c.d} format={c.format} size="lg" />
             <span className="block truncate text-[10.5px] leading-tight text-ink-2" title={c.caption}>{c.caption}</span>
           </div>
         </div>
@@ -90,17 +128,22 @@ function ExecTile({ k, index, chart, notes }: {
       : k.meetsTarget === false ? 'critical'
       : undefined
   return (
-    <div style={{ '--i': index, '--tile-c': `var(--tile-${(index % 6) + 1})` } as React.CSSProperties}
-         className={`anim-fade-up lift glass-tile flex flex-col rounded-lg border p-3.5 ${
+    <div style={{ '--i': index } as React.CSSProperties}
+         className={`anim-fade-up lift kpi flex flex-col rounded-lg border p-3 ${
            k.provenance === 'illustrative' ? 'border-dashed !border-ink-3' : ''}`}>
-      <h3 className="text-[17px] font-bold leading-tight tracking-tight">{k.label}</h3>
+      <h3 className="text-[15px] font-bold leading-tight tracking-tight">{k.label}</h3>
 
       <p className="mt-1.5 flex flex-wrap items-baseline gap-x-2">
         <Num d={k.d} format={k.format} dp={k.dp} suffix={k.suffix} size="lg" tone={tone} />
         {k.target && (
-          <span className={`text-[10.5px] ${
-            k.meetsTarget === true ? 'text-good' : k.meetsTarget === false ? 'text-critical' : 'text-ink-3'}`}>
-            {k.meetsTarget === true ? '✓ ' : k.meetsTarget === false ? '✗ ' : ''}target {k.target}
+          // the reference's delta chip: the arrow and the colour agree, and the
+          // word "target" is there so neither has to carry the meaning alone
+          <span className={`inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 text-[10px] font-semibold leading-[17px] ${
+            k.meetsTarget === true ? 'bg-good-soft text-good'
+              : k.meetsTarget === false ? 'bg-critical-soft text-critical'
+              : 'bg-surface-2 text-ink-2'}`}>
+            <span aria-hidden>{k.meetsTarget === true ? '↗' : k.meetsTarget === false ? '↘' : '·'}</span>
+            target {k.target}
           </span>
         )}
       </p>
@@ -113,7 +156,7 @@ function ExecTile({ k, index, chart, notes }: {
           chip as a pill on the right — where the reference puts its badge */}
       <div className="mt-auto flex items-center gap-2 border-t border-line-soft pt-1.5">
         <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
-          className="flex min-w-0 flex-1 items-center gap-1 text-left text-[10.5px] text-ink-2 transition-colors hover:text-accent">
+          className="flex min-w-0 flex-1 items-center gap-1 text-left text-[10.5px] text-ink-2 transition-colors hover:text-accent-ink">
           <span aria-hidden className={`inline-block transition-transform ${open ? 'rotate-90' : ''}`}>›</span>
           {open ? 'Hide the note' : 'What this means'}
         </button>
@@ -188,7 +231,7 @@ export function AssumptionLedger({ assumptions }: {
               <li key={a.id} className="flex flex-wrap gap-x-4 gap-y-1 px-4 py-2">
                 <span className="w-52 shrink-0">
                   <span className="block text-[12px] font-medium">{a.label}</span>
-                  <span className="num block text-[12px] text-accent">
+                  <span className="num block text-[12px] text-accent-ink">
                     {a.value.toLocaleString('en-IN')} <span className="text-[10.5px] text-ink-3">{a.unit}</span>
                   </span>
                 </span>
