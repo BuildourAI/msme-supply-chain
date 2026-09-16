@@ -24,49 +24,55 @@ function Filters() {
     { id: 'open_po_covers', label: 'Open PO covers' },
     { id: 'covered', label: 'Covered' },
   ]
+  const chipCls = (on: boolean) =>
+    `press shrink-0 rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
+      on ? 'border-accent bg-accent-soft text-accent-ink' : 'border-line text-ink-2 hover:bg-surface-2'}`
+
+  /* One flat row: search, the six status chips, the count, then the two view
+     controls. It was four rows, because the chips sat in their own wrapping
+     box and the view controls in another — each wrapped before the strip did.
+     Everything is a direct child now, so the strip fills a line before it
+     breaks, and it only breaks under about 1,000px of table width. */
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-line-soft px-4 py-2.5">
-      <input value={state.query} onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search material or supplier" aria-label="Search"
-        className="w-52 rounded-md border border-line bg-surface-2 px-2.5 py-1 text-[12.5px] outline-none focus:border-accent" />
-      <div className="flex flex-wrap gap-1.5">
-        {chips.map((c) => (
-          <button key={c.id} type="button" onClick={() => setFilter(c.id)}
-            className={`rounded-full border px-2.5 py-0.5 text-[11.5px] transition-colors ${
-              state.statusFilter === c.id
-                ? 'border-accent bg-accent-soft text-accent-ink'
-                : 'border-line text-ink-2 hover:bg-surface-2'}`}>
-            {c.label}
-          </button>
-        ))}
-      </div>
-      <span className="mono ml-auto text-[11px] text-ink-3">
-        showing {visible.length} of {rows.length}
+    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2 border-b border-line-soft px-4 py-2">
+      <label className="relative shrink-0">
+        <Icon name="search" aria-hidden
+              className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-ink-4" />
+        <input value={state.query} onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search" aria-label="Search"
+          className="w-36 rounded-md border border-line bg-surface-2 py-1 pl-7 pr-2 text-[12px] outline-none focus:border-accent" />
+      </label>
+
+      {chips.map((c) => (
+        <button key={c.id} type="button" onClick={() => setFilter(c.id)}
+          className={chipCls(state.statusFilter === c.id)}>
+          {c.label}
+        </button>
+      ))}
+
+      <span className="mono ml-auto shrink-0 pl-1 text-[11px] text-ink-3">
+        {visible.length} of {rows.length}
       </span>
-      {/* the two view controls travel together, so a narrow strip wraps them
-          onto the same line rather than stranding one of them */}
-      <div className="flex items-center gap-2">
+
       {/* The summary table answers "which lines need me". The four columns
-            behind this button answer "why, and at what price" — a different
-            question, asked less often, and carrying four columns of arithmetic
-            into every glance is what made this table hard to read. Only offered
-            on the summary view: full detail already shows all of it. */}
-        {state.view === 'summary' && (
-          <button type="button" onClick={toggleWorking} aria-pressed={state.working}
-            title="Usable stock, the reorder point, cover left, the landed rate — and each material's full name"
-            className={`press inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11.5px] font-medium transition-colors ${
-              state.working
-                ? 'border-accent bg-accent-soft text-accent-ink'
-                : 'border-line text-ink-2 hover:bg-surface-2'}`}>
-            <Icon name="chevron" className={`size-3 transition-transform duration-200 ${
-              state.working ? 'rotate-90' : ''}`} />
-            {state.working ? 'Hide the working' : 'Show the working'}
-            {!state.working && <span className="mono text-[10px] text-ink-3">4 cols</span>}
-          </button>
-        )}
-        <Segmented label="Table view" value={state.view} onChange={setView}
-          options={[{ id: 'summary', label: 'Summary' }, { id: 'detail', label: 'Full detail' }]} />
-      </div>
+          behind this button answer "why, and at what price" — a different
+          question, asked less often, and carrying four columns of arithmetic
+          into every glance is what made this table hard to read. Only offered
+          on the summary view: full detail already shows all of it. */}
+      {state.view === 'summary' && (
+        <button type="button" onClick={toggleWorking} aria-pressed={state.working}
+          title="Usable stock, the reorder point, cover left, the landed rate — and each material's full name"
+          className={`press inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors ${
+            state.working
+              ? 'border-accent bg-accent-soft text-accent-ink'
+              : 'border-line text-ink-2 hover:bg-surface-2'}`}>
+          <Icon name="chevron" className={`size-3 transition-transform duration-200 ${
+            state.working ? 'rotate-90' : ''}`} />
+          {state.working ? 'Hide the working' : 'Show the working'}
+        </button>
+      )}
+      <Segmented label="Table view" value={state.view} onChange={setView}
+        options={[{ id: 'summary', label: 'Summary' }, { id: 'detail', label: 'Full detail' }]} />
     </div>
   )
 }
@@ -75,7 +81,7 @@ function DeskTab() {
   const { kpis, setFilter, state, selected } = useDesk()
   return (
     <>
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="mb-3 grid gap-2.5 sm:grid-cols-3">
         <KpiTile index={0} label="Lines needing a decision" d={kpis.linesNeedingDecision} format="int"
           tone="critical" icon="alert" active={state.statusFilter === 'needs_decision'}
           onClick={() => setFilter(state.statusFilter === 'needs_decision' ? 'all' : 'needs_decision')}

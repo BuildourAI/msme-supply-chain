@@ -28,15 +28,15 @@ export function KpiTile({ label, d, format, caption, tone = 'neutral', onClick, 
 }) {
   return (
     <div style={{ '--i': index } as React.CSSProperties}
-         className={`anim-fade-up lift kpi relative flex flex-col rounded-lg border p-3 ${active ? '!border-accent' : ''}`}>
+         className={`anim-fade-up lift kpi relative flex flex-col rounded-lg border p-2.5 ${active ? '!border-accent' : ''}`}>
       {/* absolutely positioned, so it goes first: as the last child it
           leaves the tile's last laid-out box at the top and the tile reads
           as mostly empty to a density probe */}
-      <Sparkbars d={d} className="absolute right-3 top-3 w-12 opacity-90" />
+      <Sparkbars d={d} className="absolute right-2.5 top-2.5 w-12 opacity-90" />
       <span aria-hidden className={`grid size-7 shrink-0 place-items-center rounded-md ${ICON_BG[tone]}`}>
         <Icon name={icon ?? 'activity'} className="size-4" />
       </span>
-      <span className="mono mt-2 flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-ink-3">
+      <span className="mono mt-1.5 flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-ink-3">
         <span className="truncate">{label}</span>
         {/* §10 — a status colour always arrives with the word that explains it */}
         {TONE_WORD[tone] && (
@@ -48,10 +48,10 @@ export function KpiTile({ label, d, format, caption, tone = 'neutral', onClick, 
       <span className="mt-0.5 block">
         <Num d={d} format={format} size="display" suffix={suffix} />
       </span>
-      <span className="mt-1 block text-[11.5px] leading-snug text-ink-2">{caption}</span>
+      <span className="mt-0.5 block text-[11px] leading-snug text-ink-2">{caption}</span>
       {onClick && (
         <button type="button" onClick={onClick} aria-pressed={active}
-          className={`press mt-1.5 self-start rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${
+          className={`press mt-1.5 self-start rounded-md border px-1.5 py-0.5 text-[10.5px] font-medium ${
             active ? 'border-accent bg-accent-tint text-accent-ink' : 'border-line text-ink-2 hover:bg-surface-2'}`}>
           {active ? 'Showing only these' : (actionLabel ?? 'Show only these')}
         </button>

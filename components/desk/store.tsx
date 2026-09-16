@@ -79,7 +79,11 @@ type Action =
 const initial: State = {
   selectedId: 'EL-TUB-INC85',
   overrides: {}, decisions: {}, view: 'summary', working: false,
-  sort: { col: 'status', dir: 'asc' }, query: '', statusFilter: 'all',
+  sort: { col: 'status', dir: 'asc' }, query: '',
+  // The desk opens on the lines that need a person, not on all nine. A buyer
+  // arriving in the morning wants the four that crossed a threshold overnight;
+  // the covered ones are there in one click and the chip says so.
+  statusFilter: 'needs_decision',
   policy: DEFAULT_POLICY,
   intake: Object.fromEntries(reviewQueue.map((l) => [l.id, 'pending' as const])),
   aliases: seededAliases,
