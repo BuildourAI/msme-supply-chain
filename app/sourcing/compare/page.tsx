@@ -96,21 +96,23 @@ export default function Page() {
                     <span className="min-w-0 flex-1">
                       <span className="flex items-baseline gap-2">
                         <span className="mono shrink-0 text-[10.5px] text-ink-3">{v.r.item.code}</span>
-                        <span className="min-w-0 truncate text-[12.5px]" title={v.r.item.name}>{v.r.item.name}</span>
+                        <span className="min-w-0 text-[12.5px] 2xl:truncate" title={v.r.item.name}>{v.r.item.name}</span>
                       </span>
-                      <span className="mt-0.5 block truncate text-[11px] text-ink-3"
+                      <span className="mt-0.5 block text-[11px] leading-[1.45] text-ink-3 2xl:truncate"
                         title={`${v.cheap.vendor.name} quotes ${money(v.cheap.vendorItem.rate, 2)}; ${v.best.vendor.name} lands at ${money(v.best.landedPerUnit.value, 2)} — ${v.flips ? 'flips' : 'confirms'} the vendor`}>
                         {v.cheap.vendor.name} <span className="num">{money(v.cheap.vendorItem.rate, 2)}</span>
                         <span aria-hidden className="mx-1">→</span>
                         {v.flips ? v.best.vendor.name : 'same vendor'}{' '}
                         <span className="num">{money(v.best.landedPerUnit.value, 2)}</span>/{v.r.item.uom}
                         {' · '}{v.flips ? 'flips' : 'confirms'}
-                        {/* on a laptop the two vendors and their rates are what
-                            the row is for; the rupee cost of the gap is already
-                            on the right of the row, in the card beside it and in
-                            this row's tooltip, so it is the part that gives way
-                            when the column is narrow */}
-                        <span className="hidden xl:inline">
+                        {/* The line wraps rather than truncating until 1536,
+                            where it fits on one line with this tail on the end.
+                            Below that the tail waits: a trimmed “₹8,30…” is
+                            worse than a clean omission, and the figure is never
+                            lost — the per-unit gap is on the same row, and the
+                            rupee cost is in this row's tooltip and in the card
+                            beside it. */}
+                        <span className="hidden 2xl:inline">
                           {' · '}{v.onThisOrder > 0
                             ? <span className="num">{money(v.onThisOrder)} on order</span>
                             : 'nothing to order'}
@@ -118,7 +120,7 @@ export default function Page() {
                       </span>
                     </span>
 
-                    <span className="shrink-0 text-right">
+                    <span className="shrink-0 self-start text-right">
                       <span className="num block text-[12px] font-medium">
                         {v.perUnit > 0
                           ? <span className="text-warn">+{money(v.perUnit, 2)}</span>
