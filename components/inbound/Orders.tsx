@@ -1,7 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { Button, Card, Pill, StatusPill } from '@/components/ui/bits'
-import { Note } from '@/components/ui/Note'
 import { Dialog } from '@/components/ui/Dialog'
 import { Num } from '@/components/ui/Num'
 import { money, num, qtyText, shortDate } from '@/lib/domain/format'
@@ -166,10 +165,9 @@ function LineCard({ row, onRevise, onAck }: {
   const latest = latestRevision(s)
   const out = row.state !== 'acknowledged'
   const short = row.gap.value > 0
-  const scale = Math.max(row.internal.value, row.vendorKnown.value, 1) * 1.05
 
   return (
-    <li data-po={s.poNo} className={`anim-fade-up panel mb-2.5 break-inside-avoid rounded-lg border p-3 ${
+    <li className={`anim-fade-up lift panel rounded-lg border p-3.5 ${
       row.state === 'not_told' ? 'border-critical/40' : row.state === 'awaiting_ack' ? 'border-warn/40' : 'border-line'}`}>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="mono text-[12.5px] font-medium">{s.poNo}</span>
@@ -182,30 +180,23 @@ function LineCard({ row, onRevise, onAck }: {
         </span>
       </div>
 
-      {/* The whole point of the system, drawn: two quantities on one scale, so
-          the gap between what we need and what they are making is a length
-          rather than a subtraction the reader has to do. */}
-      <div className="mt-2.5 space-y-1.5">
-        {[
-          { k: 'What we need', d: row.internal, v: row.internal.value,
-            sub: `v${latest.version} · ${latest.changedBy} · ${shortDate(latest.changedOn)}`,
-            cls: 'bg-accent', tone: undefined as 'warn' | undefined },
-          { k: 'What the vendor is making', d: row.vendorKnown, v: row.vendorKnown.value,
-            sub: `v${s.ackedVersion} · ${s.ackedOn ? `acknowledged ${shortDate(s.ackedOn)}` : 'never acknowledged'}`,
-            cls: out ? 'bg-warn' : 'bg-accent', tone: out ? 'warn' as const : undefined },
-        ].map((b) => (
-          <div key={b.k}>
-            <p className="flex flex-wrap items-baseline gap-x-2 text-[11.5px] text-ink-3">
-              <span>{b.k}</span>
-              <Num d={b.d} format="raw" dp={3} suffix={` ${row.uom}`} tone={b.tone} />
-              <span className="mono ml-auto text-[10.5px]">{b.sub}</span>
-            </p>
-            <span className="mt-0.5 block h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
-              <span className={`anim-reveal block h-full rounded-full ${b.cls}`}
-                    style={{ width: `${Math.max(2, (b.v / scale) * 100)}%` }} />
-            </span>
-          </div>
-        ))}
+      {/* the two quantities, side by side — the whole point of the system */}
+      <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
+        <div className="rounded-md border border-line bg-surface-2 p-2.5">
+          <p className="mono text-[10px] uppercase tracking-wider text-ink-3">What we need</p>
+          <p className="mt-0.5"><Num d={row.internal} format="raw" dp={3} size="lg" suffix={` ${row.uom}`} /></p>
+          <p className="mt-0.5 text-[11px] text-ink-3">
+            v{latest.version} · {latest.changedBy} · {shortDate(latest.changedOn)}
+          </p>
+        </div>
+        <div className={`rounded-md border p-2.5 ${out ? 'border-warn/40 bg-warn-soft' : 'border-line bg-surface-2'}`}>
+          <p className="mono text-[10px] uppercase tracking-wider text-ink-3">What the vendor is making</p>
+          <p className="mt-0.5"><Num d={row.vendorKnown} format="raw" dp={3} size="lg" suffix={` ${row.uom}`}
+            tone={out ? 'warn' : undefined} /></p>
+          <p className="mt-0.5 text-[11px] text-ink-3">
+            v{s.ackedVersion} · {s.ackedOn ? `acknowledged ${shortDate(s.ackedOn)}` : 'never acknowledged'}
+          </p>
+        </div>
       </div>
 
       {out && (
@@ -318,10 +309,7 @@ export function OrderSync() {
             <Pill tone="good">{syncRows.filter((r) => r.state === 'acknowledged').length} in sync</Pill>
           </div>
 
-          {/* Columns, not a stack: a line card is half a screen wide at most,
-              and four of them one under another is three screens of scrolling
-              for four orders. */}
-          <ul className="md:columns-2 [column-gap:0.625rem]">
+          <ul className="space-y-3">
             {open.map((r, i) => (
               <div key={r.sync.poLineId} style={{ '--i': Math.min(i, 5) } as React.CSSProperties}>
                 <LineCard row={r} onRevise={() => setRevising(r)} onAck={() => setAcking(r)} />
@@ -334,7 +322,7 @@ export function OrderSync() {
               <p className="mono mt-4 text-[10px] uppercase tracking-wider text-ink-3">
                 Closed on receipt — kept because the receipt proves the point
               </p>
-              <ul className="mt-1.5 md:columns-2 [column-gap:0.625rem]">
+              <ul className="mt-1.5 space-y-3">
                 {received.map((r) => (
                   <LineCard key={r.sync.poLineId} row={r} onRevise={() => setRevising(r)} onAck={() => setAcking(r)} />
                 ))}
@@ -342,13 +330,14 @@ export function OrderSync() {
             </>
           )}
 
+          <p className="mt-4 rounded-md border border-line bg-surface-2 p-3 text-[12.5px] leading-relaxed text-ink-2">
+            <strong className="text-ink">The design decision worth arguing about.</strong> Every cover
+            calculation on this system uses the vendor-acknowledged quantity, not the internal one.
+            Raising a number in your own system does not make more material appear — so an internal
+            change improves nothing until the vendor has confirmed it. That is why the exposure figure
+            above only goes down when someone actually talks to a supplier.
+          </p>
         </div>
-        <Note foot label="The design decision worth arguing about">
-          Every cover calculation on this system uses the vendor-acknowledged quantity, not the
-          internal one. Raising a number in your own system does not make more material appear — so an
-          internal change improves nothing until the vendor has confirmed it. That is why the exposure
-          figure above only goes down when someone actually talks to a supplier.
-        </Note>
       </Card>
 
       <NoticeDraft />
@@ -404,12 +393,13 @@ export function InboundBoard({ lines, span = 26 }: {
             </li>
           ))}
         </ul>
+        <p className="mt-4 rounded-md border border-warn/30 bg-warn-soft p-3 text-[12.5px] leading-relaxed text-ink-2">
+          <strong className="text-ink">PO-2611 is still the case worth looking at.</strong> MgO is covered
+          on quantity — 610 against a reorder point of 480 — but the material lands nine days after the
+          line runs dry. That is a timing problem, so the answer is to expedite the open order, not to
+          raise a second one. The system does not buy its way out of a late delivery.
+        </p>
       </div>
-      <Note foot label="PO-2611 is still the case worth looking at">
-        MgO is covered on quantity — 610 against a reorder point of 480 — but the material lands nine
-        days after the line runs dry. That is a timing problem, so the answer is to expedite the open
-        order, not to raise a second one. The system does not buy its way out of a late delivery.
-      </Note>
     </Card>
   )
 }
