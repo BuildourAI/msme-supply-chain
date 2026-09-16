@@ -1,5 +1,7 @@
 'use client'
+import { useState } from 'react'
 import type { Tone } from '@/lib/domain/format'
+import { Icon } from '@/components/ui/icons'
 import { useSlidingIndicator } from './Tabs'
 
 export const TONE_BG: Record<Tone, string> = {
@@ -63,6 +65,7 @@ export function Card({ title, sub, live, annotation, actions, children, id, clas
       sit on the frame instead of on a third slab */
   flat?: boolean
 }) {
+  const [showSub, setShowSub] = useState(false)
   return (
     <section id={id} style={{ '--i': index } as React.CSSProperties}
              className={`anim-fade-up min-w-0 rounded-lg border ${
@@ -70,8 +73,24 @@ export function Card({ title, sub, live, annotation, actions, children, id, clas
       {(title || actions) && (
         <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line-soft px-3.5 py-2.5">
           <div className="min-w-0">
-            <h2 className="text-[14.5px] font-bold leading-tight tracking-tight">{title}</h2>
-            {sub && <p className="mt-0.5 text-[12px] text-ink-3">{sub}</p>}
+            <span className="flex items-baseline gap-1.5">
+              <h2 className="text-[14.5px] font-bold leading-tight tracking-tight">{title}</h2>
+              {/* The subtitle says what the panel is FOR. That is worth having
+                  and worth reading once — but a sentence under every one of
+                  seventeen card titles is a page that reads as prose with
+                  tables in it. It folds behind the ⓘ, like every other
+                  explanation in the app. */}
+              {sub && (
+                <button type="button" onClick={() => setShowSub((v) => !v)}
+                  aria-expanded={showSub}
+                  aria-label={title ? `What ${title} shows` : 'What this panel shows'}
+                  className={`press shrink-0 self-center rounded transition-colors ${
+                    showSub ? 'text-accent-ink' : 'text-ink-4 hover:text-ink-2'}`}>
+                  <Icon name="info" className="size-3.5" />
+                </button>
+              )}
+            </span>
+            {sub && showSub && <p className="anim-drop mt-0.5 text-[12px] text-ink-3">{sub}</p>}
           </div>
           {live && (
             <span className="mono inline-flex items-center gap-1 rounded-full bg-good-soft px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-good">
