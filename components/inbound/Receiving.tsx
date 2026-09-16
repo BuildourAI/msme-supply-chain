@@ -1,7 +1,9 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Button, Card, Pill, StatusPill } from '@/components/ui/bits'
+import { Icon, type IconName } from '@/components/ui/icons'
+import { Dumbbell } from '@/components/charts/exec-charts'
 import { Dialog } from '@/components/ui/Dialog'
 import { Num } from '@/components/ui/Num'
 import { money, num, qtyText, shortDate } from '@/lib/domain/format'
@@ -17,6 +19,12 @@ const QC_LABEL: Record<string, string> = {
 }
 const KIND_LABEL: Record<SpecCheck['kind'], string> = {
   measure: 'measure', document: 'certificate', visual: 'visual', count: 'count',
+}
+/* what kind of check it is, as a picture — a ruler, a certificate, an eye, a
+   tally. The word rides along as the title and for a screen reader, so the
+   glyph is never carrying the meaning by itself. */
+const KIND_ICON: Record<SpecCheck['kind'], IconName> = {
+  measure: 'ruler', document: 'doc', visual: 'eye', count: 'hash',
 }
 
 /* ------------------------------------------------------ the inspection sheet */
@@ -213,70 +221,137 @@ function InspectionSheet() {
 
 /* ------------------------------------------------------------- the queue --- */
 
+const QC_RAIL: Record<string, string> = {
+  fresh: 'bg-accent', at_limit: 'bg-warn', overdue: 'bg-critical',
+}
+const QC_FILL: Record<string, string> = {
+  fresh: 'bg-accent', at_limit: 'bg-warn', overdue: 'bg-critical',
+}
+
+/**
+ * How long this receipt has been standing at the gate, against the two dates
+ * that matter: the day the QC window closes and the day it escalates.
+ *
+ * It replaces four separate sentences — received on, in QC N days, issuable
+ * from, and the policy line — with one picture where "past the limit" is a
+ * thing you see rather than a thing you work out from two dates.
+ */
+function QcClock({ row }: { row: GrnRow }) {
+  const { policy } = useInbound()
+  const age = row.age.value
+  const scale = Math.max(age, policy.qcOverdueDays + 1) * 1.1
+  const at = (d: number) => `${Math.min(99.5, (d / scale) * 100)}%`
+  return (
+    <div className="mt-2" title={`Received ${shortDate(row.grn.receivedOn)} · issuable from ${shortDate(row.issuable.value)} if closed on time`}>
+      <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
+        <div className={`anim-reveal h-full rounded-full ${QC_FILL[row.state]}`} style={{ width: at(age) }} />
+        <div aria-hidden className="absolute top-0 h-full w-[2px] bg-ink/45" style={{ left: at(policy.inboundQcDays) }} />
+        <div aria-hidden className="absolute top-0 h-full w-[2px] bg-ink" style={{ left: at(policy.qcOverdueDays) }} />
+      </div>
+      <p className="mt-1 flex flex-wrap items-baseline gap-x-2 text-[10.5px] text-ink-3">
+        <span className="mono">received {shortDate(row.grn.receivedOn)}</span>
+        <Num d={row.age} format="days" dp={0} size="sm"
+             suffix={row.age.value === 1 ? ' day at the gate' : ' days at the gate'}
+             tone={row.state === 'overdue' ? 'critical' : row.state === 'at_limit' ? 'warn' : undefined}
+             className="text-[10.5px]" />
+        <span className="ml-auto flex items-center gap-1">
+          <span aria-hidden className="inline-block h-2 w-[2px] translate-y-[1px] bg-ink/45" />
+          {policy.inboundQcDays}d window
+          <span aria-hidden className="ml-1.5 inline-block h-2 w-[2px] translate-y-[1px] bg-ink" />
+          {policy.qcOverdueDays}d escalate
+        </span>
+      </p>
+    </div>
+  )
+}
+
+/**
+ * One pip per check on the item's spec: hollow until it is marked, green on a
+ * pass, red on a fail. Five receipts' worth of "0 of 3 checks marked" is a
+ * sentence you read; a row of pips is a thing you glance at. The words stay
+ * beside them, because a colour never carries a state alone (§10).
+ */
+function CheckPips({ row }: { row: GrnRow }) {
+  const marked = row.results.filter((r) => r.outcome !== 'not_checked').length
+  if (row.checks.length === 0) return null
+  return (
+    <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-ink-3">
+      <span aria-hidden className="flex items-center gap-1">
+        {row.checks.map((c) => {
+          const o = row.results.find((r) => r.checkId === c.id)?.outcome ?? 'not_checked'
+          return (
+            <span key={c.id} title={`${c.label} — ${o === 'not_checked' ? 'not marked yet' : o}`}
+              className={`size-2.5 rounded-full border ${
+                o === 'pass' ? 'border-good bg-good'
+                  : o === 'fail' ? 'border-critical bg-critical'
+                  : 'border-ink-4'}`} />
+          )
+        })}
+      </span>
+      <span>{marked} of {row.checks.length} checks marked</span>
+    </p>
+  )
+}
+
 function QueueCard({ row }: { row: GrnRow }) {
   const { openInspection, policy } = useInbound()
   const g = row.grn
   return (
-    <li style={{ '--i': 0 } as React.CSSProperties}
-        className={`anim-fade-up lift panel rounded-lg border p-3.5 ${
+    <li data-grn={g.grnNo} style={{ '--i': 0 } as React.CSSProperties}
+        className={`anim-fade-up relative mb-2.5 flex break-inside-avoid flex-col overflow-hidden rounded-md border bg-surface pl-2.5 ${
           row.state === 'overdue' ? 'border-critical/40' : 'border-line'}`}>
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className="mono text-[12.5px] font-medium">{g.grnNo}</span>
-        <span className="text-[13px]">{g.itemName}</span>
-        <span className="mono text-[11px] text-ink-3">{qtyText(g.qtyReceived, g.uom)}</span>
-        <span className="ml-auto">
-          <StatusPill tone={QC_TONE[row.state]} label={QC_LABEL[row.state]}
-            explain={`Policy allows ${policy.inboundQcDays} days of inbound QC and escalates past ${policy.qcOverdueDays}.`} />
-        </span>
+      <span aria-hidden className={`absolute inset-y-0 left-0 w-1 ${QC_RAIL[row.state]}`} />
+
+      <div className="px-2.5 pb-2.5 pt-2.5">
+        <div className="flex items-start justify-between gap-2">
+          <span className="mono text-[11.5px] font-medium text-ink-2">{g.grnNo}</span>
+          <span className="shrink-0">
+            <StatusPill tone={QC_TONE[row.state]} label={QC_LABEL[row.state]}
+              explain={`Policy allows ${policy.inboundQcDays} days of inbound QC and escalates past ${policy.qcOverdueDays}.`} />
+          </span>
+        </div>
+        <p className="mt-0.5 truncate text-[13px] font-medium" title={g.itemName}>{g.itemName}</p>
+        <p className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-[11px] text-ink-3">
+          <span className="mono">{qtyText(g.qtyReceived, g.uom)}</span>
+          <span>{g.challanId ? 'jobwork return from' : 'from'} {g.vendorName}</span>
+          {g.poNo && (
+            <span className="mono">{g.poNo}{g.againstVersion ? ` · shipped against v${g.againstVersion}` : ''}</span>
+          )}
+          {g.challanId && (
+            <Link href="/inbound/jobwork" onClick={(e) => e.stopPropagation()}
+              className="mono text-accent-ink hover:underline">challan {g.challanId}</Link>
+          )}
+        </p>
+
+        <QcClock row={row} />
+        <CheckPips row={row} />
+
+        {row.staleAgainst && (
+          <p className="mt-2 rounded-md border border-critical/30 bg-critical-soft p-2 text-[11.5px] leading-relaxed text-ink-2">
+            <strong className="text-ink">This is a stale order arriving.</strong> {g.vendorName} shipped{' '}
+            {qtyText(row.staleAgainst.received, g.uom)} against v{g.againstVersion}. Internally the line moved to{' '}
+            v{row.staleAgainst.sync.revisions[row.staleAgainst.sync.revisions.length - 1].version} —{' '}
+            {qtyText(row.staleAgainst.internal, g.uom)} — and the notice never went out. That is{' '}
+            {qtyText(row.staleAgainst.internal - row.staleAgainst.received, g.uom)} short, and it is a
+            communication failure, not a supply failure.{' '}
+            <Link href="/inbound/orders" className="font-medium text-accent-ink hover:underline">Open INB-02 →</Link>
+          </p>
+        )}
+
+        {row.checks.length === 0 && (
+          <p className="mt-2 rounded-md border border-warn/30 bg-warn-soft p-2 text-[11.5px] leading-relaxed text-ink-2">
+            No inspection spec on file. Received unchecked — booked in, never blocked, and never counted as cover.
+          </p>
+        )}
       </div>
 
-      <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] text-ink-3">
-        <span>{g.challanId ? 'Jobwork return from' : 'From'} {g.vendorName}</span>
-        {g.poNo && <span className="mono">{g.poNo}{g.againstVersion ? ` · shipped against v${g.againstVersion}` : ''}</span>}
-        {g.challanId && <Link href="/inbound/jobwork" className="mono text-accent-ink hover:underline">challan {g.challanId}</Link>}
-        <span>received {shortDate(g.receivedOn)}</span>
-        <span>issuable from {shortDate(row.issuable.value)} if closed on time</span>
-      </p>
-
-      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px]">
-        <span className="text-ink-3">
-          In QC <Num d={row.age} format="days" dp={0} suffix={row.age.value === 1 ? ' day' : ' days'} />
-        </span>
-        <span className="text-ink-3">
-          Value <Num d={row.value} format="money" />
-        </span>
-        <span className="text-ink-3">
-          {g.vendorName} trailing rejection <Num d={row.trailing} format="raw" dp={2} suffix="%" />
-        </span>
-        <span className="mono ml-auto text-[11px] text-ink-3">
-          {row.checks.length
-            ? `${row.results.filter((r) => r.outcome !== 'not_checked').length} of ${row.checks.length} checks marked`
-            : 'no spec on file'}
-        </span>
-      </div>
-
-      {row.staleAgainst && (
-        <p className="mt-2 rounded-md border border-critical/30 bg-critical-soft p-2.5 text-[12px] leading-relaxed text-ink-2">
-          <strong className="text-ink">This is a stale order arriving.</strong> {g.vendorName} shipped{' '}
-          {qtyText(row.staleAgainst.received, g.uom)} against v{g.againstVersion}. Internally the line moved to{' '}
-          v{row.staleAgainst.sync.revisions[row.staleAgainst.sync.revisions.length - 1].version} —{' '}
-          {qtyText(row.staleAgainst.internal, g.uom)} — and the notice never went out. That is{' '}
-          {qtyText(row.staleAgainst.internal - row.staleAgainst.received, g.uom)} short, and it is a
-          communication failure, not a supply failure.{' '}
-          <Link href="/inbound/orders" className="font-medium text-accent-ink hover:underline">Open INB-02 →</Link>
-        </p>
-      )}
-
-      {row.checks.length === 0 && (
-        <p className="mt-2 rounded-md border border-warn/30 bg-warn-soft p-2.5 text-[12px] leading-relaxed text-ink-2">
-          No inspection spec on file. Received unchecked — booked in, never blocked, and never counted as cover.
-        </p>
-      )}
-
-      <div className="mt-2.5 flex flex-wrap gap-2">
+      <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-line-soft px-2.5 py-2">
         <Button size="sm" variant="primary" onClick={() => openInspection(g.id)}>
           {row.results.some((r) => r.outcome !== 'not_checked') ? 'Continue inspection' : 'Inspect & close'}
         </Button>
+        <span className="ml-auto text-[11px] text-ink-3">
+          held <Num d={row.value} format="money" size="sm" className="text-[11px]" />
+        </span>
       </div>
     </li>
   )
@@ -285,6 +360,12 @@ function QueueCard({ row }: { row: GrnRow }) {
 export function ReceivingQueue() {
   const { queue, qcHeld, policy } = useInbound()
   const overdue = queue.filter((r) => r.state === 'overdue')
+  const n = queue.length
+  /* Columns rather than a grid: one receipt carries a stale-order callout and
+     runs twice the height of its neighbours, and a grid row sizes to its
+     tallest card — which would leave two cards' worth of white space beside
+     it. Multi-column flows the cards instead, so the gate packs tight. */
+  const cols = n <= 1 ? '' : n === 2 ? 'md:columns-2' : 'md:columns-2 xl:columns-3'
   return (
     <>
       <Card index={1} title="At the gate" live
@@ -293,27 +374,27 @@ export function ReceivingQueue() {
         actions={<span className="text-[12px] text-ink-3">
           Held in QC <Num d={qcHeld} format="money" />
         </span>}>
-        <div className="p-4">
-          {queue.length === 0 ? (
-            <p className="rounded-md border border-good/30 bg-good-soft p-3 text-[12.5px] leading-relaxed text-ink-2">
-              Nothing waiting at the gate. Every receipt has a closed GRN behind it, which means every
-              quantity on the Inventory page has been looked at by a person against a written spec.
-            </p>
-          ) : (
-            <ul className="space-y-3">{queue.map((r) => <QueueCard key={r.grn.id} row={r} />)}</ul>
-          )}
+        {queue.length === 0 ? (
+          <p className="m-4 rounded-md border border-good/30 bg-good-soft p-3 text-[12.5px] leading-relaxed text-ink-2">
+            Nothing waiting at the gate. Every receipt has a closed GRN behind it, which means every
+            quantity on the Inventory page has been looked at by a person against a written spec.
+          </p>
+        ) : (
+          <ul className={`gap-2.5 p-3 [column-gap:0.625rem] ${cols}`}>
+            {queue.map((r) => <QueueCard key={r.grn.id} row={r} />)}
+          </ul>
+        )}
 
-          {overdue.length > 0 && (
-            <p className="mt-3 rounded-md border border-critical/30 bg-critical-soft p-3 text-[12.5px] leading-relaxed text-ink-2">
-              <strong className="text-ink">
-                {overdue.length === 1 ? 'One receipt is' : `${overdue.length} receipts are`} past the QC window.
-              </strong>{' '}
-              {overdue.map((r) => r.grn.grnNo).join(', ')} — material that has been paid for, is standing in
-              the store, and cannot be issued because nobody has looked at it. That is the gap this system
-              exists to make visible.
-            </p>
-          )}
-        </div>
+        {overdue.length > 0 && (
+          <Note foot label={`${overdue.length === 1 ? 'One receipt is' : `${overdue.length} receipts are`} past the QC window — what that costs`}>
+            <strong className="text-ink">
+              {overdue.length === 1 ? 'One receipt is' : `${overdue.length} receipts are`} past the QC window.
+            </strong>{' '}
+            {overdue.map((r) => r.grn.grnNo).join(', ')} — material that has been paid for, is standing in
+            the store, and cannot be issued because nobody has looked at it. That is the gap this system
+            exists to make visible.
+          </Note>
+        )}
       </Card>
       <InspectionSheet />
     </>
@@ -322,59 +403,189 @@ export function ReceivingQueue() {
 
 /* --------------------------------------------------------- closed history --- */
 
+type ClosedRow = ReturnType<typeof useInbound>['closedRows'][number]
+
+/** what a closed receipt turned out to be, in one word */
+function outcomeOf(r: ClosedRow): { key: 'clean' | 'rejected' | 'spike' | 'deviation'; label: string; tone: ToneT } {
+  if (r.deviationReason) return { key: 'deviation', label: 'deviation', tone: 'warn' }
+  if (r.spike) return { key: 'spike', label: 'spike', tone: 'critical' }
+  if ((r.grn.rejectedQty ?? 0) > 0) return { key: 'rejected', label: 'rejected', tone: 'warn' }
+  return { key: 'clean', label: 'clean', tone: 'good' }
+}
+
+/**
+ * Accepted against rejected, as one bar.
+ *
+ * The table put 491 and 9 in two columns and left the reader to work out that
+ * one is 98% of the other. The bar is that division, drawn.
+ */
+function SplitBar({ r, h = 'h-1.5' }: { r: ClosedRow; h?: string }) {
+  const total = r.grn.qtyReceived || 1
+  const rej = r.grn.rejectedQty ?? 0
+  const acceptedPct = ((total - rej) / total) * 100
+  return (
+    <span className={`block w-full overflow-hidden rounded-full bg-surface-3 ${h}`}>
+      <span className="anim-reveal flex h-full w-full">
+        <span className="h-full bg-good" style={{ width: `${acceptedPct}%` }} />
+        <span className="h-full bg-critical" style={{ width: `${100 - acceptedPct}%` }} />
+      </span>
+    </span>
+  )
+}
+
+/** The figures behind one tile — shown when a tile is asked to open. */
+function ClosedDetail({ r, onClose }: { r: ClosedRow; onClose: () => void }) {
+  const { reopenGrn } = useInbound()
+  const rej = r.grn.rejectedQty ?? 0
+  const failReason = r.grn.failedCheckIds?.length
+    ? r.checks.find((c) => c.id === r.grn.failedCheckIds![0])?.failReason
+    : null
+  return (
+    <div className="anim-drop mt-2.5 rounded-md border border-accent/30 bg-accent-soft/40 p-3">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <span className="mono text-[12px] font-medium">{r.grn.grnNo}</span>
+        <span className="text-[12.5px]">{r.grn.itemName}</span>
+        <span className="text-[11.5px] text-ink-3">{r.grn.vendorName}</span>
+        <span className="mono text-[11px] text-ink-3">received {shortDate(r.grn.receivedOn)}</span>
+        {r.grn.challanId && (
+          <span className="mono text-[11px] text-ink-3">jobwork return · {r.grn.challanId}</span>
+        )}
+        <span className="ml-auto flex shrink-0 gap-1.5">
+          <Button size="sm" variant="ghost" onClick={() => reopenGrn(r)}>Reopen</Button>
+          <Button size="sm" variant="ghost" onClick={onClose}>Close</Button>
+        </span>
+      </div>
+
+      <div className="mt-2"><SplitBar r={r} h="h-2" /></div>
+
+      <p className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[12px] text-ink-2">
+        {r.accepted ? <Num d={r.accepted} format="raw" dp={3} size="sm" /> : <span className="num">—</span>}
+        <span className="text-ink-3">accepted</span>
+        <span aria-hidden className="text-ink-4">·</span>
+        <span className={`num ${rej > 0 ? 'text-warn' : 'text-ink-3'}`}>{num(rej, 3)}</span>
+        <span className="text-ink-3">rejected</span>
+        {failReason && <span className="text-ink-3">— {failReason}</span>}
+      </p>
+
+      <p className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[11.5px] text-ink-3">
+        <span>this receipt</span>
+        {r.rejPct ? <Num d={r.rejPct} format="raw" dp={2} suffix="%" size="sm" className="text-[11.5px]" /> : <span className="num">0%</span>}
+        <span aria-hidden className="text-ink-4">·</span>
+        <span>{r.grn.vendorName} trailing</span>
+        <Num d={r.trailing} format="raw" dp={2} suffix="%" size="sm" className="text-[11.5px]" />
+        {r.spike && (
+          <span className="text-critical">— more than the vendor’s own record; spike — escalated</span>
+        )}
+      </p>
+
+      {r.deviationReason && (
+        <p className="mt-1.5 text-[11.5px] italic text-warn">
+          accepted under deviation — “{r.deviationReason}”
+        </p>
+      )}
+    </div>
+  )
+}
+
 export function InspectionHistory() {
-  const { closedRows, reopenGrn } = useInbound()
-  const shown = closedRows.slice(0, 8)
+  const { closedRows } = useInbound()
+  const shown = closedRows.slice(0, 10)
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [filter, setFilter] = useState<'all' | 'rejected' | 'spike' | 'deviation'>('all')
+
+  /* A close made on this screen should show its own result. The newest closed
+     receipt opens itself — but only when it is genuinely new, never on first
+     paint, or the card would open something the reader never asked about. */
+  const topId = shown[0]?.grn.id ?? null
+  const prevTop = useRef<string | null>(null)
+  useEffect(() => {
+    if (prevTop.current !== null && topId !== null && topId !== prevTop.current) setOpenId(topId)
+    prevTop.current = topId
+  }, [topId])
+
+  useEffect(() => {
+    if (!openId) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpenId(null) }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [openId])
+
+  const counts = {
+    rejected: shown.filter((r) => (r.grn.rejectedQty ?? 0) > 0).length,
+    spike: shown.filter((r) => r.spike).length,
+    deviation: shown.filter((r) => r.deviationReason).length,
+  }
+  const matches = (r: ClosedRow) =>
+    filter === 'all' ? true
+      : filter === 'rejected' ? (r.grn.rejectedQty ?? 0) > 0
+      : filter === 'spike' ? !!r.spike
+      : !!r.deviationReason
+  const open = shown.find((r) => r.grn.id === openId) ?? null
+
+  const chip = (id: typeof filter, label: string, n: number) => (
+    <button key={id} type="button" onClick={() => setFilter(filter === id ? 'all' : id)}
+      aria-pressed={filter === id}
+      className={`press rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
+        filter === id ? 'border-accent bg-accent-soft text-accent-ink' : 'border-line text-ink-2 hover:bg-surface-2'}`}>
+      {n} {label}
+    </button>
+  )
+
   return (
     <Card index={2} title="Closed receipts" live
-      sub="§11 · every close is reversible and logged — and every one of them moves a vendor’s trailing rejection rate">
-      <div className="scroll-x overflow-x-auto">
-        <table className="w-full min-w-[46rem] border-collapse text-[12.5px]">
-          <thead className="bg-surface-2">
-            <tr className="text-[11px] uppercase tracking-wide text-ink-3">
-              {['GRN', 'Material', 'Supplier', 'Received', 'Accepted', 'Rejected', 'This receipt', 'Trailing', ''].map((h) => (
-                <th key={h} className="whitespace-nowrap border-b border-line px-3 py-2 text-left font-medium">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((r) => (
-              <tr key={r.grn.id} className="border-b border-line-soft">
-                <td className="mono whitespace-nowrap px-3 py-2 text-[11.5px]">{r.grn.grnNo}</td>
-                <td className="px-3 py-2">
-                  {r.grn.itemName}
-                  {r.grn.challanId && <span className="mono block text-[10.5px] text-ink-3">jobwork return · {r.grn.challanId}</span>}
-                  {r.deviationReason && (
-                    <span className="block text-[10.5px] italic text-warn">accepted under deviation</span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-ink-2">{r.grn.vendorName}</td>
-                <td className="whitespace-nowrap px-3 py-2 text-ink-3">{shortDate(r.grn.receivedOn)}</td>
-                <td className="num px-3 py-2">
-                  {r.accepted ? <Num d={r.accepted} format="raw" dp={3} /> : '—'}
-                </td>
-                <td className={`num px-3 py-2 ${(r.grn.rejectedQty ?? 0) > 0 ? 'text-warn' : 'text-ink-3'}`}>
-                  {num(r.grn.rejectedQty ?? 0, 3)}
-                  {r.grn.failedCheckIds?.length ? (
-                    <span className="block text-[10.5px] text-ink-3">
-                      {r.checks.find((c) => c.id === r.grn.failedCheckIds![0])?.failReason ?? '—'}
-                    </span>
-                  ) : null}
-                </td>
-                <td className="num px-3 py-2">
-                  {r.rejPct ? <Num d={r.rejPct} format="raw" dp={2} suffix="%" /> : '—'}
-                  {r.spike && <span className="block text-[10.5px] text-critical">spike — escalated</span>}
-                </td>
-                <td className="num px-3 py-2 text-ink-3">
-                  <Num d={r.trailing} format="raw" dp={2} suffix="%" />
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <Button size="sm" variant="ghost" onClick={() => reopenGrn(r)}>Reopen</Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      sub="§11 · every close is reversible and logged — and every one of them moves a vendor’s trailing rejection rate"
+      actions={
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mono text-[10.5px] text-ink-3">{shown.length} closed</span>
+          {counts.rejected > 0 && chip('rejected', 'with rejections', counts.rejected)}
+          {counts.spike > 0 && chip('spike', 'spikes', counts.spike)}
+          {counts.deviation > 0 && chip('deviation', 'under deviation', counts.deviation)}
+        </div>
+      }>
+      <div className="p-3">
+        {/* One tile per receipt: what it was, how it split, and how it ended.
+            Everything else waits until the tile is asked to open. */}
+        <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          {shown.map((r) => {
+            const o = outcomeOf(r)
+            const on = r.grn.id === openId
+            const dim = filter !== 'all' && !matches(r)
+            return (
+              <li key={r.grn.id}>
+                <button type="button" data-grn={r.grn.grnNo} aria-expanded={on}
+                  onClick={() => setOpenId(on ? null : r.grn.id)}
+                  title={`${r.grn.grnNo} · ${r.grn.itemName} · ${r.grn.vendorName} — click for the figures`}
+                  className={`press block w-full rounded-md border p-2 text-left transition-all ${
+                    on ? 'border-accent bg-accent-soft/50' : 'border-line bg-surface hover:bg-surface-2'} ${
+                    dim ? 'opacity-40' : ''}`}>
+                  <span className="flex items-center gap-1">
+                    <span className="mono truncate text-[11px] font-medium text-ink-2">{r.grn.grnNo}</span>
+                    {r.grn.challanId && (
+                      <span aria-hidden title="jobwork return" className="shrink-0 text-[10px] text-ink-3">↩</span>
+                    )}
+                    {(r.spike || r.deviationReason) && (
+                      <Icon name="alert" className={`ml-auto size-3 shrink-0 ${r.spike ? 'text-critical' : 'text-warn'}`} />
+                    )}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[11.5px]" title={r.grn.itemName}>{r.grn.itemName}</span>
+                  <span className="mt-1.5 block"><SplitBar r={r} /></span>
+                  <span className={`mono mt-1 block text-[10px] ${
+                    o.tone === 'critical' ? 'text-critical' : o.tone === 'warn' ? 'text-warn' : 'text-ink-3'}`}>
+                    {o.label} · {shortDate(r.grn.receivedOn)}
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+
+        {open
+          ? <ClosedDetail r={open} onClose={() => setOpenId(null)} />
+          : (
+            <p className="mt-2.5 text-[11.5px] text-ink-3">
+              Click a receipt for what was accepted, what was rejected and why — and to reopen it.
+            </p>
+          )}
       </div>
       <Note foot label="How a rejection here re-prices that supplier">
         This table is what a rejection allowance is an average of. §5 prices every quote at
@@ -411,8 +622,9 @@ export function SpecRegister({ specs }: { specs: SpecCheck[] }) {
                         {num(c.min ?? 0, 2)}–{num(c.max ?? 0, 2)} {c.unit}
                       </span>
                     )}
-                    <span className="mono ml-auto text-[10px] uppercase tracking-wide text-ink-3">
-                      {KIND_LABEL[c.kind]}
+                    <span className="ml-auto shrink-0 text-ink-3" title={KIND_LABEL[c.kind]}>
+                      <Icon name={KIND_ICON[c.kind]} className="size-3.5" />
+                      <span className="sr-only">{KIND_LABEL[c.kind]}</span>
                     </span>
                   </li>
                 ))}
@@ -420,54 +632,50 @@ export function SpecRegister({ specs }: { specs: SpecCheck[] }) {
             </div>
           ))}
         </div>
-        <p className="mt-3 text-[11.5px] leading-relaxed text-ink-3">
-          Two to four checks, a tolerance and a certificate. This is not a quality-management system;
-          it is the difference between “we checked it” and a record of what was checked, by whom, and
-          against what number. Every failure routes to one of the eight non-usable reasons the
-          Inventory page already displays — so a rejection here and a lot there are the same fact.
-        </p>
+        {/* the four glyphs, named once — a legend, not a column of words */}
+        <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-line-soft pt-2.5">
+          {(['measure', 'document', 'visual', 'count'] as SpecCheck['kind'][]).map((k) => (
+            <li key={k} className="flex items-center gap-1.5 text-[10.5px] text-ink-3">
+              <Icon name={KIND_ICON[k]} className="size-3.5" />{KIND_LABEL[k]}
+            </li>
+          ))}
+        </ul>
       </div>
+      <Note foot label="What “inspected” means here, and where a failure goes">
+        Two to four checks, a tolerance and a certificate. This is not a quality-management system;
+        it is the difference between “we checked it” and a record of what was checked, by whom, and
+        against what number. Every failure routes to one of the eight non-usable reasons the
+        Inventory page already displays — so a rejection here and a lot there are the same fact.
+      </Note>
     </Card>
   )
 }
 
 /* ------------------------------------------------------- lead-time truth ---- */
 
+/**
+ * Quoted against actual, per material.
+ *
+ * The table gave three columns — quoted, actual, drift — and asked the reader
+ * to subtract. The dumbbell draws the subtraction: two dots, the gap between
+ * them coloured, and a vendor who takes longer than they promise reads as a
+ * bar leaning right before any number is read.
+ */
 export function LeadTimeTruth({ rows }: {
   rows: { code: string; name: string; vendor: string; quoted: number; actual: React.ComponentProps<typeof Num>['d'] }[]
 }) {
   return (
     <Card index={4} title="Lead-time truth" live
       sub="§5 · the trailing average of the last six actual receipts, never the vendor’s quoted figure">
-      <div className="scroll-x overflow-x-auto">
-        <table className="w-full min-w-[40rem] border-collapse text-[12.5px]">
-          <thead className="bg-surface-2">
-            <tr className="text-[11px] uppercase tracking-wide text-ink-3">
-              {['Material', 'Supplier', 'Quoted', 'Actual, last 6 receipts', 'Drift'].map((h) => (
-                <th key={h} className="whitespace-nowrap border-b border-line px-3 py-2 text-left font-medium">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const drift = (r.actual.value as number) - r.quoted
-              return (
-                <tr key={r.code} className="border-b border-line-soft">
-                  <td className="px-3 py-2">
-                    <span className="mono block text-[11px] text-ink-3">{r.code}</span>
-                    {r.name}
-                  </td>
-                  <td className="px-3 py-2 text-ink-2">{r.vendor}</td>
-                  <td className="num px-3 py-2">{r.quoted} days</td>
-                  <td className="px-3 py-2"><Num d={r.actual} format="days" suffix=" days" /></td>
-                  <td className={`num px-3 py-2 ${drift > 0 ? 'text-warn' : 'text-ink-3'}`}>
-                    {drift === 0 ? 'none' : `${drift > 0 ? '+' : ''}${drift} days`}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+      <div className="p-3.5">
+        <Dumbbell unit="days" fromLabel="quoted" toLabel="actual, last 6 receipts"
+          rows={rows.map((r) => ({
+            label: r.name,
+            sub: `${r.code} · ${r.vendor}`,
+            from: r.quoted,
+            to: r.actual.value as number,
+            inspect: <Num d={r.actual} format="days" suffix="d" size="sm" className="text-[10.5px]" />,
+          }))} />
       </div>
       <Note foot label="Why every lead time here is computed, not stored">
         The receipt side of INB-01. Every lead time here is computed from six receipt records, not

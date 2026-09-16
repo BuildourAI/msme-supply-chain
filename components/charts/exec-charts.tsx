@@ -124,7 +124,13 @@ export function CellStrip({ cells, legend, note }: {
  * a paired bar chart makes you measure it by eye instead of seeing it.
  */
 export function Dumbbell({ rows, unit = 'days', fromLabel, toLabel, more }: {
-  rows: { label: string; from: number; to: number; sub?: string }[]
+  /**
+   * `inspect` is the derivation behind the `to` figure — a <Num>, usually. A
+   * dumbbell is a picture of two numbers, and one of them here is computed from
+   * six receipts; without a way in, the picture would be the first figure on
+   * this build a reader cannot open.
+   */
+  rows: { label: string; from: number; to: number; sub?: string; inspect?: React.ReactNode }[]
   unit?: string; fromLabel: string; toLabel: string
   /** what was left off the bottom, when the list is deliberately cut short */
   more?: string
@@ -157,8 +163,11 @@ export function Dumbbell({ rows, unit = 'days', fromLabel, toLabel, more }: {
                       style={{ left: `${X(r.to)}%`, background: worse ? 'var(--warn)' : 'var(--good)' }}
                       title={`${toLabel} ${r.to}`} />
               </span>
-              <span className={`num w-14 shrink-0 text-right text-[10.5px] ${worse ? 'text-warn' : 'text-good'}`}>
-                {worse ? '+' : ''}{num(r.to - r.from, 1)} {unit}
+              <span className="flex shrink-0 items-center justify-end gap-1.5">
+                {r.inspect}
+                <span className={`num w-14 shrink-0 text-right text-[10.5px] ${worse ? 'text-warn' : 'text-good'}`}>
+                  {worse ? '+' : ''}{num(r.to - r.from, 1)} {unit}
+                </span>
               </span>
             </li>
           )
