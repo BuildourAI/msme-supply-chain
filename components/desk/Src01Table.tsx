@@ -3,9 +3,9 @@ import type { DerivedRow } from '@/lib/domain/derive'
 import { Num } from '@/components/ui/Num'
 import { StatusPill } from '@/components/ui/bits'
 import { Icon, type IconName } from '@/components/ui/icons'
-import { money, qtyText, shortDate, STATUS_LABEL, STATUS_TONE } from '@/lib/domain/format'
+import { qtyText, shortDate, STATUS_LABEL, STATUS_TONE } from '@/lib/domain/format'
 import { VendorSelect } from './VendorSelect'
-import { OrderValue, RowActions } from './RowActions'
+import { RowActions } from './RowActions'
 import { SEED, useDesk, type SortCol } from './store'
 
 function Th({ children, col, right, sticky, wrap }: {
@@ -47,132 +47,6 @@ const STATUS_ICON: Record<string, IconName> = {
   at_risk_late: 'clock',
   open_po_covers: 'truck',
   covered: 'check',
-}
-
-/* --------------------------------------------------------------- summary -- */
-
-export function SummaryTable() {
-  const { visible, state, select } = useDesk()
-  const w = state.working
-  /** a working column: rendered only when the buyer asks for the arithmetic */
-  const W = ({ children }: { children: React.ReactNode }) =>
-    w ? <>{children}</> : null
-  return (
-    <div className="scroll-x overflow-x-auto">
-      <table className={`w-full border-collapse ${w ? 'min-w-[64rem]' : 'min-w-[46rem]'}`}>
-        <thead className="bg-surface-2">
-          <tr>
-            <Th col="code">Material</Th>
-            <Th col="position" right>Position</Th>
-            {w && <Th right wrap>Usable</Th>}
-            {w && <Th right wrap>Reorder point</Th>}
-            {w && <Th col="cover" right wrap>Cover left</Th>}
-            <Th col="reorder" right>Reorder qty</Th>
-            <Th>Supplier</Th>
-            {w && <Th right wrap>Landed rate</Th>}
-            <Th col="value" right>Order value</Th>
-            <Th col="status">Status</Th>
-            <Th>Action</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {visible.map((r) => {
-            const sel = r.item.id === state.selectedId
-            // §8.1 — position red below the reorder point, cover red once shorter
-            // than the vendor's lead time.
-            const posLow = r.truePosition.value < r.reorderPoint.value
-            const coverShort = r.coverDays.value < r.leadTime.value
-            return (
-              <tr key={r.item.id} className={rowCls(sel)} onClick={() => select(r.item.id)}>
-                {/* The name is folded away by default, but the code always
-                    carries it as a tooltip — a table of bare codes you cannot
-                    resolve is smaller, not clearer. */}
-                <td className="px-2 py-2" title={r.item.name}>
-                  <span className="mono block whitespace-nowrap text-[11.5px] text-ink-2">{r.item.code}</span>
-                  {w && (
-                    <span className="anim-fade-in block max-w-[8rem] truncate text-[12.5px]">
-                      {r.item.name}
-                    </span>
-                  )}
-                </td>
-                {/* Position keeps the reorder point in its tooltip even when the
-                    column is hidden: the red tone means "below the reorder
-                    point", and a reader should always be able to find out what
-                    that point is. */}
-                <td className="px-2 py-2 text-right"
-                    title={`Reorder point ${qtyText(r.reorderPoint.value, r.item.uom)}`}>
-                  <span className="inline-flex items-center gap-1">
-                    {posLow && (
-                      <>
-                        <span className="sr-only">below the reorder point:</span>
-                        <Icon name="arrow-down" className="size-3 shrink-0 text-critical" />
-                      </>
-                    )}
-                    <Num d={r.truePosition} tone={posLow ? 'critical' : undefined} />
-                  </span>
-                </td>
-                {w && (
-                  <td className="anim-fade-in px-1.5 py-2 text-right">
-                    <Num d={r.usable} />
-                    {r.nonUsable.value > 0 && (
-                      // §8.1 — non-usable is named under the usable figure, not given a column.
-                      <span className="block text-[10.5px] leading-tight text-ink-3">
-                        / <Num d={r.nonUsable} size="sm" className="text-ink-3" /> non-usable
-                      </span>
-                    )}
-                  </td>
-                )}
-                {w && <td className="anim-fade-in px-1.5 py-2 text-right"><Num d={r.reorderPoint} /></td>}
-                {w && (
-                  <td className="anim-fade-in px-1.5 py-2 text-right">
-                    <Num d={r.coverDays} format="days" tone={coverShort ? 'critical' : undefined} suffix="d" />
-                    <span className="mono block text-[10px] text-ink-3">lead {r.leadTime.value}d</span>
-                  </td>
-                )}
-                <td className="px-2 py-2 text-right">
-                  {r.reorderQty.value > 0
-                    ? <Num d={r.reorderQty} />
-                    : <span className="text-ink-3">—</span>}
-                </td>
-                <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
-                  <VendorSelect row={r} />
-                </td>
-                {w && (
-                  <td className="num anim-fade-in px-1.5 py-2 text-right">
-                    <Num d={r.chosen.landedPerUnit} format="money" dp={2} />
-                  </td>
-                )}
-                <td className="px-2 py-2 text-right"><OrderValue row={r} /></td>
-                <td className="px-2 py-2">
-                  <span className="inline-flex items-center gap-1.5">
-                    <Icon name={STATUS_ICON[r.status.value] ?? 'activity'} aria-hidden
-                          className={`size-3.5 shrink-0 ${
-                            STATUS_TONE[r.status.value] === 'critical' ? 'text-critical'
-                              : STATUS_TONE[r.status.value] === 'warn' ? 'text-warn'
-                              : STATUS_TONE[r.status.value] === 'good' ? 'text-good' : 'text-ink-3'}`} />
-                    <StatusPill label={STATUS_LABEL[r.status.value]} tone={STATUS_TONE[r.status.value]}
-                                explain={r.status.note} />
-                  </span>
-                  {r.held.value && (
-                    <span className="mt-1 block text-[10.5px] leading-tight text-warn">
-                      held · {r.coverageAfterMonths.value} mo cover
-                    </span>
-                  )}
-                </td>
-                {/* the action cell holds buttons and sign-off flags side by
-                    side. Left to the browser it collapses to the narrowest
-                    column in the table and wraps four words onto five lines,
-                    which is how a one-line row became 234px tall. */}
-                <td className="min-w-[144px] px-2 py-2" onClick={(e) => e.stopPropagation()}>
-                  <RowActions row={r} />
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
-  )
 }
 
 /* ----------------------------------------------------------- full detail -- */

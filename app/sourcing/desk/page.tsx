@@ -2,11 +2,13 @@
 import { useState } from 'react'
 import { PageHeader, TabStrip } from '@/components/shell/PageHeader'
 import { Button, Card, Pill, Segmented, StatusPill } from '@/components/ui/bits'
+import { Note } from '@/components/ui/Note'
 import { Num } from '@/components/ui/Num'
 import { Icon } from '@/components/ui/icons'
 import { useDesk } from '@/components/desk/store'
 import { KpiTile } from '@/components/desk/KpiRow'
-import { DetailTable, SummaryTable } from '@/components/desk/Src01Table'
+import { DetailTable } from '@/components/desk/Src01Table'
+import { LineCards } from '@/components/desk/LineCards'
 import { GuardrailPanel, LandedCostCompare } from '@/components/desk/Panels'
 import { lakh, longDate, money, num, STATUS_LABEL, STATUS_TONE } from '@/lib/domain/format'
 import { VALUATION_BASIS } from '@/lib/domain/policy'
@@ -14,8 +16,15 @@ import { useApp } from '@/state/app-store'
 
 type Tab = 'desk' | 'history' | 'policy'
 
+/** the sorts a card view needs — the table keeps its own column headers */
+const SORTS: { id: 'status' | 'value' | 'code'; label: string; dir: 'asc' | 'desc' }[] = [
+  { id: 'status', label: 'Urgency', dir: 'asc' },
+  { id: 'value', label: 'Order value', dir: 'desc' },
+  { id: 'code', label: 'Material', dir: 'asc' },
+]
+
 function Filters() {
-  const { state, setQuery, setFilter, setView, toggleWorking, visible, rows } = useDesk()
+  const { state, setQuery, setFilter, setView, toggleWorking, toggleSort, visible, rows } = useDesk()
   const chips: { id: typeof state.statusFilter; label: string }[] = [
     { id: 'all', label: `All ${rows.length}` },
     { id: 'needs_decision', label: 'Needs a decision' },
@@ -54,12 +63,10 @@ function Filters() {
         {visible.length} of {rows.length}
       </span>
 
-      {/* The summary table answers "which lines need me". The four columns
-          behind this button answer "why, and at what price" — a different
-          question, asked less often, and carrying four columns of arithmetic
-          into every glance is what made this table hard to read. Only offered
-          on the summary view: full detail already shows all of it. */}
-      {state.view === 'summary' && (
+      {/* Cards say the arithmetic out loud — usable, reorder point, cover and
+          lead are all in the sentence — so there is nothing to unfold there.
+          The working columns belong to the table view now. */}
+      {state.view === 'detail' && (
         <button type="button" onClick={toggleWorking} aria-pressed={state.working}
           title="Usable stock, the reorder point, cover left, the landed rate — and each material's full name"
           className={`press inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors ${
@@ -71,8 +78,28 @@ function Filters() {
           {state.working ? 'Hide the working' : 'Show the working'}
         </button>
       )}
+      {/* A card has no column header to click, so the sort moves into the
+          strip. It drives the same store action the table headers do. */}
+      {state.view === 'summary' && (
+        <span className="inline-flex shrink-0 items-center gap-1">
+          <span className="text-[11px] text-ink-3">Sort</span>
+          {SORTS.map((o) => (
+            <button key={o.id} type="button" onClick={() => toggleSort(o.id, o.dir)}
+              aria-pressed={state.sort.col === o.id}
+              title={`Sort by ${o.label.toLowerCase()}${state.sort.col === o.id ? ' — click again to reverse' : ''}`}
+              className={chipCls(state.sort.col === o.id)}>
+              {o.label}
+              {state.sort.col === o.id && (
+                <span aria-hidden className="ml-0.5 text-accent-ink">
+                  {state.sort.dir === 'asc' ? '↑' : '↓'}
+                </span>
+              )}
+            </button>
+          ))}
+        </span>
+      )}
       <Segmented label="Table view" value={state.view} onChange={setView}
-        options={[{ id: 'summary', label: 'Summary' }, { id: 'detail', label: 'Full detail' }]} />
+        options={[{ id: 'summary', label: 'Cards' }, { id: 'detail', label: 'Full detail' }]} />
     </div>
   )
 }
@@ -97,12 +124,12 @@ function DeskTab() {
         live className="mb-4">
         <Filters />
         <div key={state.view} className="anim-fade-in">
-          {state.view === 'summary' ? <SummaryTable /> : <DetailTable />}
+          {state.view === 'summary' ? <LineCards /> : <DetailTable />}
         </div>
-        <p className="border-t border-line-soft px-4 py-2.5 text-[11.5px] leading-snug text-ink-3">
-          Click any figure to see the formula that produced it. Selecting a row drives the two panels
+        <Note foot label={`What the two panels below are showing — ${selected.item.code}`}>
+          Click any figure to see the formula that produced it. Selecting a card drives the two panels
           below — currently <span className="mono text-ink-2">{selected.item.code}</span>.
-        </p>
+        </Note>
       </Card>
 
       <div className="grid items-start gap-3 lg:grid-cols-2">

@@ -69,7 +69,7 @@ type Action =
   | { t: 'undecide'; id: string }
   | { t: 'view'; view: ViewMode }
   | { t: 'working' }
-  | { t: 'sort'; col: SortCol }
+  | { t: 'sort'; col: SortCol; dir?: 'asc' | 'desc' }
   | { t: 'query'; q: string }
   | { t: 'filter'; f: State['statusFilter'] }
   | { t: 'policy'; patch: Partial<Policy> }
@@ -102,7 +102,13 @@ function reducer(s: State, a: Action): State {
     case 'view': return { ...s, view: a.view }
     case 'working': return { ...s, working: !s.working }
     case 'sort':
-      return { ...s, sort: { col: a.col, dir: s.sort.col === a.col && s.sort.dir === 'asc' ? 'desc' : 'asc' } }
+      // Clicking the column you are already on flips the direction. Arriving on
+      // a new one takes the direction that column is actually useful in —
+      // biggest order value first, soonest deadline first — because a control
+      // that needs a second click to say anything is a control that lied once.
+      return { ...s, sort: a.col === s.sort.col
+        ? { col: a.col, dir: s.sort.dir === 'asc' ? 'desc' : 'asc' }
+        : { col: a.col, dir: a.dir ?? 'asc' } }
     case 'query': return { ...s, query: a.q }
     case 'filter': return { ...s, statusFilter: a.f }
     case 'policy': return { ...s, policy: { ...s.policy, ...a.patch } }
@@ -138,7 +144,7 @@ interface Ctx {
   setView: (v: ViewMode) => void
   /** show or hide the summary table's working columns */
   toggleWorking: () => void
-  toggleSort: (c: SortCol) => void
+  toggleSort: (c: SortCol, dir?: 'asc' | 'desc') => void
   setQuery: (q: string) => void
   setFilter: (f: State['statusFilter']) => void
   setPolicy: (p: Partial<Policy>) => void
@@ -328,7 +334,7 @@ export function DeskProvider({ children }: { children: React.ReactNode }) {
     state, rows, visible, selected, kpis, intakeCounts, select, chooseVendor, decide, undo, reviewIntake,
     setView: (v) => dispatch({ t: 'view', view: v }),
     toggleWorking: () => dispatch({ t: 'working' }),
-    toggleSort: (c) => dispatch({ t: 'sort', col: c }),
+    toggleSort: (c, dir) => dispatch({ t: 'sort', col: c, dir }),
     setQuery: (q) => dispatch({ t: 'query', q }),
     setFilter: (f) => dispatch({ t: 'filter', f }),
     setPolicy: (p) => {

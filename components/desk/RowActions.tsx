@@ -112,10 +112,41 @@ function ApproveDialog({ row, open, onClose }: {
 }
 
 /**
+ * The two sign-off triggers the data can evaluate (§11).
+ *
+ * In the table they sit inside the action cell, wrapping above the buttons. A
+ * card wants them on their own line under the proposal, so they are their own
+ * component and `RowActions` can be told to leave them out.
+ */
+export function RowFlags({ row }: { row: DerivedRow }) {
+  const { state } = useDesk()
+  if (state.decisions[row.item.id]) return null
+  if (!row.aboveLastPurchase.value && !row.needsOwnerSignoff.value) return null
+  return (
+    <div className="mb-1.5 space-y-0.5">
+      {row.aboveLastPurchase.value && (
+        <p className="text-[10.5px] leading-tight text-warn" title={row.aboveLastPurchase.note}>
+          rate above last purchase price · needs sign-off
+        </p>
+      )}
+      {row.needsOwnerSignoff.value && (
+        <p className="text-[10.5px] leading-tight text-warn" title={row.needsOwnerSignoff.note}>
+          above the owner’s threshold · owner signs off
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
  * §11 — the system raises, holds and drafts. Nothing here places an order or
  * contacts a supplier, and the verbs say so.
  */
-export function RowActions({ row, size = 'sm' }: { row: DerivedRow; size?: 'sm' | 'md' }) {
+export function RowActions({ row, size = 'sm', flags: showFlags = true }: {
+  row: DerivedRow; size?: 'sm' | 'md'
+  /** the card renders them itself, above the buttons */
+  flags?: boolean
+}) {
   const { decide, undo, state } = useDesk()
   const { offcutRows } = useInventory()
   const { log, say } = useApp()
@@ -159,7 +190,7 @@ export function RowActions({ row, size = 'sm' }: { row: DerivedRow; size?: 'sm' 
     setReasonOpen(false); setReason('')
   }
 
-  const flags = (
+  const flags = !showFlags ? null : (
     <>
       {row.aboveLastPurchase.value && (
         <span className="basis-full text-[10.5px] leading-tight text-warn"
