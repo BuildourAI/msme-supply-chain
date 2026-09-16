@@ -105,18 +105,13 @@ export default function Page() {
                         {v.flips ? v.best.vendor.name : 'same vendor'}{' '}
                         <span className="num">{money(v.best.landedPerUnit.value, 2)}</span>/{v.r.item.uom}
                         {' · '}{v.flips ? 'flips' : 'confirms'}
-                        {/* The line wraps rather than truncating until 1536,
-                            where it fits on one line with this tail on the end.
-                            Below that the tail waits: a trimmed “₹8,30…” is
-                            worse than a clean omission, and the figure is never
-                            lost — the per-unit gap is on the same row, and the
-                            rupee cost is in this row's tooltip and in the card
-                            beside it. */}
-                        <span className="hidden 2xl:inline">
-                          {' · '}{v.onThisOrder > 0
-                            ? <span className="num">{money(v.onThisOrder)} on order</span>
-                            : 'nothing to order'}
-                        </span>
+                        {/* What the gap costs on this run, on every width. The
+                            line wraps rather than truncating below 1536, so a
+                            narrow column buys this figure another line rather
+                            than cutting it off. */}
+                        {' · '}{v.onThisOrder > 0
+                          ? <span className="num">{money(v.onThisOrder)} on order</span>
+                          : 'nothing to order'}
                       </span>
                     </span>
 
