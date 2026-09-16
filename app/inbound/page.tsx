@@ -7,6 +7,7 @@ import { Num } from '@/components/ui/Num'
 import { useInbound } from '@/components/inbound/store'
 import { INBOUND_TABS } from '@/components/inbound/InboundTabs'
 import { money, type Tone } from '@/lib/domain/format'
+import { Note } from '@/components/ui/Note'
 
 /**
  * The stage page is the front door to the three systems. It shows the one number
@@ -82,13 +83,13 @@ export default function Page() {
             </Link>
           ))}
         </div>
-        <p className="border-t border-line-soft px-4 py-3 text-[12px] leading-relaxed text-ink-3">
-          The three are one loop, not three screens. A jobwork return comes back through INB-01’s gate
+        <Note foot label="Why the three screens are one loop">
+        The three are one loop, not three screens. A jobwork return comes back through INB-01’s gate
           like any purchase, so outsourced work gets the same inspection. A receipt that matches a
           version the vendor was never moved off is INB-02’s evidence, surfaced as a stale order rather
           than a random short supply. And every closed receipt moves the trailing rejection rate that
           the Sourcing Desk prices its quotes with — a loop that was open until now.
-        </p>
+      </Note>
       </Card>
     </StagePage>
   )

@@ -7,6 +7,7 @@ import { Donut, RankedBars } from '@/components/charts/exec-charts'
 import { DocViewerProvider, useDocViewer } from '@/components/desk/DocumentViewer'
 import { AliasTable, IntakeQueue } from '@/components/desk/Panels'
 import { useDesk } from '@/components/desk/store'
+import { Note } from '@/components/ui/Note'
 import { docMeta, documentLines, reviewQueue, supplierDocuments } from '@/lib/seed/intake'
 import { shortDate } from '@/lib/domain/format'
 import type { Tone } from '@/lib/domain/format'
@@ -88,50 +89,18 @@ function IntakePage() {
           {c.escalated > 0 && <Pill tone="critical">{c.escalated} escalated</Pill>}
         </>} />
 
-      <p className="mb-3 max-w-4xl text-[13px] leading-relaxed text-ink-2">
+      <Note label="What this screen does" className="mb-3">
         <strong className="text-ink">This is the module that ships first.</strong> It needs no
         historical data, no item master and no ERP — one inbox and one WhatsApp number are enough to
         start it on day one. Everything else in this build runs on what it produces: the landed-cost
         comparison needs three months of quotes, and a reorder point on a broken item master will
         confidently and repeatedly order the wrong thing.
-      </p>
+      </Note>
 
       <div className="mb-3 grid items-start gap-3 xl:grid-cols-[1.15fr_1fr]">
         <IntakeQueue />
 
-        {/* the rules, and the table they produce */}
-        <div className="grid gap-3">
-          <Card index={1} title="The rules this runs on" sub="§11 · escalate, don’t guess">
-            <div className="space-y-2.5 p-3.5 text-[12px] leading-relaxed text-ink-2">
-              <p>
-                <strong className="text-ink">Below 70% confidence, nobody accepts it unseen.</strong> The
-                line goes to a person with the suggestion attached and the vendor’s original wording
-                beside it. A parser that guesses at 64% is worse than no parser, because the wrong alias
-                is permanent and silent.
-              </p>
-              <p>
-                <strong className="text-ink">A rejection escalates rather than disappears.</strong> It
-                does not get auto-filed under a nearby item, and it does not sit in a queue with no
-                owner — it is marked escalated and stays visible until a person resolves it.
-              </p>
-              <p>
-                <strong className="text-ink">An accepted match is permanent.</strong> It writes an alias
-                against that vendor’s exact wording, so the same line never comes back for review — and
-                the floor sees the factory’s name for the material, not the supplier’s.
-              </p>
-              <p className="text-ink-3">
-                The mapping table is the deliverable, not the parser. A better parser reduces the queue;
-                only the table makes the data usable by everything downstream.
-              </p>
-              <p className="border-t border-line-soft pt-2.5">
-                <Link href="/production#aliases" className="font-medium text-accent-ink hover:underline">
-                  See the aliases on the floor →
-                </Link>
-              </p>
-            </div>
-          </Card>
-          <AliasTable />
-        </div>
+        <AliasTable />
       </div>
 
       <Card index={3} title={`All ${c.total} documents`}
@@ -256,6 +225,41 @@ function IntakePage() {
           </div>
         </div>
       </Card>
+
+      {/* The rules are the contract this screen runs on and they matter — but
+          they are read once, at the start, and then never again. They live at
+          the foot of the page now, folded shut, where a reader who wants them
+          knows to look and a reader who does not is not made to scroll past
+          four paragraphs to reach the documents. */}
+      <Note label="The rules this runs on" className="mt-3 border-t border-line pt-2.5">
+        <div className="space-y-2.5">
+    <p>
+                  <strong className="text-ink">Below 70% confidence, nobody accepts it unseen.</strong> The
+                  line goes to a person with the suggestion attached and the vendor’s original wording
+                  beside it. A parser that guesses at 64% is worse than no parser, because the wrong alias
+                  is permanent and silent.
+                </p>
+                <p>
+                  <strong className="text-ink">A rejection escalates rather than disappears.</strong> It
+                  does not get auto-filed under a nearby item, and it does not sit in a queue with no
+                  owner — it is marked escalated and stays visible until a person resolves it.
+                </p>
+                <p>
+                  <strong className="text-ink">An accepted match is permanent.</strong> It writes an alias
+                  against that vendor’s exact wording, so the same line never comes back for review — and
+                  the floor sees the factory’s name for the material, not the supplier’s.
+                </p>
+                <p className="text-ink-3">
+                  The mapping table is the deliverable, not the parser. A better parser reduces the queue;
+                  only the table makes the data usable by everything downstream.
+                </p>
+                <p className="border-t border-line-soft pt-2.5">
+                  <Link href="/production#aliases" className="font-medium text-accent-ink hover:underline">
+                    See the aliases on the floor →
+                  </Link>
+                </p>
+        </div>
+      </Note>
     </>
   )
 }

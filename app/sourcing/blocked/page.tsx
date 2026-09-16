@@ -5,6 +5,7 @@ import { Card, Pill, StatusPill } from '@/components/ui/bits'
 import { Donut, RankedBars } from '@/components/charts/exec-charts'
 import { CAT } from '@/components/charts/kit'
 import { useDesk } from '@/components/desk/store'
+import { Note } from '@/components/ui/Note'
 import { AGE_LABEL, blockedStock, CAUSE_LABEL, ROUTE_LABEL } from '@/lib/seed/blocked'
 import { lakh, money, num } from '@/lib/domain/format'
 import { TODAY_SOURCING } from '@/lib/seed/sourcing'
@@ -76,13 +77,13 @@ export default function Page() {
           <Pill tone="critical">{lakh(blockedStock.filter((b) => b.ageBucket === 'over_180').reduce((a, b) => a + b.value, 0))} over 180 days</Pill>
         </>} />
 
-      <p className="mb-3 max-w-4xl text-[13px] leading-relaxed text-ink-2">
+      <Note label="What this screen does" className="mb-3">
         <strong className="text-ink">This is usable material bought for the wrong job.</strong> It is a
         different population from the {money(kpis.nonUsableValue.value)} of stock that cannot be issued
         at all — that material is damaged, expired or held in QC; this material is perfectly good and
         simply has nowhere to go. One is not a subset of the other, and adding them together would
         double-count nothing while hiding both.
-      </p>
+      </Note>
 
       <div className="mb-3 grid items-start gap-3 lg:grid-cols-[1fr_1.3fr]">
         <Card index={0} title="How old the money is" sub="age tells you how bad it is">

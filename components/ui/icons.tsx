@@ -16,7 +16,7 @@ export type IconName =
   | 'home' | 'report' | 'cart' | 'tray' | 'boxes' | 'factory' | 'truck'
   | 'search' | 'bell' | 'chevron' | 'lock' | 'check' | 'arrow-right'
   | 'activity' | 'alert' | 'clock' | 'cash' | 'calendar' | 'menu' | 'help'
-  | 'close' | 'scale' | 'doc' | 'arrow-down'
+  | 'close' | 'scale' | 'doc' | 'arrow-down' | 'info'
 
 const PATHS: Record<IconName, React.ReactNode> = {
   home: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5.5 9.5V20h13V9.5" /></>,
@@ -43,6 +43,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
   scale: <><path d="M12 3.5v17M5 7.5h14" /><path d="M5 7.5 2.5 14h5zM19 7.5 16.5 14h5z" /><path d="M8 20.5h8" /></>,
   doc: <><path d="M5 20.5V3.5h8l5 5v12z" /><path d="M13 3.5v5h5" /><path d="M8.5 13h7M8.5 16.5h5" /></>,
   'arrow-down': <><path d="M12 4.5v15" /><path d="m6 13.5 6 6 6-6" /></>,
+  info: <><circle cx="12" cy="12" r="8.75" /><path d="M12 11v5.5" /><circle cx="12" cy="7.9" r=".9" fill="currentColor" stroke="none" /></>,
 }
 
 export function Icon({ name, className = 'size-4' }: { name: IconName; className?: string }) {

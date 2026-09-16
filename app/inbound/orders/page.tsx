@@ -4,6 +4,7 @@ import { Pill } from '@/components/ui/bits'
 import { InboundTabs } from '@/components/inbound/InboundTabs'
 import { InboundBoard, OrderSync } from '@/components/inbound/Orders'
 import { useInbound } from '@/components/inbound/store'
+import { Note } from '@/components/ui/Note'
 import { buildRows, type SeedBundle } from '@/lib/domain/derive'
 import { DEFAULT_POLICY } from '@/lib/domain/policy'
 import { addDays, daysBetween } from '@/lib/domain/calc'
@@ -54,12 +55,12 @@ export default function Page() {
           <Pill tone="neutral" mono>{longDate(today)}</Pill>
         </>} />
       <InboundTabs />
-      <p className="mb-4 max-w-3xl text-[13.5px] leading-relaxed text-ink-2">
+      <Note label="What this screen does" className="mb-3">
         Every purchase order line carries its versions. An internal change — a quantity, a date, a
         cancellation — creates a new version and drafts the notice; a person sends it and records what
         the vendor said back. Until that acknowledgement exists, the vendor is still making the old
         quantity, and this system counts the old quantity.
-      </p>
+      </Note>
       <div className="space-y-3">
         <OrderSync />
         <InboundBoard lines={lines} />

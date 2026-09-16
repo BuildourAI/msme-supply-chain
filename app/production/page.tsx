@@ -8,6 +8,7 @@ import { DEFAULT_POLICY } from '@/lib/domain/policy'
 import * as S from '@/lib/seed/sourcing'
 import { useDesk } from '@/components/desk/store'
 import { STATUS_LABEL, STATUS_TONE } from '@/lib/domain/format'
+import { Note } from '@/components/ui/Note'
 
 const seed: SeedBundle = {
   today: S.TODAY_SOURCING, items: S.items, vendors: S.vendors, vendorItems: S.vendorItems,
@@ -70,11 +71,11 @@ export default function Page() {
             </li>
           ))}
         </ul>
-        <p className="border-t border-line-soft px-4 py-3 text-[12px] leading-relaxed text-ink-3">
-          New mappings are written from the review queue on the{' '}
+        <Note foot label="Where new supplier spellings are taught">
+        New mappings are written from the review queue on the{' '}
           <Link href="/sourcing/intake" className="font-medium text-accent-ink hover:underline">supplier intake page</Link>.
           Accepting a suggested match teaches the system that vendor’s spelling permanently.
-        </p>
+      </Note>
       </Card>
     </StagePage>
   )

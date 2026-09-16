@@ -4,6 +4,7 @@ import { Button, Card, Pill, StatusPill } from '@/components/ui/bits'
 import { Dialog } from '@/components/ui/Dialog'
 import { Num } from '@/components/ui/Num'
 import { money, num, shortDate } from '@/lib/domain/format'
+import { Note } from '@/components/ui/Note'
 import { useDispatch } from './store'
 
 /**
@@ -151,13 +152,13 @@ export function ReturnsRegister() {
         </Pill>
         <Pill tone="neutral" mono>valued at cost, never at the selling price</Pill>
       </div>
-      <p className="border-t border-line-soft px-4 py-3 text-[11.5px] leading-relaxed text-ink-3">
-        <strong className="text-ink">Half of this was already built.</strong> Goods coming back are goods
+      <Note foot label="Half of this was already built">
+        Goods coming back are goods
         coming in, and the inbound gate has taken those against a spec since INB-01. What was missing is
         the authorisation: a named owner, a date it can be late against, and a reason that survives the
         phone call. The rate is counted on authorisations raised rather than on goods physically back, so
         a return nobody has chased still shows up in it.
-      </p>
+      </Note>
       <AuthoriseDialog open={open} onClose={() => setOpen(false)} />
     </Card>
   )

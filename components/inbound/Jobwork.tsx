@@ -5,6 +5,7 @@ import { Button, Card, Pill, StatusPill } from '@/components/ui/bits'
 import { Dialog } from '@/components/ui/Dialog'
 import { Num } from '@/components/ui/Num'
 import { money, num, qtyText, shortDate } from '@/lib/domain/format'
+import { Note } from '@/components/ui/Note'
 import { useInbound, type ChallanRow } from './store'
 
 /**
@@ -399,12 +400,12 @@ export function JobworkRegister() {
             </tbody>
           </table>
         </div>
-        <p className="border-t border-line-soft px-4 py-3 text-[11.5px] leading-relaxed text-ink-3">
-          A concentration limit is not about trust. It is about how much of your working capital can be
+        <Note foot label="Why a concentration limit is not about trust">
+        A concentration limit is not about trust. It is about how much of your working capital can be
           standing in one shed you do not control — and whether you would know, on the day it burned
           down, what was in it. Valued at last purchase price, ex-freight (§13-1), the same basis the
           Inventory and Sourcing pages use.
-        </p>
+      </Note>
       </Card>
 
       <ReturnDialog row={returning} onClose={() => setReturning(null)} />

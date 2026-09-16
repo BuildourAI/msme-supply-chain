@@ -2,6 +2,7 @@ import { StagePage } from '@/components/stage/StagePage'
 import { stageById } from '@/lib/seed/stages'
 import { Card } from '@/components/ui/bits'
 import { GUARDRAILS } from '@/lib/seed/stages'
+import { Note } from '@/components/ui/Note'
 
 export default function Page() {
   return (
@@ -44,10 +45,10 @@ export default function Page() {
             </ul>
           </div>
         </div>
-        <p className="border-t border-line-soft px-4 py-3 text-[12px] leading-relaxed text-ink-3">
-          The scope of this build is Stage 1 in full, plus the shop-floor read of Stages 3–4 that
+        <Note foot label="What this build deliberately leaves out">
+        The scope of this build is Stage 1 in full, plus the shop-floor read of Stages 3–4 that
           Stage 1 depends on. Naming that boundary is more useful than a screen with invented numbers on it.
-        </p>
+      </Note>
       </Card>
     </StagePage>
   )

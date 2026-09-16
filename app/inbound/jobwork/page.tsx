@@ -4,6 +4,7 @@ import { Pill } from '@/components/ui/bits'
 import { InboundTabs } from '@/components/inbound/InboundTabs'
 import { JobworkRegister } from '@/components/inbound/Jobwork'
 import { useInbound } from '@/components/inbound/store'
+import { Note } from '@/components/ui/Note'
 import { lakh, longDate } from '@/lib/domain/format'
 
 export default function Page() {
@@ -20,14 +21,14 @@ export default function Page() {
           <Pill tone="neutral" mono>{longDate(today)}</Pill>
         </>} />
       <InboundTabs />
-      <p className="mb-4 max-w-3xl text-[13.5px] leading-relaxed text-ink-2">
+      <Note label="What this screen does" className="mb-3">
         Once material leaves for jobwork it is neither on the shelf nor consumed, and a challan book
         that stops at “sent” can tell you nothing about it. Every unit that left is visibly one of five
         things here — back in stock, back and waiting on inspection, still at the jobworker, allowed
         process loss, or unaccounted — and the five always add up to what went out. Returns come back
         through inbound QC like any other receipt, and material inside its promised date is never
         reported as missing.
-      </p>
+      </Note>
       <JobworkRegister />
     </>
   )

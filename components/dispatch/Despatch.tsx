@@ -7,6 +7,7 @@ import { Sparkbars } from '@/components/ui/Sparkbars'
 import { Icon } from '@/components/ui/icons'
 import { ICON_BG } from '@/components/exec/Section'
 import { money, num, shortDate } from '@/lib/domain/format'
+import { Note } from '@/components/ui/Note'
 import { useDispatch } from './store'
 
 /* ------------------------------------------------------ raise a despatch -- */
@@ -166,11 +167,11 @@ export function OrderBook() {
           </tbody>
         </table>
       </div>
-      <p className="border-t border-line-soft px-4 py-3 text-[11.5px] leading-relaxed text-ink-3">
-        <strong className="text-ink">An order value is derived from its lines</strong>, never stored beside
+      <Note foot label="An order value is derived from its lines">
+        , never stored beside
         them — two numbers for one fact is two numbers that will disagree. The three orders Line Watch
         already carries keep their published values exactly: their lines multiply out to the rupee.
-      </p>
+      </Note>
       <DespatchDialog />
     </Card>
   )
@@ -219,11 +220,11 @@ export function FinishedGoods() {
           )
         })}
       </div>
-      <p className="border-t border-line-soft px-4 py-3 text-[11.5px] leading-relaxed text-ink-3">
+      <Note foot label="How a finished-goods balance is built">
         A balance here is the sum of its movements — an opening figure, the jobs the floor closed, the
         despatches raised against it, and anything a customer sent back. The same rule the raw-material
         ledger keeps, for the same reason: a quantity you can type over is a quantity nobody can audit.
-      </p>
+      </Note>
     </Card>
   )
 }
@@ -272,11 +273,11 @@ export function DespatchRegister() {
           </tbody>
         </table>
       </div>
-      <p className="border-t border-line-soft px-4 py-3 text-[11.5px] leading-relaxed text-ink-3">
+      <Note foot label="Why a name on the note is the whole point">
         Every note names a person who let the goods go. That is the whole difference between a despatch
         and stock walking out of a gate, and it is why this is the smallest honest first step for the
         stage — before documents, before carriers, before milestones.
-      </p>
+      </Note>
     </Card>
   )
 }

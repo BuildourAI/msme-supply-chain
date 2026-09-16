@@ -4,6 +4,7 @@ import { Pill } from '@/components/ui/bits'
 import { InventoryTabs } from '@/components/inventory/InventoryTabs'
 import { CutRecords, OffcutRegister, RepurchaseCheck } from '@/components/inventory/Offcuts'
 import { useInventory } from '@/components/inventory/store'
+import { Note } from '@/components/ui/Note'
 import { buildRows, type SeedBundle } from '@/lib/domain/derive'
 import { DEFAULT_POLICY } from '@/lib/domain/policy'
 import * as S from '@/lib/seed/sourcing'
@@ -36,12 +37,12 @@ export default function Page() {
           <Pill tone="neutral" mono>{longDate(today)}</Pill>
         </>} />
       <InventoryTabs />
-      <p className="mb-4 max-w-3xl text-[13.5px] leading-relaxed text-ink-2">
+      <Note label="What this screen does" className="mb-3">
         A remnant above the usable minimum becomes a lot in the same ledger as everything else, with a
         size and a rack. Below the minimum it is scrap at the cut, which is what stops the register
         filling with bits nobody will use. Every cut record balances — input equals parts plus kerf plus
         remnants — so a yield figure is a measurement rather than an opinion.
-      </p>
+      </Note>
       <div className="space-y-3">
         <OffcutRegister />
         <CutRecords />

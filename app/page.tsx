@@ -24,6 +24,7 @@ import * as X from '@/lib/domain/exec'
 import { ASSUMPTIONS, A } from '@/lib/seed/exec'
 import { AssumptionLedger, ExecSection, HeadlineStrip, ProvenanceChip } from '@/components/exec/Section'
 import { execCharts } from '@/components/exec/charts'
+import { Note } from '@/components/ui/Note'
 
 const seed: SeedBundle = {
   today: S.TODAY_SOURCING, items: S.items, vendors: S.vendors, vendorItems: S.vendorItems,
@@ -213,8 +214,8 @@ export default function Page() {
       <div className="mb-3 space-y-3">
         <ExecSection no={1} index={0} title="Inbound procurement" kpis={inbound} charts={charts} notes={notes}
           blurb="Supplier efficiency and risk — whether the people you buy from can be relied on to keep the line fed">
-          <p className="border-t border-line-soft px-4 py-3 text-[12px] leading-relaxed text-ink-2">
-            <strong className="text-ink">Two different promises, and the gap between them is the point.</strong>{' '}
+          <Note foot label="Two different promises, and the gap between them is the point">
+        {' '}
             OTIF above is measured against the date written on the purchase order — a promise a person
             made. Measured instead against the lead time each vendor quotes in their price list, across
             every seeded receipt — all 27 supplier–item pairs, six receipts each — only{' '}
@@ -224,7 +225,7 @@ export default function Page() {
             measurable on the five receipts carrying a promised date and an ordered quantity, and that
             thinness is itself a finding: most factories cannot compute OTIF at all, because the
             promise was never written down.
-          </p>
+      </Note>
         </ExecSection>
 
         <ExecSection no={2} index={1} title="Warehouse & inventory health" kpis={warehouse} charts={charts} notes={notes}
@@ -232,8 +233,8 @@ export default function Page() {
 
         <ExecSection no={3} index={2} title="Outbound fulfilment" kpis={outbound} charts={charts} notes={notes}
           blurb="Delivery to customers — measured since Stage 5, where every figure on this row used to be an assumption">
-          <p className="border-t border-line-soft px-4 py-3 text-[12px] leading-relaxed text-ink-2">
-            <strong className="text-ink">This row used to be four invented numbers.</strong> Nothing in
+          <Note foot label="This row used to be four invented numbers">
+        Nothing in
             the build shipped anything, so there was no despatch table, no carrier record and no returns
             route, and all four were shown as the shape of an answer rather than the answer. DSP-01 to
             DSP-04 supply the three facts they were missing: a note that says what left and on whose
@@ -244,19 +245,19 @@ export default function Page() {
             {dsp.inTransit.length} still in transit and excluded rather than flattered into the
             numerator. The at-risk orders Line Watch derives are still underneath the headline, and
             still real.
-          </p>
+      </Note>
         </ExecSection>
 
         <ExecSection no={4} index={3} title="Supply chain financials" kpis={financial} charts={charts} notes={notes}
           blurb="Cash flow and cost — every supply-chain decision lands on the runway">
-          <p className="border-t border-line-soft px-4 py-3 text-[12px] leading-relaxed text-ink-2">
-            <strong className="text-ink">The freight half that IS measured:</strong> inbound freight on
+          <Note foot label="The freight half that is measured">
+        inbound freight on
             this run is <Num d={inFreight} format="raw" dp={2} suffix="% of order value" /> — ₹11,200
             against ₹4,55,100 of orders. It is quoted as a share rather than rupees per unit because
             these orders are in metres, kilograms and pieces, and dividing one rupee total by the sum of
             those would be arithmetic on nothing. Freight is one of the five components of landed cost
             (§5), which is why the cheapest quoted rate is so often not the cheapest material.
-          </p>
+      </Note>
         </ExecSection>
       </div>
 

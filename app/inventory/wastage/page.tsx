@@ -4,6 +4,7 @@ import { Pill } from '@/components/ui/bits'
 import { InventoryTabs } from '@/components/inventory/InventoryTabs'
 import { LossLedger, LossSummary, ScrapVsTarget } from '@/components/inventory/Wastage'
 import { useInventory } from '@/components/inventory/store'
+import { Note } from '@/components/ui/Note'
 import { lakh, longDate } from '@/lib/domain/format'
 
 export default function Page() {
@@ -20,12 +21,12 @@ export default function Page() {
           <Pill tone="neutral" mono>{longDate(today)}</Pill>
         </>} />
       <InventoryTabs />
-      <p className="mb-4 max-w-3xl text-[13.5px] leading-relaxed text-ink-2">
+      <Note label="What this screen does" className="mb-3">
         Seven causes, six of them posted automatically by events that already happen — a cut, a count,
         a closed challan, a gate rejection. Only wastage on the floor is typed by a person, because a
         loss you have to remember to enter is a loss nobody enters. Scrap percentage is then derived
         from this ledger rather than stored, which is what makes it move.
-      </p>
+      </Note>
       <div className="space-y-3">
         <LossSummary />
         <ScrapVsTarget />

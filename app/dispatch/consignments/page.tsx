@@ -4,6 +4,7 @@ import { Pill } from '@/components/ui/bits'
 import { DispatchTabs } from '@/components/dispatch/DispatchTabs'
 import { CarrierTable, ConsignmentRegister, OtifStrip } from '@/components/dispatch/Consignments'
 import { useDispatch } from '@/components/dispatch/store'
+import { Note } from '@/components/ui/Note'
 import { longDate, num } from '@/lib/domain/format'
 
 export default function Page() {
@@ -22,13 +23,13 @@ export default function Page() {
           <Pill tone="neutral" mono>{longDate(today)}</Pill>
         </>} />
       <DispatchTabs />
-      <p className="mb-4 max-w-3xl text-[13.5px] leading-relaxed text-ink-2">
+      <Note label="What this screen does" className="mb-3">
         Despatched and delivered used to be the same event as far as the record was concerned, so
         customer OTIF could not be computed at all and the executive dashboard carried an assumed
         percentage that said so. A consignment names the carrier, the date the customer was given and the
         date somebody watched the goods arrive. That third fact is the one no client in the source set
         captures today, and it is the whole reason this figure was illustrative.
-      </p>
+      </Note>
       <OtifStrip />
       <div className="space-y-3">
         <ConsignmentRegister />

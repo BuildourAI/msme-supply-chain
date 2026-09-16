@@ -1,6 +1,7 @@
 'use client'
 import { PageHeader } from '@/components/shell/PageHeader'
 import { Card, Pill, StatusPill } from '@/components/ui/bits'
+import { Note } from '@/components/ui/Note'
 import { buildRows, deskKpis, needsDecision, type SeedBundle } from '@/lib/domain/derive'
 import { buildLineWatch } from '@/lib/domain/linewatch'
 import { DEFAULT_POLICY } from '@/lib/domain/policy'
@@ -344,12 +345,12 @@ export default function Page() {
           <Pill mono>run in your browser, not baked in</Pill>
         </>} />
 
-      <p className="mb-4 max-w-3xl text-[13.5px] leading-relaxed text-ink-2">
+      <Note label="What this screen does" className="mb-3">
         Every figure quoted in the design document, recomputed live from the seed data by the same
         functions the dashboards render. Nothing here is a stored expected value — if a formula
         changes, this page goes red before anyone notices on a dashboard. It checks the seed as
         shipped, not the decisions you have made this session, so it stays a contract.
-      </p>
+      </Note>
 
       <div className="space-y-3">
         {groups.map((g) => {

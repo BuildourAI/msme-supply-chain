@@ -4,6 +4,7 @@ import { Card, Pill, StatusPill } from '@/components/ui/bits'
 import { LandedCostCompare } from '@/components/desk/Panels'
 import { RankedBars } from '@/components/charts/exec-charts'
 import { useDesk } from '@/components/desk/store'
+import { Note } from '@/components/ui/Note'
 import { money } from '@/lib/domain/format'
 import type { DerivedRow } from '@/lib/domain/derive'
 
@@ -55,14 +56,14 @@ export default function Page() {
           <Pill mono>{money(exposure)} on this run</Pill>
         </>} />
 
-      <p className="mb-3 max-w-4xl text-[13px] leading-relaxed text-ink-2">
+      <Note label="What this screen does" className="mb-3">
         <strong className="text-ink">The cheapest quoted rate is the wrong answer on{' '}
         {flipping.length} of these {rows.length} lines.</strong> Landed cost is the rate plus freight,
         plus the GST you cannot claim back, plus what the payment term costs you, plus an allowance for
         the material this vendor historically sends back — five components, each one openable. Buying
         the whole run on quoted rate alone would cost {money(exposure)} more than buying it on landed
         cost, and none of that difference is visible on a quotation.
-      </p>
+      </Note>
 
       <div className="mb-3 grid items-start gap-3 xl:grid-cols-[1.15fr_1fr]">
         <Card index={0} title="Every line, on both bases"

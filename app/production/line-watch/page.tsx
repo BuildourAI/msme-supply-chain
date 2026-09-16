@@ -5,6 +5,7 @@ import { Button, Card, Pill, StatusPill } from '@/components/ui/bits'
 import { KpiTile } from '@/components/desk/KpiRow'
 import { Num } from '@/components/ui/Num'
 import { CoverBar, StockBar, type StockSeg } from '@/components/charts/kit'
+import { Note } from '@/components/ui/Note'
 import { buildLineWatch, type DerivedMaterial } from '@/lib/domain/linewatch'
 import { lakh, longDate, money, num, qtyText, shortDate, STATUS_LABEL } from '@/lib/domain/format'
 import { OWNER_POLICY } from '@/lib/domain/policy'
@@ -262,11 +263,11 @@ export default function Page() {
           <Pill>supplier policy: {OWNER_POLICY.supplierDefault === 'preferred' ? 'usual supplier' : 'lowest landed cost'}</Pill>
         </>} />
 
-      <p className="mb-4 max-w-3xl text-[13.5px] leading-relaxed text-ink-2">
+      <Note label="What this screen does" className="mb-3">
         The same data as the buyer’s desk, read as a manufacturing statement rather than an inventory
         number. Plain language on the face — the arithmetic is still underneath every figure if you
         want it.
-      </p>
+      </Note>
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiTile index={0} label="The line runs for" d={t.lineRunsFor} format="days" tone="critical" icon="clock" suffix=" days"
@@ -335,13 +336,13 @@ export default function Page() {
               )
             })}
           </ul>
-          <p className="border-t border-line-soft px-4 py-3 text-[12px] leading-relaxed text-ink-3">
-            A job halting because a jobworker is late is a different problem from a job halting
+          <Note foot label="A late jobworker is a different problem from empty stock">
+        A job halting because a jobworker is late is a different problem from a job halting
             because stock ran out.{' '}
             {OVERDUE.length > 0 && lw.jobs.some((j) => j.status.value === 'at_risk')
               ? <>{lw.jobs.filter((j) => j.status.value === 'at_risk').map((j) => j.job.jobNo).join(', ')} is the first kind — {OVERDUE.map((j) => `${j.vendorName} is ${daysBetween(j.dueBack, lw.today)} days late`).join(', ')} — and the schedule says so.</>
               : 'Nothing is late at a jobworker this week.'}
-          </p>
+      </Note>
         </Card>
 
         <Card index={12} title="Offcuts and scrap" sub="Material already owned, and material being lost">

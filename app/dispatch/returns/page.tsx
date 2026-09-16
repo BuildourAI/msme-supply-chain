@@ -4,6 +4,7 @@ import { Pill } from '@/components/ui/bits'
 import { DispatchTabs } from '@/components/dispatch/DispatchTabs'
 import { ReturnsRegister } from '@/components/dispatch/Returns'
 import { useDispatch } from '@/components/dispatch/store'
+import { Note } from '@/components/ui/Note'
 import { longDate, num } from '@/lib/domain/format'
 
 export default function Page() {
@@ -18,13 +19,13 @@ export default function Page() {
           <Pill tone="neutral" mono>{longDate(today)}</Pill>
         </>} />
       <DispatchTabs />
-      <p className="mb-4 max-w-3xl text-[13.5px] leading-relaxed text-ink-2">
+      <Note label="What this screen does" className="mb-3">
         A returned product used to be handled on the phone: it never became stock again, never became a
         quality signal and never reached the supplier who caused it. Half the fix was already built,
         because goods coming back are goods coming in and the inbound gate has checked those against a
         spec since INB-01. The missing half is this — an authorisation with a named owner and a date the
         return can be late against.
-      </p>
+      </Note>
       <div className="space-y-3">
         <ReturnsRegister />
       </div>

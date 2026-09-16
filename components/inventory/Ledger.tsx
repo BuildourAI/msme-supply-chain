@@ -4,6 +4,7 @@ import { Button, Card, Pill, StatusPill } from '@/components/ui/bits'
 import { Dialog } from '@/components/ui/Dialog'
 import { Num } from '@/components/ui/Num'
 import { money, num, qtyText, shortDate } from '@/lib/domain/format'
+import { Note } from '@/components/ui/Note'
 import { useInventory, type LotRow } from './store'
 
 const USABILITY_LABEL: Record<string, string> = {
@@ -212,8 +213,8 @@ export function StockLedger() {
         </div>
 
         {stale.length > 0 && (
-          <p className="border-t border-line-soft px-4 py-3 text-[12.5px] leading-relaxed text-ink-2">
-            <strong className="text-ink">
+          <Note foot label="Which balances are past their counting cadence">
+        <strong className="text-ink">
               {stale.length === 1 ? 'One balance is' : `${stale.length} balances are`} past the counting
               cadence for their class
             </strong>{' '}
@@ -225,7 +226,7 @@ export function StockLedger() {
               hiding: the lots nobody counts are the lots nobody can use. They sit in a corner, never come
               up on a job, and so never get looked at.</>
             )}
-          </p>
+      </Note>
         )}
       </Card>
 
@@ -276,11 +277,11 @@ export function CountHistory() {
           </tbody>
         </table>
       </div>
-      <p className="border-t border-line-soft px-4 py-3 text-[11.5px] leading-relaxed text-ink-3">
+      <Note foot label="What “record accuracy” measures, and what it does not">
         Record accuracy is {num(accuracy.value, 1)}% — counts that came in inside their class tolerance,
         over counts taken. It is deliberately not “is the stock right”, which nobody can answer. It is
         “how often is the book right when somebody checks”, which is measurable and which moves.
-      </p>
+      </Note>
     </Card>
   )
 }

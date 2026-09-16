@@ -7,6 +7,7 @@ import { Sparkbars } from '@/components/ui/Sparkbars'
 import { Icon, type IconName } from '@/components/ui/icons'
 import { ICON_BG, TONE_WORD } from '@/components/exec/Section'
 import { money, num, shortDate } from '@/lib/domain/format'
+import { Note } from '@/components/ui/Note'
 import { useDispatch } from './store'
 
 /**
@@ -179,12 +180,12 @@ export function ConsignmentRegister() {
           </tbody>
         </table>
       </div>
-      <p className="border-t border-line-soft px-4 py-3 text-[11.5px] leading-relaxed text-ink-3">
-        <strong className="text-ink">On time and in full are two different failures.</strong> A
+      <Note foot label="On time and in full are two different failures">
+        A
         consignment that arrives by the promised date against a part shipment is not an OTIF success,
         and this table keeps the two apart instead of averaging them into one comfortable number. A
         consignment still in transit counts as neither until it lands.
-      </p>
+      </Note>
       <DeliveryDialog />
     </Card>
   )
@@ -226,11 +227,11 @@ export function CarrierTable() {
           </tbody>
         </table>
       </div>
-      <p className="border-t border-line-soft px-4 py-3 text-[11.5px] leading-relaxed text-ink-3">
+      <Note foot label="Read the count beside the drift before acting">
         Read the count beside the drift before acting on it. One late consignment out of
         {' '}{num(carrierRows.reduce((a, r) => a + r.shipped, 0), 0)} across every carrier is an
         incident; the same carrier late repeatedly is a conversation about the rate.
-      </p>
+      </Note>
     </Card>
   )
 }

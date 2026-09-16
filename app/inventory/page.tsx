@@ -7,6 +7,7 @@ import { Num } from '@/components/ui/Num'
 import { useInventory } from '@/components/inventory/store'
 import { INVENTORY_TABS } from '@/components/inventory/InventoryTabs'
 import { money, type Tone } from '@/lib/domain/format'
+import { Note } from '@/components/ui/Note'
 
 /**
  * The front door. One number per system — each of them a number this factory
@@ -86,14 +87,14 @@ export default function Page() {
             </Link>
           ))}
         </div>
-        <p className="border-t border-line-soft px-4 py-3 text-[12px] leading-relaxed text-ink-3">
-          One ledger, three readings. A cut issues material and hands back a remnant, so INV-02 posts to
+        <Note foot label="One ledger, three readings">
+        One ledger, three readings. A cut issues material and hands back a remnant, so INV-02 posts to
           the same balance INV-01 shows. The kerf and the undersized drops from that same cut land on
           INV-03 as losses with a cause. A cycle count that comes up short posts an adjustment and a
           loss at once. And the totals still reconcile to §9.1 exactly — the opening balance of every
           lot is computed so that opening plus every document since equals the quantity the design
           document states, which is why the Sourcing Desk does not move.
-        </p>
+      </Note>
       </Card>
     </StagePage>
   )

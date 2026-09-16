@@ -3,6 +3,7 @@ import { Button, Card, Pill } from '@/components/ui/bits'
 import { Dialog } from '@/components/ui/Dialog'
 import { Num } from '@/components/ui/Num'
 import { money, num, shortDate } from '@/lib/domain/format'
+import { Note } from '@/components/ui/Note'
 import { fgById, useDispatch } from './store'
 
 /**
@@ -188,12 +189,12 @@ export function DocumentRegister() {
           </tbody>
         </table>
       </div>
-      <p className="border-t border-line-soft px-4 py-3 text-[11.5px] leading-relaxed text-ink-3">
-        <strong className="text-ink">This is a hand-off, not a ledger.</strong> The pack carries the
+      <Note foot label="This is a hand-off, not a ledger">
+        The pack carries the
         figures the accounting package needs and stops there: no invoice number is allocated here, no
         tax is computed here, and no receivable is held here. §12 puts that boundary in writing, and it
         is the difference between saving three re-keys and quietly building a second set of books.
-      </p>
+      </Note>
       <DocumentPack />
     </Card>
   )

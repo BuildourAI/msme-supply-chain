@@ -6,6 +6,7 @@ import { Num } from '@/components/ui/Num'
 import { money, num, qtyText, shortDate } from '@/lib/domain/format'
 import { CAUSE_MOVES_STOCK, LOSS_LABEL } from '@/lib/domain/inventory'
 import type { LossCause } from '@/lib/domain/types'
+import { Note } from '@/components/ui/Note'
 import { useInventory, type LossRow } from './store'
 
 /* ------------------------------------------------------- record a wastage -- */
@@ -226,7 +227,7 @@ export function ScrapVsTarget() {
           </tbody>
         </table>
       </div>
-      <p className="border-t border-line-soft px-4 py-3 text-[12px] leading-relaxed text-ink-2">
+      <Note foot label="What a class target is measured against">
         {over.length > 0 ? (
           <>
             <strong className="text-ink">
@@ -241,7 +242,7 @@ export function ScrapVsTarget() {
         )}{' '}
         The percentage is against material <em>issued</em>, not material bought — so a quiet month does
         not flatter it.
-      </p>
+      </Note>
     </Card>
   )
 }
@@ -348,7 +349,7 @@ export function LossLedger() {
           </tbody>
         </table>
       </div>
-      <p className="border-t border-line-soft px-4 py-3 text-[11.5px] leading-relaxed text-ink-3">
+      <Note foot label="Recoverable is the estimate; Actual is the money">
         {lossRows.length > shown.length && `${lossRows.length - shown.length} older records not shown. `}
         <strong className="text-ink">Recoverable is the estimate; Actual is the money.</strong> The
         scrap rate is booked when the loss is recorded, so Recoverable is only what the ledger assumed.
@@ -360,7 +361,7 @@ export function LossLedger() {
         gate rejection — or it names a component of a movement already posted, like the kerf inside a
         cut’s issue. That is why the two ledgers never double-count, and why the stock balances still
         reconcile to §9.1 with the whole loss ledger sitting alongside them.
-      </p>
+      </Note>
     </Card>
   )
 }

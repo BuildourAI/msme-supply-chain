@@ -4,6 +4,7 @@ import { Pill } from '@/components/ui/bits'
 import { InboundTabs } from '@/components/inbound/InboundTabs'
 import { InspectionHistory, LeadTimeTruth, ReceivingQueue, SpecRegister } from '@/components/inbound/Receiving'
 import { useInbound } from '@/components/inbound/store'
+import { Note } from '@/components/ui/Note'
 import { specChecks } from '@/lib/seed/inbound'
 import { buildRows, type SeedBundle } from '@/lib/domain/derive'
 import { DEFAULT_POLICY } from '@/lib/domain/policy'
@@ -31,12 +32,12 @@ export default function Page() {
           <Pill tone="neutral" mono>{longDate(today)}</Pill>
         </>} />
       <InboundTabs />
-      <p className="mb-4 max-w-3xl text-[13.5px] leading-relaxed text-ink-2">
+      <Note label="What this screen does" className="mb-3">
         No material becomes usable stock without a goods receipt, and no receipt closes until every
         check on the item’s spec is marked with a reading or a mark against it. What is rejected lands
         in a named bucket rather than a storeman’s memory, and what is accepted files a receipt — so the
         vendor’s lead time and rejection rate move as the gate is worked.
-      </p>
+      </Note>
       <div className="space-y-3">
         <ReceivingQueue />
         <InspectionHistory />

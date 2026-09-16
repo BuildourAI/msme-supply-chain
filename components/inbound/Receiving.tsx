@@ -8,6 +8,7 @@ import { money, num, qtyText, shortDate } from '@/lib/domain/format'
 import { outcomeForMeasure } from '@/lib/domain/inbound'
 import type { CheckOutcome, SpecCheck } from '@/lib/domain/types'
 import type { Tone as ToneT } from '@/lib/domain/format'
+import { Note } from '@/components/ui/Note'
 import { useInbound, type GrnRow } from './store'
 
 const QC_TONE: Record<string, ToneT> = { fresh: 'accent', at_limit: 'warn', overdue: 'critical' }
@@ -375,11 +376,11 @@ export function InspectionHistory() {
           </tbody>
         </table>
       </div>
-      <p className="border-t border-line-soft px-4 py-3 text-[11.5px] leading-relaxed text-ink-3">
+      <Note foot label="How a rejection here re-prices that supplier">
         This table is what a rejection allowance is an average of. §5 prices every quote at
         rate × trailing_rejection_rate — until now that rate was a stored constant. Close a GRN with a
         rejection on it and the Sourcing Desk re-prices that supplier on the next run.
-      </p>
+      </Note>
     </Card>
   )
 }
@@ -468,11 +469,11 @@ export function LeadTimeTruth({ rows }: {
           </tbody>
         </table>
       </div>
-      <p className="border-t border-line-soft px-4 py-3 text-[11.5px] leading-relaxed text-ink-3">
+      <Note foot label="Why every lead time here is computed, not stored">
         The receipt side of INB-01. Every lead time here is computed from six receipt records, not
         stored as a number — click one to see the six dates it averages. Closing a GRN files another
         receipt, so this table moves as the gate is worked.
-      </p>
+      </Note>
     </Card>
   )
 }
