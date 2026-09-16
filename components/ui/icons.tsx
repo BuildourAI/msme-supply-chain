@@ -16,7 +16,7 @@ export type IconName =
   | 'home' | 'report' | 'cart' | 'tray' | 'boxes' | 'factory' | 'truck'
   | 'search' | 'bell' | 'chevron' | 'lock' | 'check' | 'arrow-right'
   | 'activity' | 'alert' | 'clock' | 'cash' | 'calendar' | 'menu' | 'help'
-  | 'close' | 'scale' | 'doc' | 'arrow-down' | 'info' | 'mail' | 'camera'
+  | 'close' | 'scale' | 'doc' | 'arrow-down' | 'info' | 'mail' | 'camera' | 'filter'
 
 const PATHS: Record<IconName, React.ReactNode> = {
   home: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5.5 9.5V20h13V9.5" /></>,
@@ -46,6 +46,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
   info: <><circle cx="12" cy="12" r="8.75" /><path d="M12 11v5.5" /><circle cx="12" cy="7.9" r=".9" fill="currentColor" stroke="none" /></>,
   mail: <><rect x="2.5" y="5" width="19" height="14" rx="2" /><path d="m3.5 6.5 8.5 6.5 8.5-6.5" /></>,
   camera: <><path d="M3.5 7.5h3.8l1.4-2.2h6.6l1.4 2.2h3.8a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H3.5A1.5 1.5 0 0 1 2 18.5v-9a1.5 1.5 0 0 1 1.5-1.5Z" /><circle cx="12" cy="13.5" r="3.6" /></>,
+  filter: <path d="M3.5 5h17l-6.5 7.5v5.5l-4 2v-7.5z" />,
 }
 
 export function Icon({ name, className = 'size-4' }: { name: IconName; className?: string }) {

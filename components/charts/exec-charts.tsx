@@ -315,7 +315,7 @@ export function Waterfall({ steps, unit = 'days', totalLabel }: {
  * would double-encode bar length as colour and spend the only free channel on
  * information the bar already shows.
  */
-export function RankedBars({ rows, format = 'money', hatched, unit, target, targetLabel, title, more }: {
+export function RankedBars({ rows, format = 'money', hatched, unit, target, targetLabel, title, more, onPick, picked }: {
   rows: { label: string; value: number; sub?: string }[]
   format?: 'money' | 'int' | 'pct'; hatched?: boolean; unit?: string
   /** a limit drawn as a rule across the bars, scaled in with them */
@@ -324,6 +324,14 @@ export function RankedBars({ rows, format = 'money', hatched, unit, target, targ
   title?: string
   /** what was left off the bottom, when the list is deliberately cut short */
   more?: string
+  /**
+   * Make each bar a control. A summary chart that sits beside a table of the
+   * same rows is a filter waiting to be wired: click the bar, see the rows.
+   * `picked` is the label currently chosen; the others step back so the
+   * chart and the table agree at a glance. Clicking the picked bar clears it.
+   */
+  onPick?: (label: string) => void
+  picked?: string
 }) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
   const top = Math.max(...rows.map((r) => r.value), target ?? 0, 1) * (target != null ? 1.06 : 1)
@@ -333,28 +341,43 @@ export function RankedBars({ rows, format = 'money', hatched, unit, target, targ
     <div>
       {title && <p className="mb-1.5 text-[10.5px] uppercase tracking-wide text-ink-3">{title}</p>}
       <ul className="space-y-2">
-        {rows.map((r, i) => (
-          <li key={r.label}>
-            <p className="flex items-baseline gap-2">
-              <span className="min-w-0 truncate text-[11.5px] text-ink-2" title={r.label}>{r.label}</span>
-              <span className="num ml-auto shrink-0 text-[11.5px] font-medium">{fmt(r.value)}{unit ?? ''}</span>
-            </p>
-            {/* the sub line carries the evidence — it is never truncated away */}
-            {r.sub && <p className="mono text-[10px] leading-snug text-ink-3">{r.sub}</p>}
-            <svg viewBox="0 0 100 8" preserveAspectRatio="none" className="mt-1 h-2.5 w-full" role="img"
-                 aria-label={`${r.label}: ${fmt(r.value)}`}>
-              <defs>{hatched && <Hatch id={`r-${uid}-${i}`} color="var(--seq-4)" />}</defs>
-              <rect x="0" y="0" width={Math.max(0.8, (r.value / top) * 100)} height="8" rx="1.5"
-                    fill={hatched ? `url(#r-${uid}-${i})` : 'var(--seq-4)'}
-                    className="anim-reveal" style={{ '--i': Math.min(i, 6) } as React.CSSProperties}>
-                <title>{`${r.label}: ${fmt(r.value)}`}</title>
-              </rect>
-              {target != null && (
-                <rect x={Math.max(0, (target / top) * 100 - 0.35)} y="-1" width="0.7" height="10" fill="var(--ink)" />
-              )}
-            </svg>
-          </li>
-        ))}
+        {rows.map((r, i) => {
+          const dim = picked != null && picked !== r.label
+          const body = (
+            <>
+              <p className="flex items-baseline gap-2">
+                <span className={`min-w-0 truncate text-[11.5px] ${picked === r.label ? 'font-medium text-accent-ink' : 'text-ink-2'}`}
+                      title={r.label}>{r.label}</span>
+                <span className="num ml-auto shrink-0 text-[11.5px] font-medium">{fmt(r.value)}{unit ?? ''}</span>
+              </p>
+              {/* the sub line carries the evidence — it is never truncated away */}
+              {r.sub && <p className="mono text-[10px] leading-snug text-ink-3">{r.sub}</p>}
+              <svg viewBox="0 0 100 8" preserveAspectRatio="none" className="mt-1 h-2.5 w-full" role="img"
+                   aria-label={`${r.label}: ${fmt(r.value)}`}>
+                <defs>{hatched && <Hatch id={`r-${uid}-${i}`} color="var(--seq-4)" />}</defs>
+                <rect x="0" y="0" width={Math.max(0.8, (r.value / top) * 100)} height="8" rx="1.5"
+                      fill={hatched ? `url(#r-${uid}-${i})` : 'var(--seq-4)'}
+                      className="anim-reveal" style={{ '--i': Math.min(i, 6) } as React.CSSProperties}>
+                  <title>{`${r.label}: ${fmt(r.value)}`}</title>
+                </rect>
+                {target != null && (
+                  <rect x={Math.max(0, (target / top) * 100 - 0.35)} y="-1" width="0.7" height="10" fill="var(--ink)" />
+                )}
+              </svg>
+            </>
+          )
+          return (
+            <li key={r.label} className={`transition-opacity ${dim ? 'opacity-50' : ''}`}>
+              {onPick ? (
+                <button type="button" onClick={() => onPick(r.label)} aria-pressed={picked === r.label}
+                  title={picked === r.label ? `Showing only ${r.label} — click to show all` : `Show only ${r.label}`}
+                  className="press -mx-1.5 block w-[calc(100%+0.75rem)] rounded-md px-1.5 py-0.5 text-left transition-colors hover:bg-surface-2">
+                  {body}
+                </button>
+              ) : body}
+            </li>
+          )
+        })}
       </ul>
       <p className="mono mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] text-ink-3">
         {target != null && (
