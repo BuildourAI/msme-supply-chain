@@ -71,7 +71,7 @@ export default function Page() {
         cost, and none of that difference is visible on a quotation.
       </Note>
 
-      <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
+      <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
         <Card index={0} title="Every line, on both bases"
           sub="Click a material to compare its vendors component by component"
           actions={<span className="mono text-[10.5px] text-ink-3"
@@ -105,9 +105,16 @@ export default function Page() {
                         {v.flips ? v.best.vendor.name : 'same vendor'}{' '}
                         <span className="num">{money(v.best.landedPerUnit.value, 2)}</span>/{v.r.item.uom}
                         {' · '}{v.flips ? 'flips' : 'confirms'}
-                        {' · '}{v.onThisOrder > 0
-                          ? <span className="num">{money(v.onThisOrder)} on order</span>
-                          : 'nothing to order'}
+                        {/* on a laptop the two vendors and their rates are what
+                            the row is for; the rupee cost of the gap is already
+                            on the right of the row, in the card beside it and in
+                            this row's tooltip, so it is the part that gives way
+                            when the column is narrow */}
+                        <span className="hidden xl:inline">
+                          {' · '}{v.onThisOrder > 0
+                            ? <span className="num">{money(v.onThisOrder)} on order</span>
+                            : 'nothing to order'}
+                        </span>
                       </span>
                     </span>
 
@@ -149,7 +156,7 @@ export default function Page() {
         {/* the answer to the click, kept beside the click — and the two folds
             that explain it, in the column they explain rather than at the foot
             of a page the reader never reaches */}
-        <div className="space-y-2.5 xl:sticky xl:top-[60px]">
+        <div className="space-y-2.5 lg:sticky lg:top-[60px]">
           <LandedCostCompare numbers="folded" />
           <div className="flex flex-wrap gap-x-6 gap-y-1 px-1">
         <Note label="The five components of landed cost">
