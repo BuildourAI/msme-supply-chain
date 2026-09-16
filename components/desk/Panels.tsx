@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { Button, Card, Pill, Segmented, StatusPill } from '@/components/ui/bits'
 import { Icon } from '@/components/ui/icons'
+import { Note } from '@/components/ui/Note'
 import { Num } from '@/components/ui/Num'
 import { StackedBars, type StackRow } from '@/components/charts/kit'
 import { lakh, money, num, qtyText, shortDate } from '@/lib/domain/format'
@@ -16,9 +17,19 @@ const COST_KEYS = ['Rate', 'Freight', 'Non-cred. GST', 'Payment term', 'Rejectio
 
 /* ------------------------------------------------ SRC-03 · landed cost ---- */
 
-export function LandedCostCompare() {
+export function LandedCostCompare({ numbers = 'shown' }: {
+  /**
+   * The per-component table under the bars. On the desk it is part of the
+   * answer and stays open; on the comparison page it sits beside a list the
+   * reader is clicking through, where seven numeric columns redrawing on every
+   * click is noise — the bars carry the same five components, and the numbers
+   * are one click away for anyone checking a figure.
+   */
+  numbers?: 'shown' | 'folded'
+}) {
   const { selected: r } = useDesk()
   const [mode, setMode] = useState<'full' | 'extras'>('full')
+  const [showNums, setShowNums] = useState(false)
 
   const rows: StackRow[] = r.quotes.map((q) => {
     const vi = q.vendorItem
@@ -44,31 +55,61 @@ export function LandedCostCompare() {
   })
 
   const best = r.quotes[0], cheap = r.quotes.find((q) => q.isLowestRate)!
+  const gap = cheap.landedPerUnit.value - best.landedPerUnit.value
+  const onOrder = gap * Math.max(r.reorderQty.value, 0)
+  const folded = numbers === 'folded'
 
   return (
-    <Card id="compare" index={5} title="Landed-cost comparison" sub={`SRC-03 · ${r.item.code} · ${r.item.name}`}
+    <Card id="compare" index={5}
+      title={folded ? `Landed-cost comparison · ${r.item.code}` : 'Landed-cost comparison'}
+      sub={`SRC-03 · ${r.item.code} · ${r.item.name}`}
       actions={<Segmented label="Comparison basis" value={mode} onChange={setMode}
         options={[{ id: 'full', label: 'Full landed cost' }, { id: 'extras', label: 'Beyond the rate' }]} />}>
-      <div className="p-4">
-        <StackedBars rows={rows} keys={mode === 'full' ? COST_KEYS : COST_KEYS.slice(1)} />
+      <div className={folded ? 'p-3.5' : 'p-4'}>
+        <StackedBars rows={rows} keys={mode === 'full' ? COST_KEYS : COST_KEYS.slice(1)}
+          table={!folded || showNums} />
+
+        {folded && (
+          <button type="button" onClick={() => setShowNums((v) => !v)} aria-expanded={showNums}
+            className="press mt-2.5 inline-flex items-center gap-1.5 rounded text-[11.5px] text-ink-3 transition-colors hover:text-ink">
+            <Icon name="chevron" className={`size-2.5 shrink-0 transition-transform duration-200 ${showNums ? 'rotate-90' : ''}`} />
+            {showNums ? 'Hide the numbers' : 'Show the numbers'}
+          </button>
+        )}
 
         {r.flipsVendor ? (
-          <p className="mt-4 rounded-md border border-accent/30 bg-accent-soft p-3 text-[12.5px] leading-relaxed text-ink-2">
+          <p className={`rounded-md border border-accent/30 bg-accent-soft p-3 text-[12.5px] leading-relaxed text-ink-2 ${folded ? 'mt-2.5' : 'mt-4'}`}>
             <strong className="text-ink">Landed cost overturns the cheapest quote here.</strong>{' '}
-            {cheap.vendor.name} quotes {money(cheap.vendorItem.rate, 2)} against {best.vendor.name}’s{' '}
-            {money(best.vendorItem.rate, 2)}, and lands at {money(cheap.landedPerUnit.value, 2)} against{' '}
-            {money(best.landedPerUnit.value, 2)} — {money((cheap.landedPerUnit.value - best.landedPerUnit.value) * Math.max(r.reorderQty.value, 1))}{' '}
-            more on {r.reorderQty.value > 0 ? `a ${num(r.reorderQty.value, 0)} ${r.item.uom} order` : 'this line'},
-            because of freight, terms and a {cheap.vendorItem.trailingRejectionRate}% rejection history.
+            {cheap.vendor.name} quotes {money(cheap.vendorItem.rate, 2)} and lands{' '}
+            {money(gap, 2)} dearer than {best.vendor.name} — {onOrder > 0
+              ? `${money(onOrder)} more on ${`a ${num(r.reorderQty.value, 0)} ${r.item.uom} order`}`
+              : 'nothing today, because this line has no order on it'}.
           </p>
         ) : (
-          <p className="mt-4 rounded-md border border-line bg-surface-2 p-3 text-[12.5px] leading-relaxed text-ink-2">
+          <p className={`rounded-md border border-line bg-surface-2 p-3 text-[12.5px] leading-relaxed text-ink-2 ${folded ? 'mt-2.5' : 'mt-4'}`}>
             <strong className="text-ink">The obvious choice is also the right one here.</strong>{' '}
-            {best.vendor.name} has both the lowest quoted rate and the lowest landed cost. Not every
-            comparison flips the vendor — on this dataset six of nine do and three confirm.
+            {best.vendor.name} has both the lowest quoted rate and the lowest landed cost.
           </p>
         )}
       </div>
+
+      <Note foot label={r.flipsVendor ? 'Why this vendor loses on landed cost' : 'Why some lines flip and this one does not'}>
+        {r.flipsVendor ? (
+          <>
+            {cheap.vendor.name} quotes {money(cheap.vendorItem.rate, 2)} against {best.vendor.name}’s{' '}
+            {money(best.vendorItem.rate, 2)}, and lands at {money(cheap.landedPerUnit.value, 2)} against{' '}
+            {money(best.landedPerUnit.value, 2)} — because of freight, terms and a{' '}
+            {cheap.vendorItem.trailingRejectionRate}% rejection history. Not every comparison flips the
+            vendor: on this dataset six of nine do and three confirm.
+          </>
+        ) : (
+          <>
+            Freight, payment terms and rejection history can all overturn a quoted rate, and on six of
+            these nine lines they do. Here they do not: {best.vendor.name} is ahead on the rate and stays
+            ahead once the other four components are added.
+          </>
+        )}
+      </Note>
     </Card>
   )
 }

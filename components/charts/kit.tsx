@@ -81,8 +81,10 @@ const BADGE_CLS = {
  * value table beneath. 2px surface gaps between segments keep adjacent fills
  * from reading as one block.
  */
-export function StackedBars({ rows, keys, format = 'money', max }: {
+export function StackedBars({ rows, keys, format = 'money', max, table = true }: {
   rows: StackRow[]; keys: string[]; format?: 'money' | 'lakh'; max?: number
+  /** the per-component numbers under the bars; off when the caller folds them */
+  table?: boolean
 }) {
   const [hover, setHover] = useState<string | null>(null)
   const top = max ?? Math.max(...rows.map((r) => r.total), 1)
@@ -129,7 +131,7 @@ export function StackedBars({ rows, keys, format = 'money', max }: {
 
       {/* seven numeric columns cannot shrink below their digits; on a phone
           the table scrolls inside the card rather than pushing the card wide */}
-      <div className="overflow-x-auto">
+      {table && <div className="overflow-x-auto">
       <table className="mt-3 w-full border-collapse text-[12px]">
           <thead>
             <tr className="border-b border-line text-ink-3">
@@ -156,7 +158,7 @@ export function StackedBars({ rows, keys, format = 'money', max }: {
             ))}
           </tbody>
         </table>
-      </div>
+      </div>}
     </div>
   )
 }
