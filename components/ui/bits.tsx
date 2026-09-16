@@ -36,7 +36,7 @@ export function Pill({ children, tone = 'neutral', mono = false, title }: {
 export function StatusPill({ label, tone, explain }: { label: string; tone: Tone; explain?: string }) {
   return (
     <span title={explain}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium leading-[18px] ${TONE_BG[tone]} ${explain ? 'cursor-help' : ''}`}>
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium leading-[18px] ${TONE_BG[tone]} ${explain ? 'cursor-help' : ''}`}>
       <span aria-hidden className={`size-1.5 rounded-full ${TONE_BAR[tone]}`} />
       {label}
     </span>

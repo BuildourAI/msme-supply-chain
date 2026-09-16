@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { PageHeader, TabStrip } from '@/components/shell/PageHeader'
 import { Button, Card, Pill, Segmented, StatusPill } from '@/components/ui/bits'
 import { Num } from '@/components/ui/Num'
+import { Icon } from '@/components/ui/icons'
 import { useDesk } from '@/components/desk/store'
 import { KpiTile } from '@/components/desk/KpiRow'
 import { DetailTable, SummaryTable } from '@/components/desk/Src01Table'
@@ -14,7 +15,7 @@ import { useApp } from '@/state/app-store'
 type Tab = 'desk' | 'history' | 'policy'
 
 function Filters() {
-  const { state, setQuery, setFilter, setView, visible, rows } = useDesk()
+  const { state, setQuery, setFilter, setView, toggleWorking, visible, rows } = useDesk()
   const chips: { id: typeof state.statusFilter; label: string }[] = [
     { id: 'all', label: `All ${rows.length}` },
     { id: 'needs_decision', label: 'Needs a decision' },
@@ -42,8 +43,30 @@ function Filters() {
       <span className="mono ml-auto text-[11px] text-ink-3">
         showing {visible.length} of {rows.length}
       </span>
-      <Segmented label="Table view" value={state.view} onChange={setView}
-        options={[{ id: 'summary', label: 'Summary' }, { id: 'detail', label: 'Full detail' }]} />
+      {/* the two view controls travel together, so a narrow strip wraps them
+          onto the same line rather than stranding one of them */}
+      <div className="flex items-center gap-2">
+      {/* The summary table answers "which lines need me". The four columns
+            behind this button answer "why, and at what price" — a different
+            question, asked less often, and carrying four columns of arithmetic
+            into every glance is what made this table hard to read. Only offered
+            on the summary view: full detail already shows all of it. */}
+        {state.view === 'summary' && (
+          <button type="button" onClick={toggleWorking} aria-pressed={state.working}
+            title="Usable stock, the reorder point, cover left, the landed rate — and each material's full name"
+            className={`press inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11.5px] font-medium transition-colors ${
+              state.working
+                ? 'border-accent bg-accent-soft text-accent-ink'
+                : 'border-line text-ink-2 hover:bg-surface-2'}`}>
+            <Icon name="chevron" className={`size-3 transition-transform duration-200 ${
+              state.working ? 'rotate-90' : ''}`} />
+            {state.working ? 'Hide the working' : 'Show the working'}
+            {!state.working && <span className="mono text-[10px] text-ink-3">4 cols</span>}
+          </button>
+        )}
+        <Segmented label="Table view" value={state.view} onChange={setView}
+          options={[{ id: 'summary', label: 'Summary' }, { id: 'detail', label: 'Full detail' }]} />
+      </div>
     </div>
   )
 }

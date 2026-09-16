@@ -46,6 +46,14 @@ interface State {
   overrides: Record<string, string>
   decisions: Record<string, DecisionRecord>
   view: ViewMode
+  /**
+   * §8.1 — the summary table shows the decision, not the working. The four
+   * columns that explain HOW the line was raised (usable, reorder point,
+   * cover left, landed rate) and the material's full name are folded away
+   * until asked for, because a buyer scanning nine lines is looking for
+   * which ones need him, not for the arithmetic behind each.
+   */
+  working: boolean
   sort: { col: SortCol; dir: 'asc' | 'desc' }
   query: string
   statusFilter: BuyerStatus | 'needs_decision' | 'all'
@@ -60,6 +68,7 @@ type Action =
   | { t: 'decide'; id: string; record: DecisionRecord }
   | { t: 'undecide'; id: string }
   | { t: 'view'; view: ViewMode }
+  | { t: 'working' }
   | { t: 'sort'; col: SortCol }
   | { t: 'query'; q: string }
   | { t: 'filter'; f: State['statusFilter'] }
@@ -69,7 +78,7 @@ type Action =
 
 const initial: State = {
   selectedId: 'EL-TUB-INC85',
-  overrides: {}, decisions: {}, view: 'summary',
+  overrides: {}, decisions: {}, view: 'summary', working: false,
   sort: { col: 'status', dir: 'asc' }, query: '', statusFilter: 'all',
   policy: DEFAULT_POLICY,
   intake: Object.fromEntries(reviewQueue.map((l) => [l.id, 'pending' as const])),
@@ -87,6 +96,7 @@ function reducer(s: State, a: Action): State {
       return { ...s, decisions: rest }
     }
     case 'view': return { ...s, view: a.view }
+    case 'working': return { ...s, working: !s.working }
     case 'sort':
       return { ...s, sort: { col: a.col, dir: s.sort.col === a.col && s.sort.dir === 'asc' ? 'desc' : 'asc' } }
     case 'query': return { ...s, query: a.q }
@@ -122,6 +132,8 @@ interface Ctx {
   /** §11 — every automated action reversible. Reverses a decision and says so in the log. */
   undo: (row: DerivedRow) => void
   setView: (v: ViewMode) => void
+  /** show or hide the summary table's working columns */
+  toggleWorking: () => void
   toggleSort: (c: SortCol) => void
   setQuery: (q: string) => void
   setFilter: (f: State['statusFilter']) => void
@@ -311,6 +323,7 @@ export function DeskProvider({ children }: { children: React.ReactNode }) {
   const value: Ctx = {
     state, rows, visible, selected, kpis, intakeCounts, select, chooseVendor, decide, undo, reviewIntake,
     setView: (v) => dispatch({ t: 'view', view: v }),
+    toggleWorking: () => dispatch({ t: 'working' }),
     toggleSort: (c) => dispatch({ t: 'sort', col: c }),
     setQuery: (q) => dispatch({ t: 'query', q }),
     setFilter: (f) => dispatch({ t: 'filter', f }),
