@@ -179,7 +179,7 @@ export function SummaryTable() {
 
 const BANDS: { label: string; span: number }[] = [
   { label: 'Material', span: 4 },
-  { label: 'Stock position', span: 5 },
+  { label: 'Stock position', span: 6 },
   { label: 'Reorder logic', span: 3 },
   { label: 'Cost', span: 4 },
   { label: 'Outcome', span: 3 },
@@ -214,6 +214,7 @@ export function DetailTable() {
             <Th right>In transit</Th>
             <Th right>Open PO</Th>
             <Th col="position" right>True position</Th>
+            <Th col="cover" right>Cover left</Th>
             <Th right>Reorder point</Th>
             <Th right>MOQ</Th>
             <Th col="reorder" right>Reorder qty</Th>
@@ -260,8 +261,16 @@ export function DetailTable() {
                 <td className="px-2 py-2 text-right">
                   {r.openPoQty.value > 0 ? <Num d={r.openPoQty} /> : <span className="text-ink-3">—</span>}
                 </td>
-                <td className="border-r border-line-soft px-2 py-2 text-right">
+                <td className="px-2 py-2 text-right">
                   <Num d={r.truePosition} tone={posLow ? 'critical' : undefined} />
+                </td>
+                {/* the position read as days, with the lead time it has to beat
+                    underneath it — cover shorter than the lead time is the §8.1
+                    case where ordering today is already too late */}
+                <td className="border-r border-line-soft px-2 py-2 text-right">
+                  <Num d={r.coverDays} format="days" suffix="d"
+                       tone={r.coverDays.value < r.leadTime.value ? 'critical' : undefined} />
+                  <span className="mono block text-[10px] text-ink-3">lead {r.leadTime.value}d</span>
                 </td>
                 <td className="px-2 py-2 text-right"><Num d={r.reorderPoint} /></td>
                 <td className="num px-2 py-2 text-right text-[12.5px] text-ink-2">{qtyText(r.item.moq, '')}</td>
@@ -296,8 +305,15 @@ export function DetailTable() {
                   </span>
                 </td>
                 <td className="px-2 py-2">
-                  <StatusPill label={STATUS_LABEL[r.status.value]} tone={STATUS_TONE[r.status.value]}
-                              explain={r.status.note} />
+                  <span className="inline-flex items-center gap-1.5">
+                    <Icon name={STATUS_ICON[r.status.value] ?? 'activity'} aria-hidden
+                          className={`size-3.5 shrink-0 ${
+                            STATUS_TONE[r.status.value] === 'critical' ? 'text-critical'
+                              : STATUS_TONE[r.status.value] === 'warn' ? 'text-warn'
+                              : STATUS_TONE[r.status.value] === 'good' ? 'text-good' : 'text-ink-3'}`} />
+                    <StatusPill label={STATUS_LABEL[r.status.value]} tone={STATUS_TONE[r.status.value]}
+                                explain={r.status.note} />
+                  </span>
                   {r.held.value && (
                     <span className="mt-1 block text-[10.5px] leading-tight text-warn">
                       held · {r.coverageAfterMonths.value} mo cover
