@@ -212,7 +212,7 @@ function ChallanCard({ row, onReturn, onClose, onExtend }: {
   const closed = c.status === 'closed'
 
   return (
-    <li className={`anim-fade-up lift panel rounded-lg border p-3.5 ${
+    <li data-jc={c.challanNo} className={`anim-fade-up panel mb-2.5 break-inside-avoid rounded-lg border p-3 ${
       row.overdue ? 'border-critical/40' : closed ? 'border-line-soft' : 'border-line'}`}>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="mono text-[12.5px] font-medium">{c.challanNo}</span>
@@ -310,8 +310,10 @@ export function JobworkRegister() {
   const fabrication = challanRows.filter((r) => r.challan.floor === 'fabrication')
   const overdue = challanRows.filter((r) => r.overdue)
 
+  /* Columns rather than a stack: eight challans one under another is three
+     screens for a register a storeman reads at a glance. */
   const section = (rows: ChallanRow[]) => (
-    <ul className="space-y-3">
+    <ul className="md:columns-2 xl:columns-3 [column-gap:0.625rem]">
       {rows.map((r, i) => (
         <div key={r.challan.id} style={{ '--i': Math.min(i, 5) } as React.CSSProperties}>
           <ChallanCard row={r}
@@ -364,48 +366,63 @@ export function JobworkRegister() {
 
       <Card index={2} className="mt-3" title="By jobworker" live
         sub={`Ageing and concentration — nobody should be holding more than ${money(policy.jobworkerExposureCeiling)} of ours`}>
-        <div className="scroll-x overflow-x-auto">
-          <table className="w-full min-w-[38rem] border-collapse text-[12.5px]">
-            <thead className="bg-surface-2">
-              <tr className="text-[11px] uppercase tracking-wide text-ink-3">
-                {['Jobworker', 'Open challans', 'Value held', 'Unaccounted', 'Oldest overdue', 'Concentration'].map((h) => (
-                  <th key={h} className="whitespace-nowrap border-b border-line px-3 py-2 text-left font-medium">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {jobworkers.map((j) => {
-                const mine = challanRows.filter((r) => r.challan.jobworkerName === j.name && r.challan.status === 'out')
-                return (
-                  <tr key={j.name} className="border-b border-line-soft">
-                    <td className="px-3 py-2 font-medium">{j.name}</td>
-                    <td className="px-3 py-2 text-ink-2">
-                      {mine.length} · {mine.map((r) => r.challan.process.toLowerCase()).join(', ')}
-                    </td>
-                    <td className="num px-3 py-2"><Num d={j.exposure} format="money" /></td>
-                    <td className={`num px-3 py-2 ${j.unaccounted > 0 ? 'text-critical' : 'text-ink-3'}`}>
-                      {j.unaccounted > 0 ? money(j.unaccounted) : '—'}
-                    </td>
-                    <td className={`num px-3 py-2 ${j.oldest > 0 ? 'text-critical' : 'text-ink-3'}`}>
-                      {j.oldest > 0 ? `${j.oldest} days` : 'nothing overdue'}
-                    </td>
-                    <td className="px-3 py-2">
-                      {j.over
-                        ? <StatusPill tone="critical" label="Over the ceiling — escalated" />
-                        : <StatusPill tone="good" label="Within the ceiling" />}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        {/* A bar each against the ceiling, rather than six columns: the question
+            is "is anyone holding too much of ours", and that is a length against
+            a line, not a number to compare by eye down a column. */}
+        <ul className="grid gap-2.5 p-3.5 md:grid-cols-2 xl:grid-cols-3">
+          {jobworkers.map((j, i) => {
+            const mine = challanRows.filter((r) => r.challan.jobworkerName === j.name && r.challan.status === 'out')
+            const ceiling = policy.jobworkerExposureCeiling
+            const scale = Math.max(j.exposure.value, ceiling) * 1.2
+            return (
+              <li key={j.name} style={{ '--i': Math.min(i, 6) } as React.CSSProperties}
+                  className="anim-fade-up rounded-md border border-line bg-surface p-2.5">
+                <p className="flex items-start justify-between gap-2">
+                  <span className="truncate text-[12.5px] font-medium" title={j.name}>{j.name}</span>
+                  {j.over
+                    ? <StatusPill tone="critical" label="Over the ceiling — escalated" />
+                    : <StatusPill tone="good" label="Within the ceiling" />}
+                </p>
+                <p className="mt-0.5 truncate text-[11px] text-ink-3"
+                   title={mine.map((r) => r.challan.process.toLowerCase()).join(', ')}>
+                  {mine.length} open · {mine.map((r) => r.challan.process.toLowerCase()).join(', ') || 'nothing out'}
+                </p>
+
+                <div className="relative mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
+                  <div className={`anim-reveal h-full rounded-full ${j.over ? 'bg-critical' : 'bg-accent'}`}
+                       style={{ width: `${Math.max(1.5, (j.exposure.value / scale) * 100)}%` }} />
+                  <div aria-hidden className="absolute top-0 h-full w-[2px] bg-ink"
+                       style={{ left: `${Math.min(99, (ceiling / scale) * 100)}%` }} />
+                </div>
+                {/* the ceiling is named once under the grid, not seven times */}
+                <p className="mt-1 flex flex-wrap items-baseline gap-x-2 text-[10.5px] text-ink-3">
+                  <span>value held</span>
+                  <Num d={j.exposure} format="money" size="sm" className="text-[10.5px]"
+                       tone={j.over ? 'critical' : undefined} />
+                  {j.unaccounted > 0 && (
+                    <>
+                      <span aria-hidden className="text-ink-4">·</span>
+                      <span className="num text-critical">{money(j.unaccounted)} unaccounted</span>
+                    </>
+                  )}
+                  <span className={`ml-auto ${j.oldest > 0 ? 'text-critical' : ''}`}>
+                    {j.oldest > 0 ? `oldest overdue ${j.oldest} days` : 'nothing overdue'}
+                  </span>
+                </p>
+              </li>
+            )
+          })}
+        </ul>
+        <p className="flex flex-wrap items-center gap-x-2 px-3.5 pb-1 text-[10.5px] text-ink-3">
+          <span aria-hidden className="inline-block h-2.5 w-[2px] bg-ink" />
+          the mark on each bar is the {money(policy.jobworkerExposureCeiling)} ceiling
+        </p>
         <Note foot label="Why a concentration limit is not about trust">
-        A concentration limit is not about trust. It is about how much of your working capital can be
+          A concentration limit is not about trust. It is about how much of your working capital can be
           standing in one shed you do not control — and whether you would know, on the day it burned
           down, what was in it. Valued at last purchase price, ex-freight (§13-1), the same basis the
           Inventory and Sourcing pages use.
-      </Note>
+        </Note>
       </Card>
 
       <ReturnDialog row={returning} onClose={() => setReturning(null)} />
