@@ -2,6 +2,8 @@
 import { useEffect, useState } from 'react'
 import { Button, Card, Pill, StatusPill } from '@/components/ui/bits'
 import { Dialog } from '@/components/ui/Dialog'
+import { Icon, type IconName } from '@/components/ui/icons'
+import { Note } from '@/components/ui/Note'
 import { Num } from '@/components/ui/Num'
 import { money, num, qtyText, shortDate } from '@/lib/domain/format'
 import type { Tone } from '@/lib/domain/format'
@@ -157,8 +159,52 @@ function AckDialog({ row, onClose }: { row: SyncRow | null; onClose: () => void 
 
 /* ------------------------------------------------------------ the register - */
 
-function LineCard({ row, onRevise, onAck }: {
-  row: SyncRow; onRevise: () => void; onAck: () => void
+/**
+ * One PO line, in three lines of card.
+ *
+ * The two quantities are the whole system: what we need, what the vendor
+ * believes, and the distance between them. They stay large and side by side —
+ * that comparison is the reason this screen exists, and a 6px bar is a smaller
+ * version of the same two numbers, not a picture of them.
+ *
+ * What went is the stack that grew around them. A card used to be six blocks
+ * tall: header, two bordered boxes, a gap line, a warn callout, a fold, a button
+ * row — 280px to say "they are making 150 fewer than we need, tell them". The
+ * consequence now sits beside the figures instead of under them, the two warn
+ * callouts become one chip each with their sentence on the title, and the
+ * explanations fold into the version history, so a card carries one disclosure
+ * rather than a disclosure and two paragraphs.
+ */
+function Chip({ tone, icon, children, title }: {
+  tone: 'warn' | 'critical'; icon: IconName; children: React.ReactNode; title: string
+}) {
+  return (
+    <span title={title}
+      className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] ${
+        tone === 'critical'
+          ? 'border-critical/40 bg-critical-soft text-ink-2'
+          : 'border-warn/40 bg-warn-soft text-ink-2'}`}>
+      <Icon name={icon} className={`size-3 shrink-0 ${tone === 'critical' ? 'text-critical' : 'text-warn'}`} />
+      {children}
+    </span>
+  )
+}
+
+/** One quantity, its label and where it came from. */
+function Figure({ label, children, from }: {
+  label: string; children: React.ReactNode; from: string
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="mono text-[10px] uppercase tracking-wider text-ink-3">{label}</p>
+      <p className="mt-0.5">{children}</p>
+      <p className="mt-0.5 text-[11px] text-ink-3">{from}</p>
+    </div>
+  )
+}
+
+function LineCard({ row, onRevise, onAck, dim = false }: {
+  row: SyncRow; onRevise: () => void; onAck: () => void; dim?: boolean
 }) {
   const { showDraft, policy } = useInbound()
   const s = row.sync
@@ -167,8 +213,9 @@ function LineCard({ row, onRevise, onAck }: {
   const short = row.gap.value > 0
 
   return (
-    <li className={`anim-fade-up lift panel rounded-lg border p-3.5 ${
-      row.state === 'not_told' ? 'border-critical/40' : row.state === 'awaiting_ack' ? 'border-warn/40' : 'border-line'}`}>
+    <li className={`anim-fade-up lift panel rounded-lg border px-3 py-2.5 transition-opacity ${
+      row.state === 'not_told' ? 'border-critical/40' : row.state === 'awaiting_ack' ? 'border-warn/40' : 'border-line'
+    } ${dim ? 'opacity-40' : ''}`}>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="mono text-[12.5px] font-medium">{s.poNo}</span>
         <span className="text-[13px]">{row.item.name}</span>
@@ -180,92 +227,80 @@ function LineCard({ row, onRevise, onAck }: {
         </span>
       </div>
 
-      {/* the two quantities, side by side — the whole point of the system */}
-      <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
-        <div className="rounded-md border border-line bg-surface-2 p-2.5">
-          <p className="mono text-[10px] uppercase tracking-wider text-ink-3">What we need</p>
-          <p className="mt-0.5"><Num d={row.internal} format="raw" dp={3} size="lg" suffix={` ${row.uom}`} /></p>
-          <p className="mt-0.5 text-[11px] text-ink-3">
-            v{latest.version} · {latest.changedBy} · {shortDate(latest.changedOn)}
-          </p>
+      {/* the two quantities, and what the distance between them costs */}
+      <div className="mt-2 flex flex-wrap items-start gap-x-5 gap-y-2">
+        {/* the two figures shrink before they overflow: at phone width the
+            labels wrap rather than running past the card edge */}
+        <div className="flex min-w-0 items-start gap-2.5">
+          <Figure label="What we need"
+            from={`v${latest.version} · ${latest.changedBy} · ${shortDate(latest.changedOn)}`}>
+            <Num d={row.internal} format="raw" dp={3} size="lg" suffix={` ${row.uom}`} />
+          </Figure>
+          <span aria-hidden className="mt-4 shrink-0 text-[15px] text-ink-3">→</span>
+          <Figure label="What the vendor is making"
+            from={`v${s.ackedVersion} · ${s.ackedOn ? `acknowledged ${shortDate(s.ackedOn)}` : 'never acknowledged'}`}>
+            <Num d={row.vendorKnown} format="raw" dp={3} size="lg" suffix={` ${row.uom}`}
+              tone={out ? 'warn' : undefined} />
+          </Figure>
         </div>
-        <div className={`rounded-md border p-2.5 ${out ? 'border-warn/40 bg-warn-soft' : 'border-line bg-surface-2'}`}>
-          <p className="mono text-[10px] uppercase tracking-wider text-ink-3">What the vendor is making</p>
-          <p className="mt-0.5"><Num d={row.vendorKnown} format="raw" dp={3} size="lg" suffix={` ${row.uom}`}
-            tone={out ? 'warn' : undefined} /></p>
-          <p className="mt-0.5 text-[11px] text-ink-3">
-            v{s.ackedVersion} · {s.ackedOn ? `acknowledged ${shortDate(s.ackedOn)}` : 'never acknowledged'}
-          </p>
+
+        <div className="min-w-[15rem] flex-1 pt-3.5">
+          {out ? (
+            <p className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 text-[12px]">
+              <span className="text-ink-3">
+                Gap <Num d={row.gap} format="raw" dp={3} suffix={` ${row.uom}`} tone={short ? 'critical' : 'warn'} />
+              </span>
+              <span className="text-ink-3">
+                Exposure <Num d={row.exposure} format="money" tone="warn" />
+              </span>
+              {short ? (
+                <span className="text-ink-3">
+                  Cover lost <Num d={row.coverGap} format="days" dp={1} suffix=" days" tone="critical" />
+                </span>
+              ) : (
+                <span className="text-warn">
+                  {qtyText(Math.abs(row.gap.value), row.uom)} arriving that nobody needs — blocked capital in the making
+                </span>
+              )}
+              <span className="mono text-[11px] text-ink-3">
+                changed <Num d={row.sinceChange} format="days" dp={0}
+                  suffix={row.sinceChange.value === 1 ? ' day ago' : ' days ago'} />
+              </span>
+            </p>
+          ) : (
+            <p className="text-[12px] text-ink-3">
+              No gap — the vendor is building the version we are planning on, due{' '}
+              <span className="mono">{shortDate(latest.promisedDate)}</span>.
+            </p>
+          )}
+
+          {(row.state === 'awaiting_ack' || row.whipsawed) && (
+            <p className="mt-1.5 flex flex-wrap gap-1.5">
+              {row.state === 'awaiting_ack' && (
+                <Chip tone={row.chaseOverdue ? 'critical' : 'warn'} icon="clock"
+                  title={`Notice sent ${shortDate(s.notifiedOn!)}. ${row.chaseOverdue
+                    ? `Past the ${policy.ackChaseDays}-day chase limit, so it escalates. ${s.shipped
+                      ? 'The material has already left, which means it left at the old quantity.'
+                      : 'Until they confirm, assume they are making the old quantity.'}`
+                    : 'Until they confirm, the cover figures still use the old quantity.'}`}>
+                  <Num d={row.awaitingAck} format="days" dp={0} size="sm" className="text-[11px]"
+                    suffix={row.awaitingAck.value === 1 ? ' day' : ' days'} /> with no reply
+                  {row.chaseOverdue && <> — past the {policy.ackChaseDays}-day limit</>}
+                </Chip>
+              )}
+              {row.whipsawed && (
+                <Chip tone="warn" icon="alert"
+                  title={`This line has changed ${row.churn.value} times in 30 days against a limit of ${policy.poChurnLimit}. The vendor is being whipsawed — and a supplier who re-plans four times prices that in next quarter. The fix is upstream of purchasing.`}>
+                  changed <Num d={row.churn} format="int" size="sm" className="text-[11px]" /> times in 30 days
+                </Chip>
+              )}
+            </p>
+          )}
         </div>
       </div>
 
-      {out && (
-        <p className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[12px]">
-          <span className="text-ink-3">
-            Gap <Num d={row.gap} format="raw" dp={3} suffix={` ${row.uom}`} tone={short ? 'critical' : 'warn'} />
-          </span>
-          <span className="text-ink-3">
-            Exposure <Num d={row.exposure} format="money" tone="warn" />
-          </span>
-          {short ? (
-            <span className="text-ink-3">
-              Cover lost <Num d={row.coverGap} format="days" dp={1} suffix=" days" tone="critical" />
-            </span>
-          ) : (
-            <span className="text-warn">
-              {qtyText(Math.abs(row.gap.value), row.uom)} arriving that nobody needs — blocked capital in the making
-            </span>
-          )}
-          <span className="mono ml-auto text-[11px] text-ink-3">
-            changed <Num d={row.sinceChange} format="days" dp={0}
-              suffix={row.sinceChange.value === 1 ? ' day ago' : ' days ago'} />
-          </span>
-        </p>
-      )}
-
-      {row.state === 'awaiting_ack' && (
-        <p className={`mt-2 rounded-md border p-2.5 text-[12px] leading-relaxed ${
-          row.chaseOverdue ? 'border-critical/30 bg-critical-soft' : 'border-line bg-surface-2'} text-ink-2`}>
-          Notice sent {shortDate(s.notifiedOn!)} —{' '}
-          <Num d={row.awaitingAck} format="days" dp={0}
-            suffix={row.awaitingAck.value === 1 ? ' day' : ' days'} /> with no reply.
-          {row.chaseOverdue && (
-            <> Past the {policy.ackChaseDays}-day limit, so it escalates. {s.shipped
-              ? 'The material has already left, which means it left at the old quantity.'
-              : 'Until they confirm, assume they are making the old quantity.'}</>
-          )}
-        </p>
-      )}
-
-      {row.whipsawed && (
-        <p className="mt-2 rounded-md border border-warn/30 bg-warn-soft p-2.5 text-[12px] leading-relaxed text-ink-2">
-          <strong className="text-ink">This line has changed <Num d={row.churn} format="int" /> times in 30 days</strong>{' '}
-          against a limit of {policy.poChurnLimit}. The vendor is being whipsawed — and a supplier
-          who re-plans four times prices that in next quarter. The fix is upstream of purchasing.
-        </p>
-      )}
-
-      {/* the version history */}
-      <details className="mt-2 group">
-        <summary className="cursor-pointer select-none text-[11.5px] text-ink-3 hover:text-ink-2">
-          {s.revisions.length} versions · what changed and who changed it
-        </summary>
-        <ol className="mt-1.5 space-y-1 border-l-2 border-line pl-3">
-          {s.revisions.map((r) => (
-            <li key={r.version} className="text-[11.5px]">
-              <span className="mono font-medium">v{r.version}</span>{' '}
-              <span className="num">{num(r.qty, 3)} {row.uom}</span>{' '}
-              <span className="text-ink-3">due {shortDate(r.promisedDate)} · {shortDate(r.changedOn)} · {r.changedBy}</span>
-              {r.version <= s.ackedVersion && <span className="ml-1.5 text-good">acknowledged</span>}
-              {r.version > s.ackedVersion && r.version <= s.notifiedVersion && <span className="ml-1.5 text-warn">sent</span>}
-              {r.version > s.notifiedVersion && <span className="ml-1.5 text-critical">never sent</span>}
-              <span className="block italic text-ink-3">“{r.reason}”</span>
-            </li>
-          ))}
-        </ol>
-      </details>
-
-      <div className="mt-2.5 flex flex-wrap gap-2">
+      {/* one fold per card: why it is in this state, and every version of it */}
+      <div className="mt-1.5 flex flex-wrap items-center gap-2 border-t border-line-soft pt-1.5">
         {row.state === 'not_told' && (
           <Button size="sm" variant="primary" onClick={() => showDraft(s.poLineId)}>
             Draft the change notice
@@ -278,17 +313,91 @@ function LineCard({ row, onRevise, onAck }: {
           </>
         )}
         {!row.received && <Button size="sm" onClick={onRevise}>Change this order</Button>}
+
+        <details className="ml-auto group [&[open]]:mt-1 [&[open]]:w-full">
+          <summary className="cursor-pointer select-none text-[11.5px] text-ink-3 hover:text-ink-2">
+            Why, and the {s.revisions.length} {s.revisions.length === 1 ? 'version' : 'versions'}
+          </summary>
+          {row.state === 'awaiting_ack' && (
+            <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-2">
+              Notice sent {shortDate(s.notifiedOn!)} —{' '}
+              <Num d={row.awaitingAck} format="days" dp={0} size="sm"
+                suffix={row.awaitingAck.value === 1 ? ' day' : ' days'} /> with no reply.
+              {row.chaseOverdue && (
+                <> Past the {policy.ackChaseDays}-day limit, so it escalates. {s.shipped
+                  ? 'The material has already left, which means it left at the old quantity.'
+                  : 'Until they confirm, assume they are making the old quantity.'}</>
+              )}
+            </p>
+          )}
+          {row.whipsawed && (
+            <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-2">
+              <strong className="text-ink">This line has changed <Num d={row.churn} format="int" size="sm" /> times
+              in 30 days</strong> against a limit of {policy.poChurnLimit}. The vendor is being
+              whipsawed — and a supplier who re-plans four times prices that in next quarter. The fix
+              is upstream of purchasing.
+            </p>
+          )}
+          <ol className="mt-1.5 space-y-1 border-l-2 border-line pl-3">
+            {s.revisions.map((r) => (
+              <li key={r.version} className="text-[11.5px]">
+                <span className="mono font-medium">v{r.version}</span>{' '}
+                <span className="num">{num(r.qty, 3)} {row.uom}</span>{' '}
+                <span className="text-ink-3">due {shortDate(r.promisedDate)} · {shortDate(r.changedOn)} · {r.changedBy}</span>
+                {r.version <= s.ackedVersion && <span className="ml-1.5 text-good">acknowledged</span>}
+                {r.version > s.ackedVersion && r.version <= s.notifiedVersion && <span className="ml-1.5 text-warn">sent</span>}
+                {r.version > s.notifiedVersion && <span className="ml-1.5 text-critical">never sent</span>}
+                <span className="block italic text-ink-3">“{r.reason}”</span>
+              </li>
+            ))}
+          </ol>
+        </details>
       </div>
     </li>
   )
 }
 
+/* The order a buyer should meet these in: the lines nobody has told the vendor
+   about, then the ones waiting on a reply, then the ones that are fine. The
+   register used to open on an in-sync line because that is the order the seed
+   file happens to be in. */
+const STATE_RANK: Record<string, number> = { not_told: 0, awaiting_ack: 1, acknowledged: 2 }
+
+type SyncFilter = 'all' | 'open' | 'not_told' | 'awaiting_ack' | 'acknowledged'
+
 export function OrderSync() {
-  const { syncRows, outOfSync, exposure } = useInbound()
+  const { syncRows, exposure } = useInbound()
   const [revising, setRevising] = useState<SyncRow | null>(null)
   const [acking, setAcking] = useState<SyncRow | null>(null)
-  const open = syncRows.filter((r) => !r.received)
+  const [filter, setFilter] = useState<SyncFilter>('all')
+
+  const byUrgency = (a: SyncRow, b: SyncRow) =>
+    (STATE_RANK[a.state] ?? 3) - (STATE_RANK[b.state] ?? 3) || b.exposure.value - a.exposure.value
+  const open = syncRows.filter((r) => !r.received).sort(byUrgency)
   const received = syncRows.filter((r) => r.received)
+  const count = (st: string) => syncRows.filter((r) => r.state === st).length
+
+  /* A filter here dims rather than removes: the counts are the point of the
+     row, and a register that empties to one card stops showing you how many
+     lines the one card is out of. */
+  const dimmed = (r: SyncRow) =>
+    filter === 'all' ? false
+    : filter === 'open' ? r.received
+    : r.state !== filter
+
+  const chip = (id: SyncFilter, label: string, n: number, tone: 'critical' | 'warn' | 'good' | 'neutral') => (
+    <button key={id} type="button" onClick={() => setFilter(filter === id ? 'all' : id)}
+      aria-pressed={filter === id}
+      title={filter === id ? 'Showing only these lines — click to show every line' : `Pick out the ${label}`}
+      className={`press rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
+        filter === id ? 'border-accent bg-accent-soft text-accent-ink'
+        : tone === 'critical' ? 'border-critical/40 bg-critical-soft text-ink-2 hover:border-critical'
+        : tone === 'warn' ? 'border-warn/40 bg-warn-soft text-ink-2 hover:border-warn'
+        : tone === 'good' ? 'border-good/40 bg-good-soft text-ink-2 hover:border-good'
+        : 'border-line text-ink-2 hover:bg-surface-2'}`}>
+      {n} {label}
+    </button>
+  )
 
   return (
     <>
@@ -297,47 +406,53 @@ export function OrderSync() {
         actions={<span className="text-[12px] text-ink-3">
           Unacknowledged exposure <Num d={exposure} format="money" tone={exposure.value > 0 ? 'warn' : 'good'} />
         </span>}>
-        <div className="p-4">
-          <div className="mb-3 flex flex-wrap gap-2">
-            <Pill tone="neutral">{open.length} open lines</Pill>
-            <Pill tone={outOfSync.some((r) => r.state === 'not_told') ? 'critical' : 'good'}>
-              {syncRows.filter((r) => r.state === 'not_told').length} changed, vendor not told
-            </Pill>
-            <Pill tone={syncRows.some((r) => r.state === 'awaiting_ack') ? 'warn' : 'good'}>
-              {syncRows.filter((r) => r.state === 'awaiting_ack').length} awaiting acknowledgement
-            </Pill>
-            <Pill tone="good">{syncRows.filter((r) => r.state === 'acknowledged').length} in sync</Pill>
+        <div className="p-3">
+          <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
+            {chip('open', 'open lines', open.length, 'neutral')}
+            {chip('not_told', 'changed, vendor not told', count('not_told'),
+              count('not_told') ? 'critical' : 'good')}
+            {chip('awaiting_ack', 'awaiting acknowledgement', count('awaiting_ack'),
+              count('awaiting_ack') ? 'warn' : 'good')}
+            {chip('acknowledged', 'in sync', count('acknowledged'), 'good')}
+            {filter !== 'all' && (
+              <button type="button" onClick={() => setFilter('all')}
+                className="press text-[11px] text-ink-3 underline underline-offset-2 hover:text-ink">
+                Show every line
+              </button>
+            )}
           </div>
 
-          <ul className="space-y-3">
+          <ul className="space-y-2">
             {open.map((r, i) => (
               <div key={r.sync.poLineId} style={{ '--i': Math.min(i, 5) } as React.CSSProperties}>
-                <LineCard row={r} onRevise={() => setRevising(r)} onAck={() => setAcking(r)} />
+                <LineCard row={r} dim={dimmed(r)}
+                  onRevise={() => setRevising(r)} onAck={() => setAcking(r)} />
               </div>
             ))}
           </ul>
 
           {received.length > 0 && (
             <>
-              <p className="mono mt-4 text-[10px] uppercase tracking-wider text-ink-3">
+              <p className="mono mt-3 text-[10px] uppercase tracking-wider text-ink-3">
                 Closed on receipt — kept because the receipt proves the point
               </p>
-              <ul className="mt-1.5 space-y-3">
+              <ul className="mt-1.5 space-y-2">
                 {received.map((r) => (
-                  <LineCard key={r.sync.poLineId} row={r} onRevise={() => setRevising(r)} onAck={() => setAcking(r)} />
+                  <LineCard key={r.sync.poLineId} row={r} dim={dimmed(r)}
+                    onRevise={() => setRevising(r)} onAck={() => setAcking(r)} />
                 ))}
               </ul>
             </>
           )}
-
-          <p className="mt-4 rounded-md border border-line bg-surface-2 p-3 text-[12.5px] leading-relaxed text-ink-2">
-            <strong className="text-ink">The design decision worth arguing about.</strong> Every cover
-            calculation on this system uses the vendor-acknowledged quantity, not the internal one.
-            Raising a number in your own system does not make more material appear — so an internal
-            change improves nothing until the vendor has confirmed it. That is why the exposure figure
-            above only goes down when someone actually talks to a supplier.
-          </p>
         </div>
+
+        <Note foot label="Why the exposure only falls when someone talks to a supplier">
+          <strong className="text-ink">The design decision worth arguing about.</strong> Every cover
+          calculation on this system uses the vendor-acknowledged quantity, not the internal one.
+          Raising a number in your own system does not make more material appear — so an internal
+          change improves nothing until the vendor has confirmed it. That is why the exposure figure
+          above only goes down when someone actually talks to a supplier.
+        </Note>
       </Card>
 
       <NoticeDraft />
@@ -393,13 +508,13 @@ export function InboundBoard({ lines, span = 26 }: {
             </li>
           ))}
         </ul>
-        <p className="mt-4 rounded-md border border-warn/30 bg-warn-soft p-3 text-[12.5px] leading-relaxed text-ink-2">
-          <strong className="text-ink">PO-2611 is still the case worth looking at.</strong> MgO is covered
-          on quantity — 610 against a reorder point of 480 — but the material lands nine days after the
-          line runs dry. That is a timing problem, so the answer is to expedite the open order, not to
-          raise a second one. The system does not buy its way out of a late delivery.
-        </p>
       </div>
+      <Note foot label="PO-2611 is covered on quantity and still late — why that is not a second order">
+        <strong className="text-ink">PO-2611 is still the case worth looking at.</strong> MgO is covered
+        on quantity — 610 against a reorder point of 480 — but the material lands nine days after the
+        line runs dry. That is a timing problem, so the answer is to expedite the open order, not to
+        raise a second one. The system does not buy its way out of a late delivery.
+      </Note>
     </Card>
   )
 }
