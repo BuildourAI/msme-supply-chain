@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { Button, Card, StatusPill } from '@/components/ui/bits'
 import { Dialog } from '@/components/ui/Dialog'
+import { HeadFilter, HeadSort } from '@/components/ui/HeadFilter'
 import { Icon, type IconName } from '@/components/ui/icons'
 import { Num } from '@/components/ui/Num'
 import { money, num, qtyText, shortDate } from '@/lib/domain/format'
@@ -148,59 +149,107 @@ function WriteOffSheet({ row, onClose }: { row: LotRow | null; onClose: () => vo
 /**
  * The stock ledger, as one line per lot.
  *
- * Seventeen lots used to carry a code and a name stacked in one cell, a state
- * pill with its reason wrapped underneath, two buttons on every row and a value
- * column that was a dash on two rows in three. The question this table answers
- * is narrower than that: what is on the rack, is it usable, is the figure
- * trusted. Everything else — why a lot is on hold, what it is worth, which class
- * it is and how often that class is counted, and what you can do about it — is
- * one click down, on the row it belongs to.
+ * The question this table answers first is narrow — what is on the rack, is it
+ * usable, what is it worth, is the figure trusted — so that is what a row shows,
+ * on one line, with the actions that belong to it on the same line. Why a lot is
+ * held, which documents built the balance, how often its class is counted: those
+ * are one click down, on the row they belong to.
  *
- * The filters sit above it because a store with lots on QC hold wants to see
- * exactly those, and a search box because seventeen lots is more than a screen.
+ * The filters live in the headings rather than in a bar above them, because a
+ * control on the column it filters says the column is filterable. The chips
+ * above the table stay as the quick way in — they set the same filters, so the
+ * two never disagree.
+ *
  * Nothing is filtered out by default: the held and damaged lots are the ones
  * worth meeting first, so they are in the list from the start, tinted and
- * glyphed rather than hidden behind a chip you have to know to press.
+ * glyphed rather than hidden behind a control you would have to know to press.
  */
-type LedgerFilter = 'all' | 'qc_hold' | 'damaged' | 'stale'
+type FilterKey = 'material' | 'cls' | 'state' | 'confirmed'
+type SortCol = 'lot' | 'value'
 
 export function StockLedger() {
   const { stockRows, select, startCount, staleValue, accuracy, policy } = useInventory()
   const [writing, setWriting] = useState<LotRow | null>(null)
-  const [filter, setFilter] = useState<LedgerFilter>('all')
+  const [filters, setFilters] = useState<Partial<Record<FilterKey, string>>>({})
+  const [sort, setSort] = useState<{ col: SortCol; dir: 'asc' | 'desc' } | null>(null)
   const [query, setQuery] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
   const stale = stockRows.filter((r) => r.stale)
 
+  const setF = (k: FilterKey, v?: string) => setFilters((f) => ({ ...f, [k]: v }))
+  const clear = () => { setFilters({}); setQuery('') }
+  const active = Object.values(filters).filter(Boolean).length + (query.trim() ? 1 : 0)
+
   const q = query.trim().toLowerCase()
-  const shown = stockRows.filter((r) => {
-    const passes = filter === 'all' ? true
-      : filter === 'stale' ? r.stale
-      : r.lot.usability === filter
-    if (!passes) return false
-    if (!q) return true
-    return `${r.item.code} ${r.item.name} ${r.lot.batchNo} ${r.lot.usabilityReason ?? ''}`.toLowerCase().includes(q)
+  const matches = (r: LotRow) =>
+    (!filters.material || r.item.id === filters.material) &&
+    (!filters.cls || r.cls === filters.cls) &&
+    (!filters.state || r.lot.usability === filters.state) &&
+    (!filters.confirmed || (filters.confirmed === 'stale' ? r.stale : !r.stale)) &&
+    (!q || `${r.item.code} ${r.item.name} ${r.lot.batchNo} ${r.lot.usabilityReason ?? ''}`.toLowerCase().includes(q))
+
+  const shown = stockRows.filter(matches)
+  if (sort) {
+    const d = sort.dir === 'asc' ? 1 : -1
+    shown.sort((a, b) => sort.col === 'value'
+      ? (a.value.value - b.value.value) * d
+      : a.lot.batchNo.localeCompare(b.lot.batchNo) * d)
+  }
+
+  /* Three states, in the order a reader expects: the way round that column is
+     usually wanted, then the other way, then back to the ledger's own order.
+     Money starts dearest-first; a batch number starts A to Z. */
+  const toggleSort = (col: SortCol) => setSort((s) => {
+    const natural: 'asc' | 'desc' = col === 'value' ? 'desc' : 'asc'
+    if (s?.col !== col) return { col, dir: natural }
+    if (s.dir === natural) return { col, dir: natural === 'asc' ? 'desc' : 'asc' }
+    return null
   })
 
-  const count = (f: LedgerFilter) => f === 'all' ? stockRows.length
-    : f === 'stale' ? stale.length
-    : stockRows.filter((r) => r.lot.usability === f).length
+  /* every option says what it will show, counted off the other filters that are
+     already on — a menu that offers a choice leading to an empty table is a
+     menu that made you click to find that out */
+  const others = (k: FilterKey) => stockRows.filter((r) => {
+    const f = { ...filters, [k]: undefined }
+    return (!f.material || r.item.id === f.material) && (!f.cls || r.cls === f.cls) &&
+      (!f.state || r.lot.usability === f.state) &&
+      (!f.confirmed || (f.confirmed === 'stale' ? r.stale : !r.stale)) &&
+      (!q || `${r.item.code} ${r.item.name} ${r.lot.batchNo}`.toLowerCase().includes(q))
+  })
 
-  const chip = (id: LedgerFilter, label: string, tone: 'critical' | 'warn' | 'neutral', icon?: IconName) => (
-    <button key={id} type="button" onClick={() => setFilter(filter === id ? 'all' : id)}
-      aria-pressed={filter === id}
-      title={filter === id ? 'Showing only these lots — click for every lot' : `Show only the ${label} lots`}
+  const materialOptions = Array.from(new Map(stockRows.map((r) => [r.item.id, r.item])).values())
+    .map((it) => ({
+      value: it.id, label: it.name,
+      meta: `${others('material').filter((r) => r.item.id === it.id).length} lots`,
+    }))
+    .filter((o) => !o.meta.startsWith('0 '))
+  const classOptions = (['A', 'B', 'C'] as const).map((c) => ({
+    value: c, label: `Class ${c} · counted every ${policy.countCadenceDays[c]} days`,
+    meta: `${others('cls').filter((r) => r.cls === c).length} lots`,
+  })).filter((o) => !o.meta.startsWith('0 '))
+  const stateOptions = (['usable', 'qc_hold', 'damaged', 'expired'] as const).map((u) => ({
+    value: u, label: USABILITY_LABEL[u],
+    meta: `${others('state').filter((r) => r.lot.usability === u).length} lots`,
+  })).filter((o) => !o.meta.startsWith('0 '))
+  const confirmedOptions = [
+    { value: 'fresh', label: 'Inside its counting cadence', meta: `${others('confirmed').filter((r) => !r.stale).length} lots` },
+    { value: 'stale', label: 'Past its cadence — unconfirmed', meta: `${others('confirmed').filter((r) => r.stale).length} lots` },
+  ].filter((o) => !o.meta.startsWith('0 '))
+
+  const chip = (k: FilterKey, v: string, label: string, n: number,
+                tone: 'critical' | 'warn' | 'neutral', icon?: IconName) => (
+    <button key={`${k}-${v}`} type="button" onClick={() => setF(k, filters[k] === v ? undefined : v)}
+      aria-pressed={filters[k] === v}
+      title={filters[k] === v ? 'Showing only these lots — click for every lot' : `Show only the ${label} lots`}
       className={`press inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
-        filter === id ? 'border-accent bg-accent-soft text-accent-ink'
+        filters[k] === v ? 'border-accent bg-accent-soft text-accent-ink'
         : tone === 'critical' ? 'border-critical/40 bg-critical-soft text-ink-2 hover:border-critical'
         : tone === 'warn' ? 'border-warn/40 bg-warn-soft text-ink-2 hover:border-warn'
         : 'border-line text-ink-2 hover:bg-surface-2'}`}>
       {icon && <Icon name={icon} className="size-3 shrink-0" />}
-      {count(id)} {label}
+      {n} {label}
     </button>
   )
-
-  const HEADS = ['', 'Material', 'Lot', 'State', 'Balance', 'Docs', 'Confirmed']
 
   return (
     <>
@@ -218,12 +267,11 @@ export function StockLedger() {
               placeholder="Search" aria-label="Search materials and lots"
               className="w-32 rounded-md border border-line bg-surface-2 py-1 pl-7 pr-2 text-[12px] outline-none focus:border-accent" />
           </label>
-          {chip('all', 'lots', 'neutral')}
-          {chip('qc_hold', 'on QC hold', 'warn', 'lock')}
-          {chip('damaged', 'damaged', 'critical', 'alert')}
-          {chip('stale', 'unconfirmed', 'warn', 'clock')}
-          {(filter !== 'all' || q) && (
-            <button type="button" onClick={() => { setFilter('all'); setQuery('') }}
+          {chip('state', 'qc_hold', 'on QC hold', stockRows.filter((r) => r.lot.usability === 'qc_hold').length, 'warn', 'lock')}
+          {chip('state', 'damaged', 'damaged', stockRows.filter((r) => r.lot.usability === 'damaged').length, 'critical', 'alert')}
+          {chip('confirmed', 'stale', 'unconfirmed', stale.length, 'warn', 'clock')}
+          {active > 0 && (
+            <button type="button" onClick={clear}
               className="press text-[11px] text-ink-3 underline underline-offset-2 hover:text-ink">
               Show every lot
             </button>
@@ -234,16 +282,47 @@ export function StockLedger() {
         </div>
 
         <div className="scroll-x relative overflow-x-auto px-3 pb-2">
-          <table className="w-full min-w-[46rem] border-collapse text-[12px]">
+          <table className="w-full min-w-[62rem] border-collapse text-[12px]">
             <thead>
               <tr className="mono border-b border-line text-left text-[9.5px] uppercase tracking-wider text-ink-3">
-                {HEADS.map((h, i) => (
-                  <th key={h || i} className={`whitespace-nowrap py-1 font-normal ${
-                    i === 0 ? 'pl-2 pr-1' : 'pr-2'} ${i === 4 ? 'pl-4 text-right' : ''} ${
-                    i === 5 ? 'text-center' : ''} ${i === 6 ? 'w-full' : ''}`}>
-                    {h}
-                  </th>
-                ))}
+                <th className="w-6 py-1 pl-2 pr-1" />
+                <th className="whitespace-nowrap py-1 pr-2 font-normal">
+                  <HeadFilter label="Material" options={materialOptions} value={filters.material}
+                    onPick={(v) => setF('material', v)} allLabel="Every material"
+                    allMeta={`${others('material').length} lots`} className="uppercase tracking-wider" />
+                </th>
+                <th className="whitespace-nowrap py-1 pr-2 font-normal">
+                  <HeadSort label="Lot" active={sort?.col === 'lot'} dir={sort?.dir ?? 'asc'}
+                    onSort={() => toggleSort('lot')} title="Sort by batch number"
+                    className="uppercase tracking-wider" />
+                </th>
+                <th className="whitespace-nowrap py-1 pr-2 font-normal">
+                  <HeadFilter label="Class" options={classOptions} value={filters.cls}
+                    onPick={(v) => setF('cls', v)} allLabel="Every class"
+                    allMeta={`${others('cls').length} lots`} className="uppercase tracking-wider" />
+                </th>
+                <th className="whitespace-nowrap py-1 pr-2 font-normal">
+                  <HeadFilter label="State" options={stateOptions} value={filters.state}
+                    onPick={(v) => setF('state', v)} allLabel="Every state"
+                    allMeta={`${others('state').length} lots`} className="uppercase tracking-wider" />
+                </th>
+                <th className="whitespace-nowrap py-1 pl-4 pr-2 text-right font-normal"
+                  title="Not sortable on purpose: these lots are held in metres, tonnes, kilograms and pieces, and ranking 340 m against 620 nos would be arithmetic on nothing. Sort by value instead.">
+                  Balance
+                </th>
+                <th className="whitespace-nowrap py-1 pl-4 pr-2 text-right font-normal">
+                  <HeadSort label="Value ₹" active={sort?.col === 'value'} dir={sort?.dir ?? 'desc'}
+                    onSort={() => toggleSort('value')}
+                    title="Sort by what the lot is worth — balance at last purchase rate, ex-freight"
+                    className="uppercase tracking-wider" />
+                </th>
+                <th className="whitespace-nowrap py-1 pr-2 text-center font-normal">Docs</th>
+                <th className="whitespace-nowrap py-1 pr-2 font-normal">
+                  <HeadFilter label="Confirmed" options={confirmedOptions} value={filters.confirmed}
+                    onPick={(v) => setF('confirmed', v)} allLabel="Confirmed or not"
+                    allMeta={`${others('confirmed').length} lots`} className="uppercase tracking-wider" />
+                </th>
+                <th className="w-full whitespace-nowrap py-1 pr-2 text-right font-normal">Action</th>
               </tr>
             </thead>
 
@@ -276,6 +355,13 @@ export function StockLedger() {
                     <td className="mono whitespace-nowrap py-1 pr-2 text-[11px] text-ink-2">{r.lot.batchNo}</td>
 
                     <td className="whitespace-nowrap py-1 pr-2">
+                      <span className="mono text-[11px] text-ink-3"
+                        title={`Class ${r.cls} — counted every ${policy.countCadenceDays[r.cls]} days, tolerance ${policy.countTolerancePct[r.cls]}%`}>
+                        {r.cls}
+                      </span>
+                    </td>
+
+                    <td className="whitespace-nowrap py-1 pr-2">
                       <span className="inline-flex items-center gap-1.5" title={r.lot.usabilityReason ?? undefined}>
                         <Icon name={mark.icon} className={`size-3.5 shrink-0 ${mark.cls}`} />
                         <span className={good ? 'text-ink-3' : 'text-ink-2'}>{USABILITY_LABEL[r.lot.usability]}</span>
@@ -284,6 +370,10 @@ export function StockLedger() {
 
                     <td className="num whitespace-nowrap py-1 pl-4 pr-2 text-right">
                       <Num d={r.balance} format="raw" dp={3} suffix={` ${r.uom}`} size="sm" />
+                    </td>
+
+                    <td className="num whitespace-nowrap py-1 pl-4 pr-2 text-right">
+                      <Num d={r.value} format="money" size="sm" tone={good ? undefined : 'warn'} />
                     </td>
 
                     <td className="py-1 pr-2 text-center">
@@ -310,10 +400,19 @@ export function StockLedger() {
                         </span>
                       )}
                     </td>
+
+                    <td className="whitespace-nowrap py-1 pr-2 text-right" onClick={(e) => e.stopPropagation()}>
+                      <span className="inline-flex gap-1.5">
+                        <Button size="sm" onClick={() => startCount(r.lot.id)}>Count</Button>
+                        {!good && (
+                          <Button size="sm" variant="ghost" onClick={() => setWriting(r)}>Write off</Button>
+                        )}
+                      </span>
+                    </td>
                   </tr>
 
                   <tr hidden={!open}>
-                    <td colSpan={7} className="px-3 pb-2.5 pt-0.5">
+                    <td colSpan={10} className="px-3 pb-2.5 pt-0.5">
                       <p className="flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-ink-3">
                         <span>
                           Valued <Num d={r.value} format="money" size="sm" /> at last purchase rate, ex-freight
@@ -324,6 +423,10 @@ export function StockLedger() {
                         </span>
                         <span>Last confirmed <span className="mono">{shortDate(r.lastConfirmed.value)}</span></span>
                         <span>{r.counts.length} count{r.counts.length === 1 ? '' : 's'} on file</span>
+                        <button type="button" onClick={() => select(r.lot.id)}
+                          className="press text-accent-ink underline underline-offset-2 hover:no-underline">
+                          See the {r.movements.length} documents behind this balance
+                        </button>
                       </p>
 
                       {r.lot.usabilityReason && (
@@ -343,16 +446,6 @@ export function StockLedger() {
                           make it wrong — it makes it unverified, which is a different thing.
                         </p>
                       )}
-
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <Button size="sm" variant="primary" onClick={() => startCount(r.lot.id)}>Count</Button>
-                        <Button size="sm" onClick={() => select(r.lot.id)}>
-                          See the {r.movements.length} documents
-                        </Button>
-                        {!good && (
-                          <Button size="sm" variant="ghost" onClick={() => setWriting(r)}>Write off</Button>
-                        )}
-                      </div>
                     </td>
                   </tr>
                 </tbody>
@@ -362,7 +455,7 @@ export function StockLedger() {
 
           {shown.length === 0 && (
             <p className="px-1 py-4 text-center text-[12.5px] text-ink-2">
-              No lot matches that. <button type="button" onClick={() => { setFilter('all'); setQuery('') }}
+              No lot matches that. <button type="button" onClick={clear}
                 className="text-accent-ink underline underline-offset-2">Show every lot</button>
             </p>
           )}
