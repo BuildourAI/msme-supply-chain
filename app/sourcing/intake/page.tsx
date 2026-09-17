@@ -1,5 +1,4 @@
 'use client'
-import Link from 'next/link'
 import { useState } from 'react'
 import { PageHeader } from '@/components/shell/PageHeader'
 import { Card, Pill, StatusPill } from '@/components/ui/bits'
@@ -252,11 +251,6 @@ function IntakePage() {
                 <p className="text-ink-3">
                   The mapping table is the deliverable, not the parser. A better parser reduces the queue;
                   only the table makes the data usable by everything downstream.
-                </p>
-                <p className="border-t border-line-soft pt-2.5">
-                  <Link href="/production#aliases" className="font-medium text-accent-ink hover:underline">
-                    See the aliases on the floor →
-                  </Link>
                 </p>
         </div>
       </Note>

@@ -1,14 +1,11 @@
 'use client'
-import Link from 'next/link'
 import { StagePage } from '@/components/stage/StagePage'
 import { stageById } from '@/lib/seed/stages'
 import { Card, StatusPill } from '@/components/ui/bits'
 import { buildRows, type SeedBundle } from '@/lib/domain/derive'
 import { DEFAULT_POLICY } from '@/lib/domain/policy'
 import * as S from '@/lib/seed/sourcing'
-import { useDesk } from '@/components/desk/store'
 import { STATUS_LABEL, STATUS_TONE } from '@/lib/domain/format'
-import { Note } from '@/components/ui/Note'
 
 const seed: SeedBundle = {
   today: S.TODAY_SOURCING, items: S.items, vendors: S.vendors, vendorItems: S.vendorItems,
@@ -18,7 +15,6 @@ const rows = buildRows(seed, DEFAULT_POLICY)
 
 export default function Page() {
   const goods = [...new Set(S.items.flatMap((i) => i.feeds))]
-  const { state } = useDesk()
   return (
     <StagePage stage={stageById('production')}>
       <Card id="feeds" title="Feeds map" live
@@ -59,24 +55,6 @@ export default function Page() {
         </div>
       </Card>
 
-      <Card id="aliases" className="mt-3" title="Item master & aliases" live
-        sub={`§8.2 · what the factory calls it, against what each vendor calls it · ${state.aliases.length} mappings`}>
-        <ul className="divide-y divide-line-soft">
-          {state.aliases.map((a, i) => (
-            <li key={i} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-2.5">
-              <span className="mono text-[12.5px]">“{a.rawText}”</span>
-              <span aria-hidden className="text-ink-3">→</span>
-              <span className="mono text-[12.5px] font-medium">{a.itemId}</span>
-              <span className="ml-auto text-[11px] text-ink-3">{a.vendorName} · confirmed {a.confirmedAt}</span>
-            </li>
-          ))}
-        </ul>
-        <Note foot label="Where new supplier spellings are taught">
-        New mappings are written from the review queue on the{' '}
-          <Link href="/sourcing/intake" className="font-medium text-accent-ink hover:underline">supplier intake page</Link>.
-          Accepting a suggested match teaches the system that vendor’s spelling permanently.
-      </Note>
-      </Card>
     </StagePage>
   )
 }
