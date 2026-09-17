@@ -160,51 +160,46 @@ function AckDialog({ row, onClose }: { row: SyncRow | null; onClose: () => void 
 /* ------------------------------------------------------------ the register - */
 
 /**
- * One PO line, in three lines of card.
+ * One PO line, as a tile.
  *
- * The two quantities are the whole system: what we need, what the vendor
- * believes, and the distance between them. They stay large and side by side —
- * that comparison is the reason this screen exists, and a 6px bar is a smaller
- * version of the same two numbers, not a picture of them.
+ * The two quantities are the whole system — what we need, what the vendor
+ * believes — so they stay large and side by side. Everything that explains them
+ * is one click away rather than printed underneath: who changed it and when,
+ * what the gap costs in days of cover, why the line is being chased, and every
+ * version it has been through.
  *
- * What went is the stack that grew around them. A card used to be six blocks
- * tall: header, two bordered boxes, a gap line, a warn callout, a fold, a button
- * row — 280px to say "they are making 150 fewer than we need, tell them". The
- * consequence now sits beside the figures instead of under them, the two warn
- * callouts become one chip each with their sentence on the title, and the
- * explanations fold into the version history, so a card carries one disclosure
- * rather than a disclosure and two paragraphs.
+ * What stays on the face is what a buyer decides on at a glance: the two
+ * figures, the gap in quantity and rupees, the state, and a badge per condition
+ * whose sentence is on its title. Two tiles fit a row, so five lines are three
+ * rows rather than five screens of prose.
  */
-function Chip({ tone, icon, children, title }: {
-  tone: 'warn' | 'critical'; icon: IconName; children: React.ReactNode; title: string
+function Badge({ tone, icon, label, title }: {
+  tone: 'warn' | 'critical'; icon: IconName; label: string; title: string
 }) {
   return (
     <span title={title}
-      className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] ${
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-px text-[10.5px] ${
         tone === 'critical'
           ? 'border-critical/40 bg-critical-soft text-ink-2'
           : 'border-warn/40 bg-warn-soft text-ink-2'}`}>
       <Icon name={icon} className={`size-3 shrink-0 ${tone === 'critical' ? 'text-critical' : 'text-warn'}`} />
-      {children}
+      <span className="num">{label}</span>
     </span>
   )
 }
 
-/** One quantity, its label and where it came from. */
-function Figure({ label, children, from }: {
-  label: string; children: React.ReactNode; from: string
-}) {
+/** One quantity under its label. Where it came from lives in the fold. */
+function Figure({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <p className="mono text-[10px] uppercase tracking-wider text-ink-3">{label}</p>
-      <p className="mt-0.5">{children}</p>
-      <p className="mt-0.5 text-[11px] text-ink-3">{from}</p>
+      <p className="mono text-[9.5px] uppercase leading-none tracking-wider text-ink-3">{label}</p>
+      <p className="mt-1">{children}</p>
     </div>
   )
 }
 
-function LineCard({ row, onRevise, onAck, dim = false }: {
-  row: SyncRow; onRevise: () => void; onAck: () => void; dim?: boolean
+function LineCard({ row, onRevise, onAck, dim = false, i = 0 }: {
+  row: SyncRow; onRevise: () => void; onAck: () => void; dim?: boolean; i?: number
 }) {
   const { showDraft, policy } = useInbound()
   const s = row.sync
@@ -213,94 +208,63 @@ function LineCard({ row, onRevise, onAck, dim = false }: {
   const short = row.gap.value > 0
 
   return (
-    <li className={`anim-fade-up lift panel rounded-lg border px-3 py-2.5 transition-opacity ${
+    <li style={{ '--i': Math.min(i, 5) } as React.CSSProperties}
+      className={`anim-fade-up lift panel flex flex-col rounded-lg border px-3 py-2 transition-opacity ${
       row.state === 'not_told' ? 'border-critical/40' : row.state === 'awaiting_ack' ? 'border-warn/40' : 'border-line'
     } ${dim ? 'opacity-40' : ''}`}>
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className="mono text-[12.5px] font-medium">{s.poNo}</span>
-        <span className="text-[13px]">{row.item.name}</span>
-        <span className="mono text-[11px] text-ink-3">v{latest.version}</span>
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+        <span className="mono shrink-0 text-[12px] font-medium">{s.poNo}</span>
+        <span className="min-w-[8rem] flex-1 truncate text-[12.5px]" title={row.item.name}>{row.item.name}</span>
         {row.received && <Pill tone="neutral">received</Pill>}
-        <span className="ml-auto">
-          <StatusPill tone={SYNC_TONE[row.state]} label={SYNC_LABEL[row.state]}
-            explain={s.ackRef ? `Last acknowledgement: ${s.ackRef}` : 'No acknowledgement on file for the current version.'} />
-        </span>
+        {row.state === 'awaiting_ack' && (
+          <Badge tone={row.chaseOverdue ? 'critical' : 'warn'} icon="clock"
+            label={`${row.awaitingAck.value}d`}
+            title={`${row.awaitingAck.value} ${row.awaitingAck.value === 1 ? 'day' : 'days'} with no reply since the notice went on ${shortDate(s.notifiedOn!)}.${
+              row.chaseOverdue ? ` Past the ${policy.ackChaseDays}-day limit, so it escalates.` : ''}`} />
+        )}
+        {row.whipsawed && (
+          <Badge tone="warn" icon="alert" label={`${row.churn.value}×`}
+            title={`This line has changed ${row.churn.value} times in 30 days, against a limit of ${policy.poChurnLimit}. The vendor is being whipsawed.`} />
+        )}
+        <StatusPill tone={SYNC_TONE[row.state]} label={SYNC_LABEL[row.state]}
+          explain={s.ackRef ? `Last acknowledgement: ${s.ackRef}` : 'No acknowledgement on file for the current version.'} />
       </div>
 
-      {/* the two quantities, and what the distance between them costs */}
-      <div className="mt-2 flex flex-wrap items-start gap-x-5 gap-y-2">
-        {/* the two figures shrink before they overflow: at phone width the
-            labels wrap rather than running past the card edge */}
-        <div className="flex min-w-0 items-start gap-2.5">
-          <Figure label="What we need"
-            from={`v${latest.version} · ${latest.changedBy} · ${shortDate(latest.changedOn)}`}>
+      {/* the two figures, and what the distance between them costs */}
+      <div className="mt-1.5 flex flex-wrap items-end gap-x-4 gap-y-1.5">
+        <div className="flex min-w-0 items-end gap-2.5">
+          <Figure label="What we need">
             <Num d={row.internal} format="raw" dp={3} size="lg" suffix={` ${row.uom}`} />
           </Figure>
-          <span aria-hidden className="mt-4 shrink-0 text-[15px] text-ink-3">→</span>
-          <Figure label="What the vendor is making"
-            from={`v${s.ackedVersion} · ${s.ackedOn ? `acknowledged ${shortDate(s.ackedOn)}` : 'never acknowledged'}`}>
+          <span aria-hidden className="pb-0.5 shrink-0 text-[14px] text-ink-3">→</span>
+          <Figure label="What the vendor is making">
             <Num d={row.vendorKnown} format="raw" dp={3} size="lg" suffix={` ${row.uom}`}
               tone={out ? 'warn' : undefined} />
           </Figure>
         </div>
 
-        <div className="min-w-[15rem] flex-1 pt-3.5">
-          {out ? (
-            <p className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 text-[12px]">
-              <span className="text-ink-3">
-                Gap <Num d={row.gap} format="raw" dp={3} suffix={` ${row.uom}`} tone={short ? 'critical' : 'warn'} />
+        {out ? (
+          <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 pb-0.5 text-[12px] text-ink-3">
+            {short ? (
+              <>
+                <span>Gap <Num d={row.gap} format="raw" dp={3} suffix={` ${row.uom}`} tone="critical" /></span>
+                <span><Num d={row.exposure} format="money" tone="warn" /> exposed</span>
+              </>
+            ) : (
+              <span className="text-warn">
+                {qtyText(Math.abs(row.gap.value), row.uom)} arriving that nobody needs
               </span>
-              <span className="text-ink-3">
-                Exposure <Num d={row.exposure} format="money" tone="warn" />
-              </span>
-              {short ? (
-                <span className="text-ink-3">
-                  Cover lost <Num d={row.coverGap} format="days" dp={1} suffix=" days" tone="critical" />
-                </span>
-              ) : (
-                <span className="text-warn">
-                  {qtyText(Math.abs(row.gap.value), row.uom)} arriving that nobody needs — blocked capital in the making
-                </span>
-              )}
-              <span className="mono text-[11px] text-ink-3">
-                changed <Num d={row.sinceChange} format="days" dp={0}
-                  suffix={row.sinceChange.value === 1 ? ' day ago' : ' days ago'} />
-              </span>
-            </p>
-          ) : (
-            <p className="text-[12px] text-ink-3">
-              No gap — the vendor is building the version we are planning on, due{' '}
-              <span className="mono">{shortDate(latest.promisedDate)}</span>.
-            </p>
-          )}
-
-          {(row.state === 'awaiting_ack' || row.whipsawed) && (
-            <p className="mt-1.5 flex flex-wrap gap-1.5">
-              {row.state === 'awaiting_ack' && (
-                <Chip tone={row.chaseOverdue ? 'critical' : 'warn'} icon="clock"
-                  title={`Notice sent ${shortDate(s.notifiedOn!)}. ${row.chaseOverdue
-                    ? `Past the ${policy.ackChaseDays}-day chase limit, so it escalates. ${s.shipped
-                      ? 'The material has already left, which means it left at the old quantity.'
-                      : 'Until they confirm, assume they are making the old quantity.'}`
-                    : 'Until they confirm, the cover figures still use the old quantity.'}`}>
-                  <Num d={row.awaitingAck} format="days" dp={0} size="sm" className="text-[11px]"
-                    suffix={row.awaitingAck.value === 1 ? ' day' : ' days'} /> with no reply
-                  {row.chaseOverdue && <> — past the {policy.ackChaseDays}-day limit</>}
-                </Chip>
-              )}
-              {row.whipsawed && (
-                <Chip tone="warn" icon="alert"
-                  title={`This line has changed ${row.churn.value} times in 30 days against a limit of ${policy.poChurnLimit}. The vendor is being whipsawed — and a supplier who re-plans four times prices that in next quarter. The fix is upstream of purchasing.`}>
-                  changed <Num d={row.churn} format="int" size="sm" className="text-[11px]" /> times in 30 days
-                </Chip>
-              )}
-            </p>
-          )}
-        </div>
+            )}
+          </p>
+        ) : (
+          <p className="pb-0.5 text-[12px] text-ink-3">
+            due <span className="mono">{shortDate(latest.promisedDate)}</span>
+          </p>
+        )}
       </div>
 
-      {/* one fold per card: why it is in this state, and every version of it */}
-      <div className="mt-1.5 flex flex-wrap items-center gap-2 border-t border-line-soft pt-1.5">
+      {/* one fold per tile: everything that explains the two figures */}
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 border-t border-line-soft pt-1.5">
         {row.state === 'not_told' && (
           <Button size="sm" variant="primary" onClick={() => showDraft(s.poLineId)}>
             Draft the change notice
@@ -316,8 +280,35 @@ function LineCard({ row, onRevise, onAck, dim = false }: {
 
         <details className="ml-auto group [&[open]]:mt-1 [&[open]]:w-full">
           <summary className="cursor-pointer select-none text-[11.5px] text-ink-3 hover:text-ink-2">
-            Why, and the {s.revisions.length} {s.revisions.length === 1 ? 'version' : 'versions'}
+            Details · {s.revisions.length} {s.revisions.length === 1 ? 'version' : 'versions'}
           </summary>
+
+          <dl className="mt-1.5 grid gap-x-3 gap-y-0.5 text-[11.5px] sm:grid-cols-[auto_minmax(0,1fr)]">
+            <dt className="text-ink-3">What we need</dt>
+            <dd>v{latest.version} · {latest.changedBy} · {shortDate(latest.changedOn)} · due {shortDate(latest.promisedDate)}</dd>
+            <dt className="text-ink-3">What the vendor is making</dt>
+            <dd>v{s.ackedVersion} · {s.ackedOn ? `acknowledged ${shortDate(s.ackedOn)}` : 'never acknowledged'}</dd>
+            {out && short && (
+              <>
+                <dt className="text-ink-3">Cover lost</dt>
+                <dd><Num d={row.coverGap} format="days" dp={1} suffix=" days" size="sm" tone="critical" /> —{' '}
+                  the gap is <Num d={row.exposure} format="money" size="sm" tone="warn" /> of material the vendor
+                  is not making, changed{' '}
+                  <Num d={row.sinceChange} format="days" dp={0} size="sm"
+                    suffix={row.sinceChange.value === 1 ? ' day ago' : ' days ago'} />
+                </dd>
+              </>
+            )}
+            {out && !short && (
+              <>
+                <dt className="text-ink-3">Over-supply</dt>
+                <dd>{qtyText(Math.abs(row.gap.value), row.uom)} arriving that nobody needs — blocked capital in
+                  the making, worth <Num d={row.exposure} format="money" size="sm" tone="warn" />
+                </dd>
+              </>
+            )}
+          </dl>
+
           {row.state === 'awaiting_ack' && (
             <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-2">
               Notice sent {shortDate(s.notifiedOn!)} —{' '}
@@ -338,6 +329,7 @@ function LineCard({ row, onRevise, onAck, dim = false }: {
               is upstream of purchasing.
             </p>
           )}
+
           <ol className="mt-1.5 space-y-1 border-l-2 border-line pl-3">
             {s.revisions.map((r) => (
               <li key={r.version} className="text-[11.5px]">
@@ -422,12 +414,12 @@ export function OrderSync() {
             )}
           </div>
 
-          <ul className="space-y-2">
+          {/* two to a row: a tile this shape leaves half the screen empty at
+              full width, and the register is meant to be read in one glance */}
+          <ul className={`grid auto-rows-min items-start gap-2 ${open.length > 1 ? 'lg:grid-cols-2' : ''}`}>
             {open.map((r, i) => (
-              <div key={r.sync.poLineId} style={{ '--i': Math.min(i, 5) } as React.CSSProperties}>
-                <LineCard row={r} dim={dimmed(r)}
-                  onRevise={() => setRevising(r)} onAck={() => setAcking(r)} />
-              </div>
+              <LineCard key={r.sync.poLineId} row={r} i={i} dim={dimmed(r)}
+                onRevise={() => setRevising(r)} onAck={() => setAcking(r)} />
             ))}
           </ul>
 
@@ -436,7 +428,8 @@ export function OrderSync() {
               <p className="mono mt-3 text-[10px] uppercase tracking-wider text-ink-3">
                 Closed on receipt — kept because the receipt proves the point
               </p>
-              <ul className="mt-1.5 space-y-2">
+              <ul className={`mt-1.5 grid auto-rows-min items-start gap-2 ${
+                received.length > 1 ? 'lg:grid-cols-2' : ''}`}>
                 {received.map((r) => (
                   <LineCard key={r.sync.poLineId} row={r} dim={dimmed(r)}
                     onRevise={() => setRevising(r)} onAck={() => setAcking(r)} />
@@ -464,10 +457,21 @@ export function OrderSync() {
 
 /* ------------------------------------------------------- the inbound board -- */
 
+/**
+ * Everything on its way in, as four rows.
+ *
+ * This was four full-width timelines with a paragraph of labels under each —
+ * 455px to say four things a table says in four rows. The dates are data, so
+ * they sit in dated columns with the word printed once in the heading rather
+ * than repeated on every row. The one comparison a timeline was actually making
+ * — does the material land before the line stops — survives as a 96px lane per
+ * row, which is all a comparison of two dates needs.
+ */
 export function InboundBoard({ lines, span = 26 }: {
   lines: {
     poNo: string; itemName: string; qtyLabel: string; arrival: number; usable: number
-    stockout: number; late: number; etaLabel: string; issuableLabel: string
+    stockout: number; late: number; shipped: boolean; etaShort: string; issuableShort: string
+    stopShort: string; qcDays: number; etaLabel: string; issuableLabel: string
     stockoutLabel: string; statusLabel: string; inSync: boolean; ackNote: string
   }[]
   span?: number
@@ -475,40 +479,108 @@ export function InboundBoard({ lines, span = 26 }: {
   return (
     <Card index={2} className="mt-3" title="Inbound board" live
       sub="Everything on its way in, against the day each material runs out — at the quantity the vendor has confirmed">
-      <div className="p-4">
-        <ul className="space-y-3.5">
-          {lines.map((l) => (
-            <li key={l.poNo}>
-              <div className="mb-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                <span className="mono text-[12px] font-medium">{l.poNo}</span>
-                <span className="text-[12.5px]">{l.itemName}</span>
-                <span className="mono text-[11px] text-ink-3">{l.qtyLabel}</span>
-                {!l.inSync && <Pill tone="warn">vendor’s quantity, not ours</Pill>}
-                <span className="ml-auto">
-                  <StatusPill label={l.statusLabel} tone={l.late > 0 ? 'critical' : 'good'} />
-                </span>
-              </div>
-              <div className="relative h-7 w-full rounded-md bg-surface-2">
-                <div aria-hidden className="anim-tick absolute top-0 h-full w-[2px] bg-critical"
-                     style={{ left: `${Math.min(100, (l.stockout / span) * 100)}%` }} />
-                <div className="anim-reveal absolute top-1.5 h-4 rounded-l-[3px] bg-accent"
-                     style={{ left: 0, width: `${Math.min(100, (l.arrival / span) * 100)}%` }} />
-                <div className="anim-reveal hatch absolute top-1.5 h-4 rounded-r-[3px]"
-                     style={{ '--i': 3, '--hatch-c': 'var(--accent)', '--hatch-pitch': '5px', '--hatch-w': '2px',
-                       left: `${Math.min(100, (l.arrival / span) * 100)}%`,
-                       width: `${Math.max(0, ((l.usable - l.arrival) / span) * 100)}%`,
-                     } as React.CSSProperties} />
-              </div>
-              <p className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-ink-3">
-                <span>{l.etaLabel}</span>
-                <span>{l.issuableLabel}</span>
-                <span className="text-critical">{l.stockoutLabel}</span>
-                {!l.inSync && <span className="text-warn">{l.ackNote}</span>}
-              </p>
-            </li>
-          ))}
+      {/* `relative` matters: the sr-only spans in the cells are absolutely
+          positioned, and without a positioned ancestor they hang off the
+          initial containing block and scroll the whole page sideways */}
+      <div className="scroll-x relative overflow-x-auto px-3 py-2">
+        <table className="w-full min-w-[640px] border-collapse text-[12px]">
+          <thead>
+            <tr className="mono border-b border-line text-left text-[9.5px] uppercase tracking-wider text-ink-3">
+              <th className="whitespace-nowrap py-1 pr-2 font-normal">Order</th>
+              <th className="w-full py-1 pr-2 font-normal">On the vendor’s floor</th>
+              <th className="w-28 py-1 pr-2 font-normal" title="The orange bar is the wait; the hatched tail is inbound QC; the red tick is the day the line stops.">
+                Timing
+              </th>
+              <th className="whitespace-nowrap py-1 pr-2 text-right font-normal">Arrives</th>
+              <th className="whitespace-nowrap py-1 pr-2 text-right font-normal" title="Two days of inbound QC after it lands, before a single piece can be issued.">
+                Issuable
+              </th>
+              <th className="whitespace-nowrap py-1 pr-2 text-right font-normal">Line stops</th>
+              <th className="whitespace-nowrap py-1 text-right font-normal">Verdict</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line-soft">
+            {lines.map((l) => (
+              <tr key={l.poNo} className="transition-colors hover:bg-surface-2">
+                <td className="whitespace-nowrap py-1.5 pr-2">
+                  <span className="flex items-center gap-1.5">
+                    <Icon name={l.shipped ? 'truck' : 'cart'}
+                      className={`size-3.5 shrink-0 ${l.shipped ? 'text-accent-ink' : 'text-ink-3'}`} />
+                    <span className="mono text-[11.5px] font-medium">{l.poNo}</span>
+                    <span className="sr-only">{l.etaLabel}</span>
+                  </span>
+                </td>
+
+                <td className="max-w-[15rem] py-1.5 pr-2">
+                  <span className="flex items-baseline gap-1.5">
+                    <span className="min-w-0 truncate" title={l.itemName}>{l.itemName}</span>
+                    <span className={`mono shrink-0 text-[11px] ${l.inSync ? 'text-ink-3' : 'text-warn'}`}>
+                      {l.qtyLabel}
+                    </span>
+                    {!l.inSync && (
+                      <span className="shrink-0 text-warn" title={`The vendor’s quantity, not ours — ${l.ackNote}.`}>
+                        <Icon name="alert" className="size-3.5" />
+                        <span className="sr-only">vendor’s quantity, not ours — {l.ackNote}</span>
+                      </span>
+                    )}
+                  </span>
+                </td>
+
+                {/* the one comparison the timelines were for, in 96px */}
+                <td className="py-1.5 pr-2">
+                  <span className="relative block h-2.5 w-24 overflow-hidden rounded-full bg-surface-3"
+                    title={`${l.etaLabel} · ${l.issuableLabel} · ${l.stockoutLabel}`}>
+                    <span className="anim-reveal absolute inset-y-0 left-0 rounded-l-full bg-accent"
+                      style={{ width: `${Math.min(100, (l.arrival / span) * 100)}%` }} />
+                    <span className="anim-reveal hatch absolute inset-y-0 rounded-r-full"
+                      style={{ '--i': 3, '--hatch-c': 'var(--accent)', '--hatch-pitch': '4px', '--hatch-w': '1.5px',
+                        left: `${Math.min(100, (l.arrival / span) * 100)}%`,
+                        width: `${Math.max(0, ((l.usable - l.arrival) / span) * 100)}%`,
+                      } as React.CSSProperties} />
+                    <span aria-hidden className="anim-tick absolute inset-y-0 w-[2px] bg-critical"
+                      style={{ left: `${Math.min(99, (l.stockout / span) * 100)}%` }} />
+                  </span>
+                </td>
+
+                <td className="mono whitespace-nowrap py-1.5 pr-2 text-right text-[11.5px]">{l.etaShort}</td>
+                <td className="mono whitespace-nowrap py-1.5 pr-2 text-right text-[11.5px] text-ink-3">{l.issuableShort}</td>
+                <td className="mono whitespace-nowrap py-1.5 pr-2 text-right text-[11.5px] text-critical">{l.stopShort}</td>
+
+                <td className="whitespace-nowrap py-1.5 text-right">
+                  <span className="inline-flex items-center gap-1 whitespace-nowrap"
+                    title={l.statusLabel}>
+                    <Icon name={l.late > 0 ? 'alert' : 'check'}
+                      className={`size-3.5 shrink-0 ${l.late > 0 ? 'text-critical' : 'text-good'}`} />
+                    <span className={`text-[11.5px] ${l.late > 0 ? 'text-critical' : 'text-ink-2'}`}>
+                      {l.late > 0 ? `${l.late}d late` : 'in time'}
+                    </span>
+                    <span className="sr-only">{l.statusLabel}</span>
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* the words the rows no longer repeat, printed once */}
+        <ul className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10.5px] text-ink-3">
+          <li className="flex items-center gap-1.5">
+            <span aria-hidden className="inline-block h-2 w-4 rounded-full bg-accent" />on its way
+          </li>
+          <li className="flex items-center gap-1.5">
+            <span aria-hidden className="hatch inline-block h-2 w-4 rounded-full"
+              style={{ '--hatch-c': 'var(--accent)', '--hatch-pitch': '4px', '--hatch-w': '1.5px' } as React.CSSProperties} />
+            {lines[0]?.qcDays ?? 2} days of inbound QC before it can be issued
+          </li>
+          <li className="flex items-center gap-1.5">
+            <span aria-hidden className="inline-block h-2.5 w-[2px] bg-critical" />the day the line stops
+          </li>
+          <li className="flex items-center gap-1.5">
+            <Icon name="alert" className="size-3 text-warn" />vendor’s quantity, not ours
+          </li>
         </ul>
       </div>
+
       <Note foot label="PO-2611 is covered on quantity and still late — why that is not a second order">
         <strong className="text-ink">PO-2611 is still the case worth looking at.</strong> MgO is covered
         on quantity — 610 against a reorder point of 480 — but the material lands nine days after the
