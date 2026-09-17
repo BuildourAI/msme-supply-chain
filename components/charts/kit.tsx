@@ -264,7 +264,11 @@ export interface StockSeg {
  * §8.5 — the stock bar split by what stock actually IS. Jobwork and on-order
  * segments are hatched, because they are neither available nor gone.
  */
-export function StockBar({ segments, uom }: { segments: StockSeg[]; uom: string }) {
+export function StockBar({ segments, uom, legend = true }: {
+  segments: StockSeg[]; uom: string
+  /** off where the six words are printed once under a grid rather than per card */
+  legend?: boolean
+}) {
   const uid = useId().replace(/:/g, '')
   const total = segments.reduce((a, s) => a + s.value, 0)
   const shown = segments.filter((s) => s.value > 0)
@@ -292,15 +296,17 @@ export function StockBar({ segments, uom }: { segments: StockSeg[]; uom: string 
           })
         })()}
       </svg>
-      <ul className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
-        {shown.map((s) => (
-          <li key={s.key} className="flex items-center gap-1.5 text-[11px] text-ink-2">
-            <span aria-hidden className={`size-2.5 shrink-0 rounded-[2px] ${s.hatched ? 'hatch' : ''}`}
-              style={s.hatched ? { '--hatch-c': s.color } as React.CSSProperties : { background: s.color }} />
-            {s.label} <span className="num font-medium text-ink">{num(s.value, s.value < 10 ? 2 : 0)}</span>
-          </li>
-        ))}
-      </ul>
+      {legend && (
+        <ul className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+          {shown.map((s) => (
+            <li key={s.key} className="flex items-center gap-1.5 text-[11px] text-ink-2">
+              <span aria-hidden className={`size-2.5 shrink-0 rounded-[2px] ${s.hatched ? 'hatch' : ''}`}
+                style={s.hatched ? { '--hatch-c': s.color } as React.CSSProperties : { background: s.color }} />
+              {s.label} <span className="num font-medium text-ink">{num(s.value, s.value < 10 ? 2 : 0)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

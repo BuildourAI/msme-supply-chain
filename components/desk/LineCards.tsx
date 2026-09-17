@@ -32,10 +32,10 @@ const STATUS_ICON: Record<string, IconName> = {
   at_risk: 'alert', at_risk_late: 'clock', open_po_covers: 'truck', covered: 'check',
 }
 
-const TONE_RAIL: Record<string, string> = {
+export const TONE_RAIL: Record<string, string> = {
   critical: 'bg-critical', warn: 'bg-warn', accent: 'bg-accent', good: 'bg-good', neutral: 'bg-line',
 }
-const TONE_TEXT: Record<string, string> = {
+export const TONE_TEXT: Record<string, string> = {
   critical: 'text-critical', warn: 'text-warn', accent: 'text-accent-ink', good: 'text-good', neutral: 'text-ink-3',
 }
 

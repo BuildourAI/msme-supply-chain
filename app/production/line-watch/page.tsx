@@ -3,6 +3,8 @@ import { useMemo, useState } from 'react'
 import { PageHeader } from '@/components/shell/PageHeader'
 import { Button, Card, Pill, StatusPill } from '@/components/ui/bits'
 import { KpiTile } from '@/components/desk/KpiRow'
+import { TONE_RAIL, TONE_TEXT } from '@/components/desk/LineCards'
+import { Icon, type IconName } from '@/components/ui/icons'
 import { Num } from '@/components/ui/Num'
 import { CoverBar, StockBar, type StockSeg } from '@/components/charts/kit'
 import { Note } from '@/components/ui/Note'
@@ -85,7 +87,44 @@ function WeekSchedule() {
   )
 }
 
-function MaterialCard({ d, index = 0 }: { d: DerivedMaterial; index?: number }) {
+/**
+ * One material that needs a decision, as a tile.
+ *
+ * The card this replaces was a screen in itself: a header, a row of "feeds"
+ * chips, a 34px figure, two bars each with their own legend, five sentences, a
+ * customer-order block and a supplier row — 460 to 600px, five of them stacked
+ * two to a row. Reading it took three screens to answer a question the owner
+ * asks in one look: which material stops the line first, when, and what do I
+ * approve.
+ *
+ * So the tile keeps exactly that. The status rail and glyph, the cover figure
+ * against the lead-time tick, the stock split as a bar, the orders at risk, and
+ * the proposal with its two buttons. The five sentences that explain the bar —
+ * what is at a jobworker, what is earmarked, what is on the rack, where scrap
+ * sits against target — become a badge each, with the sentence on the title and
+ * the whole set in the fold. The six words under the stock bar are printed once
+ * under the grid instead of once per material.
+ */
+function Flag({ tone, icon, children, title }: {
+  tone: 'critical' | 'warn' | 'accent' | 'neutral'; icon: IconName
+  children: React.ReactNode; title: string
+}) {
+  return (
+    <span title={title}
+      className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-px text-[10.5px] ${
+        tone === 'critical' ? 'border-critical/40 bg-critical-soft text-ink-2'
+        : tone === 'warn' ? 'border-warn/40 bg-warn-soft text-ink-2'
+        : tone === 'accent' ? 'border-accent/40 bg-accent-soft text-ink-2'
+        : 'border-line bg-surface-2 text-ink-2'}`}>
+      <Icon name={icon} className={`size-3 shrink-0 ${
+        tone === 'critical' ? 'text-critical' : tone === 'warn' ? 'text-warn'
+        : tone === 'accent' ? 'text-accent-ink' : 'text-ink-3'}`} />
+      {children}
+    </span>
+  )
+}
+
+function MaterialTile({ d, index = 0 }: { d: DerivedMaterial; index?: number }) {
   const { log, say } = useApp()
   const m = d.m
   const [supplier, setSupplier] = useState(m.suppliers.find((s) => s.preferred)!.name)
@@ -93,6 +132,7 @@ function MaterialCard({ d, index = 0 }: { d: DerivedMaterial; index?: number }) 
   const chosen = m.suppliers.find((s) => s.name === supplier)!
   const cost = useMemo(() => m.reorderQty * chosen.rate + m.freight, [m, chosen])
   const tone = d.status.value === 'stop' ? 'critical' : d.status.value === 'watch' ? 'warn' : 'good'
+  const overScrap = m.scrapPct > m.scrapTargetPct
 
   const segs: StockSeg[] = [
     { key: 'usable', label: 'Ready to use', value: m.usable, color: 'var(--good)' },
@@ -104,128 +144,120 @@ function MaterialCard({ d, index = 0 }: { d: DerivedMaterial; index?: number }) 
   ]
 
   return (
-    <Card index={index} className={tone === 'critical' ? 'border-critical/35' : tone === 'warn' ? 'border-warn/35' : ''}>
-      <div className="p-4">
-        <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
-          <div className="min-w-0">
-            <h3 className="text-[16px] leading-tight">{m.name}</h3>
-            <p className="mono mt-0.5 text-[11px] text-ink-3">
-              batch {m.batchNo} · takes {m.leadTimeDays} days to arrive
-            </p>
-          </div>
-          <span className="ml-auto"><StatusPill label={STATUS_LABEL[d.status.value]} tone={tone} /></span>
-        </div>
+    <li style={{ '--i': Math.min(index, 8) } as React.CSSProperties}
+      className={`anim-fade-up lift panel relative flex flex-col overflow-hidden rounded-lg border pl-2.5 ${
+        tone === 'critical' ? 'border-critical/35' : tone === 'warn' ? 'border-warn/35' : 'border-line'}`}>
+      <span aria-hidden className={`absolute inset-y-0 left-0 w-1 ${TONE_RAIL[tone]}`} />
 
-        <ul className="mt-2 flex flex-wrap gap-1.5">
-          <li className="text-[11px] text-ink-3">Feeds:</li>
-          {m.feeds.map((f) => (
-            <li key={f} className="rounded border border-line bg-surface-2 px-1.5 py-px text-[11px] text-ink-2">{f}</li>
-          ))}
-        </ul>
-
-        <div className="mt-3.5 flex items-end gap-3">
-          <div>
-            <p className="text-[11px] text-ink-3">The line runs for</p>
-            <p className="figure text-[34px] leading-none">
-              <Num d={d.coverDays} format="days" size="display" tone={tone} suffix=" days" />
-            </p>
-          </div>
-          <p className="pb-1 text-[11.5px] leading-snug text-ink-2">
-            runs out {shortDate(d.stockoutDate.value)}
-          </p>
+      <div className="px-3 py-2.5">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <Icon name={tone === 'critical' ? 'alert' : tone === 'warn' ? 'clock' : 'check'}
+            className={`size-4 shrink-0 ${TONE_TEXT[tone]}`} />
+          <h3 className="min-w-0 flex-1 truncate text-[13.5px] font-medium" title={m.name}>{m.name}</h3>
+          <StatusPill label={STATUS_LABEL[d.status.value]} tone={tone} />
         </div>
-        <div className="mt-2">
+        <p className="mono mt-0.5 truncate text-[10.5px] text-ink-3"
+          title={`batch ${m.batchNo} · takes ${m.leadTimeDays} days to arrive · feeds ${m.feeds.join(', ')}`}>
+          batch {m.batchNo} · {m.leadTimeDays}-day lead · feeds {m.feeds.join(', ')}
+        </p>
+
+        {/* how long the line runs, against the lead time it has to beat */}
+        <p className="mt-2 flex items-baseline gap-2">
+          <Num d={d.coverDays} format="days" size="lg" tone={tone} suffix=" days" />
+          <span className="text-[11.5px] text-ink-3">runs out {shortDate(d.stockoutDate.value)}</span>
+        </p>
+        <div className="mt-1.5">
           <CoverBar coverDays={d.coverDays.value} leadDays={m.leadTimeDays} tone={tone} />
         </div>
 
-        <div className="mt-3.5">
-          <p className="mb-1 text-[11px] text-ink-3">What the stock actually is</p>
-          <StockBar segments={segs} uom={m.uom} />
+        {/* what the stock actually is — the words are under the grid, once */}
+        <div className="mt-2">
+          <StockBar segments={segs} uom={m.uom} legend={false} />
         </div>
 
-        {/* one sentence each — the extras §8.5 asks for */}
-        <ul className="mt-3 space-y-1 text-[12px] leading-relaxed text-ink-2">
+        <p className="mt-1.5 flex flex-wrap gap-1.5">
           {m.withJobworker > 0 && (
-            <li>
-              {qtyText(m.withJobworker, m.uom)} is at {m.jobworkerName}
-              {d.overdueJobwork ? <strong className="text-critical"> and it is overdue</strong> : ' and due back on time'} —
-              neither on the shelf nor consumed.
-            </li>
+            <Flag tone={d.overdueJobwork ? 'critical' : 'neutral'} icon="truck"
+              title={`${qtyText(m.withJobworker, m.uom)} is at ${m.jobworkerName}${
+                d.overdueJobwork ? ' and it is overdue' : ' and due back on time'} — neither on the shelf nor consumed.`}>
+              at {m.jobworkerName}{d.overdueJobwork ? ', overdue' : ''}
+            </Flag>
           )}
           {m.onOrder > 0 && (
-            <li>{qtyText(m.onOrder, m.uom)} is on order and earmarked for {m.earmarkedFor} — it is not free stock.</li>
+            <Flag tone="neutral" icon="cart"
+              title={`${qtyText(m.onOrder, m.uom)} is on order and earmarked for ${m.earmarkedFor} — it is not free stock.`}>
+              on order, earmarked
+            </Flag>
           )}
           {m.offcutQty > 0 && (
-            <li>
-              {qtyText(m.offcutQty, m.uom)} of usable offcut is already on the rack, worth about{' '}
-              <Num d={d.offcutValue} format="money" size="sm" /> — check it before buying.
-            </li>
+            <Flag tone="accent" icon="boxes"
+              title={`${qtyText(m.offcutQty, m.uom)} of usable offcut is already on the rack — check it before buying.`}>
+              {money(d.offcutValue.value as number)} offcut
+            </Flag>
           )}
-          <li>
-            Scrap is running at {m.scrapPct}% against a {m.scrapTargetPct}% target
-            {m.scrapPct > m.scrapTargetPct
-              ? <span className="text-warn"> — over target</span>
-              : <span className="text-good"> — within target</span>}.
-          </li>
+          {overScrap && (
+            <Flag tone="warn" icon="activity"
+              title={`Scrap is running at ${m.scrapPct}% against a ${m.scrapTargetPct}% target — over target.`}>
+              scrap {m.scrapPct}% vs {m.scrapTargetPct}%
+            </Flag>
+          )}
           {d.nonUsable.value > 0 && (
-            <li>
-              <Num d={d.nonUsable} size="sm" /> {m.uom} cannot be issued, worth{' '}
-              <Num d={d.nonUsableValue} format="money" size="sm" /> — shown, but never counted as cover.
-            </li>
+            <Flag tone="warn" icon="lock"
+              title={`${qtyText(d.nonUsable.value, m.uom)} cannot be issued, worth ${money(d.nonUsableValue.value as number)} — shown, but never counted as cover.`}>
+              {qtyText(d.nonUsable.value, m.uom)} not issuable
+            </Flag>
           )}
-        </ul>
+        </p>
 
         {/* §8.5 — customer orders only on at-risk materials */}
         {d.atRiskOrders.length > 0 && (
-          <div className="mt-3 rounded-md border border-critical/30 bg-critical-soft/40 p-2.5">
-            <p className="text-[11px] font-medium text-critical">Customer orders this puts at risk</p>
-            <ul className="mt-1 space-y-0.5">
-              {d.atRiskOrders.map((s) => (
-                <li key={s.soNo} className="flex flex-wrap items-baseline gap-x-2 text-[12px] text-ink-2">
-                  <span className="mono">{s.soNo}</span>
-                  <span>{s.customer} · {s.description}</span>
-                  <span className="num ml-auto font-medium">{lakh(s.value)}</span>
-                  <span className="mono text-[10.5px] text-ink-3">promised {shortDate(s.promisedDate)}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <ul className="mt-2 rounded-md border border-critical/30 bg-critical-soft/40 p-2">
+            {d.atRiskOrders.map((s) => (
+              <li key={s.soNo} className="flex flex-wrap items-baseline gap-x-2 text-[11.5px] text-ink-2">
+                <span className="mono">{s.soNo}</span>
+                <span className="min-w-0 truncate">{s.customer}</span>
+                <span className="num ml-auto font-medium">{lakh(s.value)}</span>
+                <span className="mono text-[10.5px] text-ink-3">promised {shortDate(s.promisedDate)}</span>
+              </li>
+            ))}
+          </ul>
         )}
 
-        <div className="mt-3.5 flex flex-wrap items-end gap-2.5 border-t border-line-soft pt-3">
-          <label className="min-w-[11rem]">
-            <span className="block text-[11px] text-ink-3">Supplier</span>
-            <select value={supplier} onChange={(e) => {
-              setSupplier(e.target.value)
-              log({ entity: 'line_material', entityId: m.id, action: 'Supplier changed',
-                detail: `${m.name} · ${supplier} → ${e.target.value}` })
-              say(`Supplier for ${m.name} set to ${e.target.value}. The cost below has been recalculated.`)
-            }}
-              className="mt-0.5 w-full rounded-md border border-line bg-surface px-2 py-1 text-[12.5px] outline-none focus:border-accent">
-              {m.suppliers.map((s) => (
-                <option key={s.name} value={s.name}>
-                  {s.name}{s.preferred ? ' · usual supplier' : ''} — {money(s.rate, s.rate < 1000 ? 2 : 0)}/{m.uom}, {s.leadTimeDays}d
-                </option>
-              ))}
-            </select>
-          </label>
-          <div>
-            <span className="block text-[11px] text-ink-3">Order</span>
-            <span className="text-[13px] font-medium">
+        {/* the decision */}
+        <div className="mt-2 border-t border-line-soft pt-2">
+          {/* the supplier keeps a line of its own: a name cut to "Kri" is not a
+              supplier a buyer can check before approving */}
+          <div className="flex items-center gap-1.5">
+            <span className="shrink-0 text-[12px] text-ink-2">
+              Buy{' '}
               <Num d={{ value: m.reorderQty, label: 'Reorder quantity', formula: 'reorder_qty (hand-set min/max, §14 Phase 2)',
-                inputs: [{ name: 'reorder_qty', value: m.reorderQty, unit: m.uom, source: 'set per material until 90 days of consumption exist' }], unit: m.uom }} suffix={` ${m.uom}`} />
+                inputs: [{ name: 'reorder_qty', value: m.reorderQty, unit: m.uom, source: 'set per material until 90 days of consumption exist' }], unit: m.uom }}
+                suffix={` ${m.uom}`} size="sm" /> from
             </span>
+          <select value={supplier} aria-label={`Supplier for ${m.name}`} onChange={(e) => {
+            setSupplier(e.target.value)
+            log({ entity: 'line_material', entityId: m.id, action: 'Supplier changed',
+              detail: `${m.name} · ${supplier} → ${e.target.value}` })
+            say(`Supplier for ${m.name} set to ${e.target.value}. The cost below has been recalculated.`)
+          }}
+            className="min-w-0 flex-1 rounded-md border border-line bg-surface px-1.5 py-1 text-[11.5px] outline-none focus:border-accent">
+            {m.suppliers.map((s) => (
+              <option key={s.name} value={s.name}>
+                {s.name}{s.preferred ? ' · usual' : ''} — {money(s.rate, s.rate < 1000 ? 2 : 0)}/{m.uom}, {s.leadTimeDays}d
+              </option>
+            ))}
+          </select>
           </div>
-          <div>
-            <span className="block text-[11px] text-ink-3">Cost</span>
-            <span className="text-[13px] font-medium">
-              <Num d={{ value: cost, label: 'Cost to reorder', formula: 'reorder_qty × rate + freight',
-                inputs: [{ name: 'reorder_qty', value: m.reorderQty, unit: m.uom }, { name: 'rate', value: chosen.rate, unit: `₹/${m.uom}`, source: chosen.name }, { name: 'freight', value: m.freight, unit: '₹' }], unit: '₹' }} format="money" />
-            </span>
-          </div>
-          <div className="ml-auto flex gap-2">
+
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+          <span className="text-[12.5px] font-medium">
+            <Num d={{ value: cost, label: 'Cost to reorder', formula: 'reorder_qty × rate + freight',
+              inputs: [{ name: 'reorder_qty', value: m.reorderQty, unit: m.uom }, { name: 'rate', value: chosen.rate, unit: `₹/${m.uom}`, source: chosen.name }, { name: 'freight', value: m.freight, unit: '₹' }], unit: '₹' }} format="money" size="sm" />
+            <span className="ml-1 text-[11px] text-ink-3">landed</span>
+          </span>
+          <span className="ml-auto flex gap-1.5">
             {done ? (
-              <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-2">
+              <span className="inline-flex items-center gap-1.5 text-[11.5px] text-ink-2">
                 <span aria-hidden className="size-1.5 rounded-full bg-good" />{done}
               </span>
             ) : (
@@ -244,10 +276,57 @@ function MaterialCard({ d, index = 0 }: { d: DerivedMaterial; index?: number }) 
                 }}>Not now</Button>
               </>
             )}
+          </span>
           </div>
         </div>
+
+        {/* the sentences, and the quantities behind the bar */}
+        <details className="group mt-1.5">
+          <summary className="cursor-pointer select-none text-[11px] text-ink-3 hover:text-ink-2">
+            Why, and what the stock is
+          </summary>
+          <ul className="mt-1 space-y-1 text-[11.5px] leading-relaxed text-ink-2">
+            {m.withJobworker > 0 && (
+              <li>
+                {qtyText(m.withJobworker, m.uom)} is at {m.jobworkerName}
+                {d.overdueJobwork ? <strong className="text-critical"> and it is overdue</strong> : ' and due back on time'} —
+                neither on the shelf nor consumed.
+              </li>
+            )}
+            {m.onOrder > 0 && (
+              <li>{qtyText(m.onOrder, m.uom)} is on order and earmarked for {m.earmarkedFor} — it is not free stock.</li>
+            )}
+            {m.offcutQty > 0 && (
+              <li>
+                {qtyText(m.offcutQty, m.uom)} of usable offcut is already on the rack, worth about{' '}
+                <Num d={d.offcutValue} format="money" size="sm" /> — check it before buying.
+              </li>
+            )}
+            <li>
+              Scrap is running at {m.scrapPct}% against a {m.scrapTargetPct}% target
+              {overScrap
+                ? <span className="text-warn"> — over target</span>
+                : <span className="text-good"> — within target</span>}.
+            </li>
+            {d.nonUsable.value > 0 && (
+              <li>
+                <Num d={d.nonUsable} size="sm" /> {m.uom} cannot be issued, worth{' '}
+                <Num d={d.nonUsableValue} format="money" size="sm" /> — shown, but never counted as cover.
+              </li>
+            )}
+          </ul>
+          <ul className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+            {segs.filter((s) => s.value > 0).map((s) => (
+              <li key={s.key} className="flex items-center gap-1.5 text-[11px] text-ink-2">
+                <span aria-hidden className={`size-2.5 shrink-0 rounded-[2px] ${s.hatched ? 'hatch' : ''}`}
+                  style={s.hatched ? { '--hatch-c': s.color } as React.CSSProperties : { background: s.color }} />
+                {s.label} <span className="num font-medium text-ink">{num(s.value, s.value < 10 ? 2 : 0)}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
       </div>
-    </Card>
+    </li>
   )
 }
 
@@ -282,11 +361,30 @@ export default function Page() {
 
       <div className="mb-4"><WeekSchedule /></div>
 
-      <h2 className="mb-2 text-[17px]">Materials needing attention</h2>
-      <p className="mb-3 text-[12.5px] text-ink-3">Sorted by which one stops the line first.</p>
-      <div className="mb-4 grid gap-3 xl:grid-cols-2">
-        {lw.needsAttention.map((d, i) => <MaterialCard key={d.m.id} d={d} index={5 + i} />)}
+      <div className="mb-2 flex flex-wrap items-baseline gap-x-2.5">
+        <h2 className="text-[17px]">Materials needing attention</h2>
+        <p className="text-[11.5px] text-ink-3">Sorted by which one stops the line first.</p>
       </div>
+      <ul className={`grid auto-rows-min items-start gap-2.5 ${
+        lw.needsAttention.length <= 1 ? ''
+        : lw.needsAttention.length === 2 || lw.needsAttention.length === 4 ? 'md:grid-cols-2'
+        : 'md:grid-cols-2 xl:grid-cols-3'}`}>
+        {lw.needsAttention.map((d, i) => <MaterialTile key={d.m.id} d={d} index={5 + i} />)}
+      </ul>
+
+      {/* the six words every stock bar used to carry, printed once */}
+      <ul className="mb-4 mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[10.5px] text-ink-3">
+        {([['var(--good)', 'ready to use', false], ['var(--warn)', 'QC hold', false],
+           ['var(--critical)', 'damaged or expired', false], ['var(--cat-1)', 'with a jobworker', true],
+           ['var(--cat-3)', 'on order', true]] as const).map(([color, label, hatched]) => (
+          <li key={label} className="flex items-center gap-1.5">
+            <span aria-hidden className={`inline-block h-2 w-4 rounded-full ${hatched ? 'hatch' : ''}`}
+              style={hatched ? { '--hatch-c': color } as React.CSSProperties : { background: color }} />
+            {label}
+          </li>
+        ))}
+        <li>Open “Why” on a tile for the sentences and the quantities.</li>
+      </ul>
 
       <Card index={10} className="mb-4" title="Everything else is fine for now"
         sub={`${lw.healthy.length} materials with more cover than they need`}
