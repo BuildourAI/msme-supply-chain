@@ -1,7 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { Button, Card, Pill, StatusPill } from '@/components/ui/bits'
+import { Button, Card, StatusPill } from '@/components/ui/bits'
 import { Dialog } from '@/components/ui/Dialog'
+import { Icon, type IconName } from '@/components/ui/icons'
 import { Num } from '@/components/ui/Num'
 import { money, num, qtyText, shortDate } from '@/lib/domain/format'
 import { Note } from '@/components/ui/Note'
@@ -9,6 +10,15 @@ import { useInventory, type LotRow } from './store'
 
 const USABILITY_LABEL: Record<string, string> = {
   usable: 'Usable', qc_hold: 'QC hold', damaged: 'Damaged', expired: 'Expired',
+}
+
+/* A state is a glyph and a word, never a glyph alone — §10. The glyph is what
+   you find the row by; the word is what tells you what you found. */
+const USABILITY_MARK: Record<string, { icon: IconName; cls: string }> = {
+  usable: { icon: 'check', cls: 'text-good' },
+  qc_hold: { icon: 'lock', cls: 'text-warn' },
+  damaged: { icon: 'alert', cls: 'text-critical' },
+  expired: { icon: 'clock', cls: 'text-warn' },
 }
 
 /* ------------------------------------------------------------- the counting */
@@ -135,86 +145,232 @@ function WriteOffSheet({ row, onClose }: { row: LotRow | null; onClose: () => vo
 
 /* ------------------------------------------------------------- the tables -- */
 
+/**
+ * The stock ledger, as one line per lot.
+ *
+ * Seventeen lots used to carry a code and a name stacked in one cell, a state
+ * pill with its reason wrapped underneath, two buttons on every row and a value
+ * column that was a dash on two rows in three. The question this table answers
+ * is narrower than that: what is on the rack, is it usable, is the figure
+ * trusted. Everything else — why a lot is on hold, what it is worth, which class
+ * it is and how often that class is counted, and what you can do about it — is
+ * one click down, on the row it belongs to.
+ *
+ * The filters sit above it because a store with lots on QC hold wants to see
+ * exactly those, and a search box because seventeen lots is more than a screen.
+ * Nothing is filtered out by default: the held and damaged lots are the ones
+ * worth meeting first, so they are in the list from the start, tinted and
+ * glyphed rather than hidden behind a chip you have to know to press.
+ */
+type LedgerFilter = 'all' | 'qc_hold' | 'damaged' | 'stale'
+
 export function StockLedger() {
   const { stockRows, select, startCount, staleValue, accuracy, policy } = useInventory()
   const [writing, setWriting] = useState<LotRow | null>(null)
+  const [filter, setFilter] = useState<LedgerFilter>('all')
+  const [query, setQuery] = useState('')
+  const [openId, setOpenId] = useState<string | null>(null)
   const stale = stockRows.filter((r) => r.stale)
+
+  const q = query.trim().toLowerCase()
+  const shown = stockRows.filter((r) => {
+    const passes = filter === 'all' ? true
+      : filter === 'stale' ? r.stale
+      : r.lot.usability === filter
+    if (!passes) return false
+    if (!q) return true
+    return `${r.item.code} ${r.item.name} ${r.lot.batchNo} ${r.lot.usabilityReason ?? ''}`.toLowerCase().includes(q)
+  })
+
+  const count = (f: LedgerFilter) => f === 'all' ? stockRows.length
+    : f === 'stale' ? stale.length
+    : stockRows.filter((r) => r.lot.usability === f).length
+
+  const chip = (id: LedgerFilter, label: string, tone: 'critical' | 'warn' | 'neutral', icon?: IconName) => (
+    <button key={id} type="button" onClick={() => setFilter(filter === id ? 'all' : id)}
+      aria-pressed={filter === id}
+      title={filter === id ? 'Showing only these lots — click for every lot' : `Show only the ${label} lots`}
+      className={`press inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
+        filter === id ? 'border-accent bg-accent-soft text-accent-ink'
+        : tone === 'critical' ? 'border-critical/40 bg-critical-soft text-ink-2 hover:border-critical'
+        : tone === 'warn' ? 'border-warn/40 bg-warn-soft text-ink-2 hover:border-warn'
+        : 'border-line text-ink-2 hover:bg-surface-2'}`}>
+      {icon && <Icon name={icon} className="size-3 shrink-0" />}
+      {count(id)} {label}
+    </button>
+  )
+
+  const HEADS = ['', 'Material', 'Lot', 'State', 'Balance', 'Docs', 'Confirmed']
 
   return (
     <>
       <Card index={1} title="Stock truth" live
-        sub="INV-01 · every quantity is the sum of its movements — click one to see the documents behind it"
+        sub="INV-01 · every quantity is the sum of its movements — click a lot for why it is where it is"
         actions={<span className="flex flex-wrap gap-x-4 text-[12px] text-ink-3">
           <span>Record accuracy <Num d={accuracy} format="raw" dp={1} suffix="%" /></span>
           <span>Unconfirmed <Num d={staleValue} format="money"
             tone={staleValue.value > 0 ? 'warn' : 'good'} /></span>
         </span>}>
-        <div className="scroll-x overflow-x-auto">
-          <table className="w-full min-w-[56rem] border-collapse text-[12.5px]">
-            <thead className="bg-surface-2">
-              <tr className="text-[11px] uppercase tracking-wide text-ink-3">
-                {['Material', 'Lot', 'State', 'Balance', 'Movements', 'Last confirmed', 'Value', ''].map((h, i) => (
-                  <th key={h || i} className={`whitespace-nowrap border-b border-line px-3 py-2 font-medium ${
-                    i === 3 || i === 6 ? 'text-right' : 'text-left'}`}>{h}</th>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-3 pb-1.5 pt-2.5">
+          <label className="relative shrink-0">
+            <Icon name="search" className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-ink-4" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search" aria-label="Search materials and lots"
+              className="w-32 rounded-md border border-line bg-surface-2 py-1 pl-7 pr-2 text-[12px] outline-none focus:border-accent" />
+          </label>
+          {chip('all', 'lots', 'neutral')}
+          {chip('qc_hold', 'on QC hold', 'warn', 'lock')}
+          {chip('damaged', 'damaged', 'critical', 'alert')}
+          {chip('stale', 'unconfirmed', 'warn', 'clock')}
+          {(filter !== 'all' || q) && (
+            <button type="button" onClick={() => { setFilter('all'); setQuery('') }}
+              className="press text-[11px] text-ink-3 underline underline-offset-2 hover:text-ink">
+              Show every lot
+            </button>
+          )}
+          <span className="mono ml-auto text-[10.5px] text-ink-3">
+            showing {shown.length} of {stockRows.length}
+          </span>
+        </div>
+
+        <div className="scroll-x relative overflow-x-auto px-3 pb-2">
+          <table className="w-full min-w-[46rem] border-collapse text-[12px]">
+            <thead>
+              <tr className="mono border-b border-line text-left text-[9.5px] uppercase tracking-wider text-ink-3">
+                {HEADS.map((h, i) => (
+                  <th key={h || i} className={`whitespace-nowrap py-1 font-normal ${
+                    i === 0 ? 'pl-2 pr-1' : 'pr-2'} ${i === 4 ? 'pl-4 text-right' : ''} ${
+                    i === 5 ? 'text-center' : ''} ${i === 6 ? 'w-full' : ''}`}>
+                    {h}
+                  </th>
                 ))}
               </tr>
             </thead>
-            <tbody>
-              {stockRows.map((r) => {
-                const good = r.lot.usability === 'usable'
-                return (
-                  <tr key={r.lot.id} className={`border-b border-line-soft ${good ? '' : 'bg-warn-soft/25'}`}>
-                    <td className="px-3 py-2">
-                      <span className="mono block text-[11px] text-ink-3">{r.item.code}</span>
-                      {r.item.name}
-                    </td>
-                    <td className="mono px-3 py-2 text-[11.5px] text-ink-2">{r.lot.batchNo}</td>
-                    <td className="px-3 py-2">
-                      <Pill tone={good ? 'good' : 'warn'}>{USABILITY_LABEL[r.lot.usability]}</Pill>
-                      {r.lot.usabilityReason && (
-                        <span className="mt-0.5 block text-[10.5px] text-ink-3">{r.lot.usabilityReason}</span>
-                      )}
-                    </td>
-                    <td className="num px-3 py-2 text-right">
-                      <Num d={r.balance} format="raw" dp={3} suffix={` ${r.uom}`} />
-                    </td>
-                    <td className="px-3 py-2">
-                      <button type="button" onClick={() => select(r.lot.id)}
-                        className="text-[12px] text-accent-ink underline decoration-dotted underline-offset-[3px] hover:no-underline">
-                        {r.movements.length} document{r.movements.length === 1 ? '' : 's'}
+
+            {shown.map((r) => {
+              const good = r.lot.usability === 'usable'
+              const mark = USABILITY_MARK[r.lot.usability] ?? USABILITY_MARK.usable
+              const open = openId === r.lot.id
+              const toggle = () => setOpenId(open ? null : r.lot.id)
+              return (
+                <tbody key={r.lot.id} className={`border-b border-line-soft ${
+                  open ? 'bg-surface-2/60' : good ? '' : 'bg-warn-soft/25'}`}>
+                  <tr onClick={toggle} className={`cursor-pointer transition-colors ${open ? '' : 'hover:bg-surface-2'}`}>
+                    <td className="py-1 pl-2 pr-1">
+                      <button type="button" aria-expanded={open}
+                        onClick={(e) => { e.stopPropagation(); toggle() }}
+                        title={`${open ? 'Hide' : 'Show'} what is behind ${r.lot.batchNo}`}
+                        className="press flex size-5 items-center justify-center rounded text-ink-3 hover:text-ink">
+                        <Icon name="chevron" className={`size-3.5 transition-transform duration-200 ${open ? 'rotate-90' : ''}`} />
+                        <span className="sr-only">{open ? 'Hide' : 'Show'} the detail for {r.lot.batchNo}</span>
                       </button>
                     </td>
-                    <td className="px-3 py-2">
+
+                    <td className="max-w-[24rem] py-1 pr-2">
+                      <span className="flex items-baseline gap-1.5">
+                        <span className="min-w-0 truncate" title={r.item.name}>{r.item.name}</span>
+                        <span className="mono shrink-0 text-[10.5px] text-ink-3">{r.item.code}</span>
+                      </span>
+                    </td>
+
+                    <td className="mono whitespace-nowrap py-1 pr-2 text-[11px] text-ink-2">{r.lot.batchNo}</td>
+
+                    <td className="whitespace-nowrap py-1 pr-2">
+                      <span className="inline-flex items-center gap-1.5" title={r.lot.usabilityReason ?? undefined}>
+                        <Icon name={mark.icon} className={`size-3.5 shrink-0 ${mark.cls}`} />
+                        <span className={good ? 'text-ink-3' : 'text-ink-2'}>{USABILITY_LABEL[r.lot.usability]}</span>
+                      </span>
+                    </td>
+
+                    <td className="num whitespace-nowrap py-1 pl-4 pr-2 text-right">
+                      <Num d={r.balance} format="raw" dp={3} suffix={` ${r.uom}`} size="sm" />
+                    </td>
+
+                    <td className="py-1 pr-2 text-center">
+                      <button type="button" onClick={(e) => { e.stopPropagation(); select(r.lot.id) }}
+                        aria-label={`${r.movements.length} documents behind ${r.lot.batchNo}`}
+                        title={`Every document behind this balance — ${r.movements.length} of them`}
+                        className="press inline-flex items-center gap-1 rounded text-[11.5px] text-accent-ink hover:underline">
+                        <Icon name="doc" className="size-3.5 shrink-0" />
+                        <span className="num">{r.movements.length}</span>
+                      </button>
+                    </td>
+
+                    <td className="whitespace-nowrap py-1 pr-2">
                       {r.stale ? (
-                        <StatusPill tone="warn" label={`Unconfirmed ${r.sinceConfirmed.value} days`}
-                          explain={`Class ${r.cls} wants a count every ${policy.countCadenceDays[r.cls]} days.`} />
+                        <span className="inline-flex items-center gap-1 text-[11.5px] text-warn"
+                          title={`Last confirmed ${shortDate(r.lastConfirmed.value)}. Class ${r.cls} wants a count every ${policy.countCadenceDays[r.cls]} days.`}>
+                          <Icon name="clock" className="size-3.5 shrink-0" />
+                          <span className="num">{r.sinceConfirmed.value}d</span>
+                          <span>unconfirmed</span>
+                        </span>
                       ) : (
                         <span className="text-[11.5px] text-ink-3">
-                          {shortDate(r.lastConfirmed.value)} · {r.sinceConfirmed.value}d
-                        </span>
-                      )}
-                    </td>
-                    <td className="num px-3 py-2 text-right">
-                      {good ? <span className="text-ink-3">—</span> : <Num d={r.value} format="money" />}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-right">
-                      <Button size="sm" onClick={() => startCount(r.lot.id)}>Count</Button>
-                      {!good && (
-                        <span className="ml-1.5 inline-block">
-                          <Button size="sm" variant="ghost" onClick={() => setWriting(r)}>Write off</Button>
+                          <span className="mono">{shortDate(r.lastConfirmed.value)}</span> · {r.sinceConfirmed.value}d
                         </span>
                       )}
                     </td>
                   </tr>
-                )
-              })}
-            </tbody>
+
+                  <tr hidden={!open}>
+                    <td colSpan={7} className="px-3 pb-2.5 pt-0.5">
+                      <p className="flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-ink-3">
+                        <span>
+                          Valued <Num d={r.value} format="money" size="sm" /> at last purchase rate, ex-freight
+                        </span>
+                        <span>
+                          Class {r.cls} · counted every {policy.countCadenceDays[r.cls]} days ·
+                          tolerance {policy.countTolerancePct[r.cls]}%
+                        </span>
+                        <span>Last confirmed <span className="mono">{shortDate(r.lastConfirmed.value)}</span></span>
+                        <span>{r.counts.length} count{r.counts.length === 1 ? '' : 's'} on file</span>
+                      </p>
+
+                      {r.lot.usabilityReason && (
+                        <p className={`mt-1.5 rounded-md border p-2 text-[12px] leading-relaxed text-ink-2 ${
+                          r.lot.usability === 'damaged' ? 'border-critical/30 bg-critical-soft' : 'border-warn/30 bg-warn-soft'}`}>
+                          <strong className="text-ink">{USABILITY_LABEL[r.lot.usability]}.</strong>{' '}
+                          {r.lot.usabilityReason}. It stays on the books at{' '}
+                          {money(r.value.value)} and out of cover until somebody decides what happens to it.
+                        </p>
+                      )}
+
+                      {r.stale && (
+                        <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-2">
+                          Nobody has physically confirmed this balance for{' '}
+                          <Num d={r.sinceConfirmed} format="days" dp={0} size="sm" suffix=" days" tone="warn" />,
+                          past the {policy.countCadenceDays[r.cls]}-day cadence for class {r.cls}. That does not
+                          make it wrong — it makes it unverified, which is a different thing.
+                        </p>
+                      )}
+
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Button size="sm" variant="primary" onClick={() => startCount(r.lot.id)}>Count</Button>
+                        <Button size="sm" onClick={() => select(r.lot.id)}>
+                          See the {r.movements.length} documents
+                        </Button>
+                        {!good && (
+                          <Button size="sm" variant="ghost" onClick={() => setWriting(r)}>Write off</Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              )
+            })}
           </table>
+
+          {shown.length === 0 && (
+            <p className="px-1 py-4 text-center text-[12.5px] text-ink-2">
+              No lot matches that. <button type="button" onClick={() => { setFilter('all'); setQuery('') }}
+                className="text-accent-ink underline underline-offset-2">Show every lot</button>
+            </p>
+          )}
         </div>
 
         {stale.length > 0 && (
           <Note foot label="Which balances are past their counting cadence">
-        <strong className="text-ink">
+            <strong className="text-ink">
               {stale.length === 1 ? 'One balance is' : `${stale.length} balances are`} past the counting
               cadence for their class
             </strong>{' '}
@@ -226,7 +382,7 @@ export function StockLedger() {
               hiding: the lots nobody counts are the lots nobody can use. They sit in a corner, never come
               up on a job, and so never get looked at.</>
             )}
-      </Note>
+          </Note>
         )}
       </Card>
 
