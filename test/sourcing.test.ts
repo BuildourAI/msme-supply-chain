@@ -204,12 +204,39 @@ describe('accepting a quote', () => {
     expect(acceptQuote(base(), 'QT-001').rfqs[0].state).toBe('awarded')
   })
 
+  it('orders what was asked for, not the supplier’s minimum', () => {
+    const ws = base()                       // the request asks for 500
+    expect(orderFromQuote(ws, ws.quotes[0], TODAY).qty).toBe(500)
+  })
+
+  it('takes the minimum when it is larger than what was asked', () => {
+    const ws = base()
+    ws.quotes = [quote({ moq: 900 })]
+    expect(orderFromQuote(ws, ws.quotes[0], TODAY).qty).toBe(900)
+  })
+
+  it('falls back to the minimum when no request is behind it', () => {
+    const ws = base()
+    ws.quotes = [quote({ rfqId: undefined, moq: 200 })]
+    expect(orderFromQuote(ws, ws.quotes[0], TODAY).qty).toBe(200)
+  })
+
+  it('does not invent a quantity when there is nothing to take one from', () => {
+    // a quote with no request and no minimum used to draft an order for 0,
+    // which prices at nothing and reads as a bug
+    const ws = base()
+    ws.rfqs = []
+    ws.quotes = [quote({ rfqId: undefined, moq: 0 })]
+    const draft = orderFromQuote(ws, ws.quotes[0], TODAY)
+    expect(draft.qty).toBe(0)
+    expect(draft.unitPrice).toBe(780)
+  })
+
   it('fills an order with the quote’s own figures, as a draft', () => {
     const ws = base()
     const draft = orderFromQuote(ws, ws.quotes[0], TODAY)
     expect(draft.no).toBe('PO-1')
     expect(draft.unitPrice).toBe(780)
-    expect(draft.qty).toBe(200)
     expect(draft.expectedOn).toBe(addDays(TODAY, 10))
     // §11 — the system drafts, a person places it
     expect(draft.state).toBe('draft')

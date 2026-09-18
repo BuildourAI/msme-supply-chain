@@ -7,7 +7,6 @@ import { Icon, Logo, STAGE_ICON, type IconName } from '@/components/ui/icons'
 import { LockDialog, type Locked } from './LockDialog'
 import { Checklist } from '@/components/onboard/Checklist'
 import { DeskNav } from './DeskNav'
-import { stageOf } from '@/lib/workspace/reveal'
 import { useWorkspace } from '@/components/workspace/store'
 
 const PAINKILLERS = 'Painkillers solved'
@@ -55,7 +54,11 @@ const MenuRule = ({ label }: { label: string }) => (
 export function Sidebar({ drawer, onClose }: { drawer: boolean; onClose: () => void }) {
   const { mode } = useWorkspace()
   const pathname = usePathname()
-  const desk = mode === 'mine' && stageOf(pathname) !== null
+  // In the owner's own company the rail is always the desk's own rows. The
+  // forty-one-row map is the sample company's, and the one route that could
+  // otherwise reach it from outside a stage — /reports — belongs to the
+  // sample company too.
+  const desk = mode === 'mine'
   const [open, setOpen] = useState<string | null>(null)
   const [lock, setLock] = useState<Locked | null>(null)
 

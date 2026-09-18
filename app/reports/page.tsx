@@ -21,6 +21,7 @@ import {
   fgProduction, fgReturns, orderLines, rmas as dspRmas,
 } from '@/lib/seed/dispatch'
 import { lakh, money, num } from '@/lib/domain/format'
+import { StageGate } from '@/components/onboard/StageGate'
 
 const seed: SeedBundle = {
   today: S.TODAY_SOURCING, items: S.items, vendors: S.vendors, vendorItems: S.vendorItems,
@@ -331,7 +332,7 @@ const CHECKS: Check[] = [
     actual: `${lw.jobs.find((j) => j.job.jobNo === 'JOB-4482')!.status.value === 'at_risk' ? 'At risk' : '—'} · ${lw.jobs.find((j) => j.job.jobNo === 'JOB-4482')!.status.lateJw.join(', ')}` },
 ]
 
-export default function Page() {
+function PageBody() {
   const pass = CHECKS.filter(eq).length
   const groups = [...new Set(CHECKS.map((c) => c.group))]
 
@@ -414,5 +415,19 @@ export default function Page() {
         </ol>
       </Card>
     </>
+  )
+}
+
+/**
+ * The reconciliation report reads across all five stages at once and ties every
+ * figure to the clause it settles. It is the case for the sample company, so it
+ * stays with it until the other four stages are set up on the owner's own data.
+ */
+export default function Page() {
+  return (
+    <StageGate sample="a report across all five stages"
+      shows="every figure in the system traced back to what it was derived from">
+      <PageBody />
+    </StageGate>
   )
 }

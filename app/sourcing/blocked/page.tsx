@@ -511,5 +511,5 @@ function PageBody() {
 }
 
 export default function Page() {
-  return <StageGate><PageBody /></StageGate>
+  return <StageGate sample="the Sourcing dashboard"><PageBody /></StageGate>
 }

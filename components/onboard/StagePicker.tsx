@@ -82,7 +82,12 @@ export function StagePicker() {
         })}
       </ul>
 
-      {!p.complete && <Checklist />}
+      {/* It stays after the last step is ticked. The five wizards are the only
+          way to change a company name, a material's units, a supplier's rate,
+          a stock count or the order-sizing rules, so hiding the list once it is
+          complete would stand those editors down with it. Ticked, it reads as
+          confirmation; the tile above already says the stage is ready. */}
+      <Checklist />
     </div>
   )
 }

@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { STAGES } from '@/lib/seed/stages'
 import { Dialog } from '@/components/ui/Dialog'
 import { Icon } from '@/components/ui/icons'
+import { useWorkspace } from '@/components/workspace/store'
+import { sourcingNav } from '@/lib/workspace/reveal'
 
 interface Dest { label: string; href: string; group: string; note?: string }
 
@@ -27,19 +29,35 @@ const DESTS: Dest[] = [
  */
 export function CommandSearch() {
   const router = useRouter()
+  const { mode, workspace } = useWorkspace()
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const [i, setI] = useState(0)
   const listRef = useRef<HTMLDivElement>(null)
 
+  /**
+   * The jump list is whatever the rail beside it is. Offering an owner
+   * thirty-four screens that belong to the sample company would put back, one
+   * keystroke away, exactly the menu the desk exists to remove.
+   */
+  const dests = useMemo(() => {
+    if (mode !== 'mine' || !workspace) return DESTS
+    return [
+      { label: 'All stages', href: '/', group: 'Overview' },
+      ...sourcingNav(workspace)
+        .filter((r) => !r.later)
+        .map((r) => ({ label: r.label, href: r.href, group: 'Sourcing' })),
+    ]
+  }, [mode, workspace])
+
   const hits = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    if (!needle) return DESTS
-    return DESTS.filter((d) =>
+    if (!needle) return dests
+    return dests.filter((d) =>
       d.label.toLowerCase().includes(needle) ||
       d.group.toLowerCase().includes(needle) ||
       (d.note ?? '').toLowerCase().includes(needle))
-  }, [q])
+  }, [q, dests])
 
   useEffect(() => { setI(0) }, [q])
 

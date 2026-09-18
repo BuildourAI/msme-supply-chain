@@ -191,11 +191,16 @@ export function syncRfqStates(ws: Workspace): Workspace {
  * the order. Accepting a price is not the same act as committing the money.
  */
 export function orderFromQuote(ws: Workspace, quote: Quote, today: string): Omit<PurchaseOrder, 'id'> {
+  // What you asked for, if you asked. A quote's minimum order is the floor a
+  // supplier will sell at, not a quantity anybody wanted, and most quotes carry
+  // no minimum at all — taking it blindly drafts an order for nothing.
+  const asked = quote.rfqId ? ws.rfqs.find((r) => r.id === quote.rfqId)?.qty : undefined
+  const qty = asked && asked > 0 ? Math.max(asked, quote.moq) : quote.moq
   return {
     no: nextNo('PO', ws.orders),
     vendorId: quote.vendorId,
     itemId: quote.itemId,
-    qty: Math.max(quote.moq, 0) || 0,
+    qty: qty > 0 ? qty : 0,
     unitPrice: quote.unitPrice,
     orderedOn: today,
     expectedOn: addDays(today, quote.leadDays || 0),

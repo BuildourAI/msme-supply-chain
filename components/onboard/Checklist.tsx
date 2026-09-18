@@ -67,7 +67,7 @@ export function Checklist({ compact = false }: { compact?: boolean }) {
           </h2>
           <p className="mt-0.5 text-[12px] leading-snug text-ink-2">
             {p.complete
-              ? 'Every screen below is running on your own numbers.'
+              ? 'Every screen in the desk is running on your own numbers. Change any of it here.'
               : 'Five short steps. Each one turns a screen on.'}
           </p>
         </div>
