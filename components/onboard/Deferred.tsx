@@ -56,8 +56,9 @@ export function SampleOnly({ shows, becomes }: { shows: string; becomes: string 
         This screen shows {shows}
       </h2>
       <p className="mx-auto mt-2 max-w-[30rem] text-[12.5px] leading-relaxed text-ink-2">
-        It reads months of receipts, quotes and rejections — what a desk builds up by being used, not
-        something to ask you to type in. It comes back as {becomes} once yours has that behind it.
+        It reads months of what a business records as it runs — receipts, quotes, rejections, counts —
+        which a desk builds up by being used rather than by being typed in. It comes back as {becomes}
+        once yours has that behind it.
       </p>
       <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
         <button type="button" onClick={() => setMode('sample')}
