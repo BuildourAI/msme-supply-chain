@@ -1,6 +1,7 @@
 'use client'
 import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import type { Derived } from '@/lib/domain/types'
+import { useWorkspace } from '@/components/workspace/store'
 
 /** §7 audit_log / §11 — what happened, when, on what data, on whose authority. */
 export interface AuditEntry {
@@ -16,6 +17,11 @@ export interface AuditEntry {
   after?: string
 }
 
+/**
+ * The demo buyer, still the name on every sample-company action. A signed-in
+ * owner's own name replaces it — an audit trail whose every line reads
+ * "A. Nandy" would be the same unattributed record §11 exists to fix.
+ */
 export const ACTOR = 'A. Nandy · Buyer'
 
 interface AppCtx {
@@ -36,6 +42,7 @@ export const useApp = () => useContext(Ctx)
 let seq = 0
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const { session } = useWorkspace()
   const [audit, setAudit] = useState<AuditEntry[]>([])
   const [inspect, setInspect] = useState<Derived<unknown> | null>(null)
   const [toast, setToast] = useState<string | null>(null)
@@ -47,8 +54,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const at = new Date().toLocaleString('en-IN', {
       day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
     })
-    setAudit((prev) => [{ id: ++seq, at, actor: ACTOR, ...e }, ...prev])
-  }, [])
+    setAudit((prev) => [{ id: ++seq, at, actor: session.actor, ...e }, ...prev])
+  }, [session.actor])
 
   const undoLast = useCallback((entity: string, entityId: string) => {
     setAudit((prev) => {

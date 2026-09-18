@@ -80,7 +80,7 @@ export default function Page() {
           </span>}>
           <ul className="divide-y divide-line-soft">
             {verdicts.map((v) => {
-              const on = v.r.item.id === selected.item.id
+              const on = v.r.item.id === selected?.item.id
               return (
                 <li key={v.r.item.id}>
                   <button type="button" onClick={() => select(v.r.item.id)} aria-pressed={on}

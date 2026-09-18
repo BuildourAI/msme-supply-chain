@@ -17,6 +17,7 @@ import { daysBetween } from '@/lib/domain/calc'
 import { longDate, money, STATUS_LABEL, STATUS_TONE } from '@/lib/domain/format'
 import type { Derived } from '@/lib/domain/types'
 import { useDesk } from '@/components/desk/store'
+import { useWorkspace } from '@/components/workspace/store'
 import { useInventory } from '@/components/inventory/store'
 import { useInbound } from '@/components/inbound/store'
 import { useDispatch } from '@/components/dispatch/store'
@@ -30,8 +31,6 @@ const seed: SeedBundle = {
   today: S.TODAY_SOURCING, items: S.items, vendors: S.vendors, vendorItems: S.vendorItems,
   stockLots: S.stockLots, poLines: S.poLines, receipts: S.receipts,
 }
-const rows = buildRows(seed, DEFAULT_POLICY)
-const kpis = deskKpis(rows)
 const lw = buildLineWatch()
 
 const blockedTotal = blockedStock.reduce((a, b) => a + b.value, 0)
@@ -59,8 +58,12 @@ export default function Page() {
      get their footnotes back. The default is the quick view, because that is
      what a dashboard is for — the reading is a second visit. */
   const [notes, setNotes] = useState(false)
+  // Sourcing figures come from the desk store, which reads whichever company is
+  // open. They used to be computed once at module scope off the seed, which was
+  // fine while there was only ever one company.
+  const { intakeCounts: ic, kpis, kpis: deskKpi, state: deskState, rows } = useDesk()
+  const today = useWorkspace().today
   const decide = rows.filter(needsDecision)
-  const { intakeCounts: ic, kpis: deskKpi, state: deskState } = useDesk()
   const { lossRows, stockRows, offcutRows, netLoss, byCause } = useInventory()
   const { grns, challanRows } = useInbound()
   // Stage 5. Five of the sixteen figures below were assumptions until this
@@ -86,7 +89,7 @@ export default function Page() {
     X.supplierOtif(grns),
     X.supplierDefectRate(grns),
     X.avgLeadTime(rows),
-    X.poBacklog(rows, S.poLines, seed.today),
+    X.poBacklog(rows, S.poLines, today),
   ]
   const dioKpi = X.daysInventoryOutstanding(rows)
   const warehouse = [
@@ -124,7 +127,7 @@ export default function Page() {
      computation of the same thing, which is how a chart and its headline drift
      apart. Freight per unit shipped is deliberately left unillustrated. */
   const charts = execCharts({
-    grns, rows, poLines: S.poLines, today: seed.today,
+    grns, rows, poLines: S.poLines, today,
     jobs: lw.jobs.map((j) => ({ jobNo: j.job.jobNo, product: j.job.product, status: j.status.value })),
     blocking: blockingMaterials,
     byCause,

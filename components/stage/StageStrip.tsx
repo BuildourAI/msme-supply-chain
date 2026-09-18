@@ -27,7 +27,6 @@ const seed: SeedBundle = {
   today: S.TODAY_SOURCING, items: S.items, vendors: S.vendors, vendorItems: S.vendorItems,
   stockLots: S.stockLots, poLines: S.poLines, receipts: S.receipts,
 }
-const staticRows = buildRows(seed, DEFAULT_POLICY)
 const lw = buildLineWatch()
 
 const D = (value: number, label: string, formula: string,
@@ -35,7 +34,7 @@ const D = (value: number, label: string, formula: string,
   ({ value, label, formula, inputs, unit, note })
 
 export function StageStrip({ stage }: { stage: StageId }) {
-  const { kpis, state } = useDesk()
+  const { kpis, state, rows: staticRows } = useDesk()
   const { grns, challanRows } = useInbound()
   const inv = useInventory()
 

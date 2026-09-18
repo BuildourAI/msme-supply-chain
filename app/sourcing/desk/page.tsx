@@ -126,10 +126,12 @@ function DeskTab() {
         <div key={state.view} className="anim-fade-in">
           {state.view === 'summary' ? <LineCards /> : <DetailTable />}
         </div>
-        <Note foot label={`What the two panels below are showing — ${selected.item.code}`}>
-          Click any figure to see the formula that produced it. Selecting a card drives the two panels
-          below — currently <span className="mono text-ink-2">{selected.item.code}</span>.
-        </Note>
+        {selected && (
+          <Note foot label={`What the two panels below are showing — ${selected.item.code}`}>
+            Click any figure to see the formula that produced it. Selecting a card drives the two panels
+            below — currently <span className="mono text-ink-2">{selected.item.code}</span>.
+          </Note>
+        )}
       </Card>
 
       <div className="grid items-start gap-3 lg:grid-cols-2">

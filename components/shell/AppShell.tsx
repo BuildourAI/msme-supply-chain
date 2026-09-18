@@ -1,6 +1,8 @@
 'use client'
 import { useState } from 'react'
-import { ACTOR, AppProvider, useApp } from '@/state/app-store'
+import { AppProvider, useApp } from '@/state/app-store'
+import { WorkspaceProvider, useWorkspace, useWorkspaceKey } from '@/components/workspace/store'
+import { ROLE_LABEL } from '@/lib/workspace/types'
 import { Inspector } from '@/components/ui/Inspector'
 import { Sheet } from '@/components/ui/Sheet'
 import { Sidebar } from './Sidebar'
@@ -67,7 +69,10 @@ function Toast() {
 
 function TopBar({ onMenu, onActivity }: { onMenu: () => void; onActivity: () => void }) {
   const { audit } = useApp()
-  const [who, role] = ACTOR.split(' · ')
+  const { session } = useWorkspace()
+  const [who, role] = session.actor.includes(' · ')
+    ? session.actor.split(' · ')
+    : [session.actor, ROLE_LABEL[session.role]]
   const initials = who.split(/[\s.]+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase()
   return (
     <header className="sticky top-0 z-20 flex items-center gap-2 border-b border-line bg-surface px-3 py-2">
@@ -138,21 +143,38 @@ function Chrome({ children }: { children: React.ReactNode }) {
   )
 }
 
+/**
+ * The stores are keyed by which company is open. Switching between the sample
+ * and the owner's own data remounts all four, so a supplier chosen against one
+ * company's line cannot survive into the other's — cheaper and far safer than
+ * teaching five reducers to reset themselves.
+ */
+function Stores({ children }: { children: React.ReactNode }) {
+  const key = useWorkspaceKey()
+  return (
+    <DeskProvider key={key}>
+      <InboundProvider>
+        <InventoryProvider>
+          <DispatchProvider>
+            <Chrome>{children}</Chrome>
+          </DispatchProvider>
+        </InventoryProvider>
+      </InboundProvider>
+    </DeskProvider>
+  )
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   // Every store lives at the shell so a decision, a supplier choice, a confirmed
   // alias, a closed GRN or a posted cycle count survives moving between pages —
   // "from then on" has to mean from then on, not until the next click on the nav.
+  // The workspace sits outside them all, because which company is open decides
+  // what they read and whose name the audit trail records.
   return (
-    <AppProvider>
-      <DeskProvider>
-        <InboundProvider>
-          <InventoryProvider>
-            <DispatchProvider>
-              <Chrome>{children}</Chrome>
-            </DispatchProvider>
-          </InventoryProvider>
-        </InboundProvider>
-      </DeskProvider>
-    </AppProvider>
+    <WorkspaceProvider>
+      <AppProvider>
+        <Stores>{children}</Stores>
+      </AppProvider>
+    </WorkspaceProvider>
   )
 }

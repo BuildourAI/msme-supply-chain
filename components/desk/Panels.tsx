@@ -30,6 +30,7 @@ export function LandedCostCompare({ numbers = 'shown' }: {
   const { selected: r } = useDesk()
   const [mode, setMode] = useState<'full' | 'extras'>('full')
   const [showNums, setShowNums] = useState(false)
+  if (!r) return null
 
   const rows: StackRow[] = r.quotes.map((q) => {
     const vi = q.vendorItem
@@ -118,6 +119,7 @@ export function LandedCostCompare({ numbers = 'shown' }: {
 
 export function GuardrailPanel() {
   const { selected: r, state } = useDesk()
+  if (!r) return null
   const ceiling = state.policy.coverageCeiling[r.item.itemClass]
   const cover = r.coverageAfterMonths.value
   const over = r.held.value

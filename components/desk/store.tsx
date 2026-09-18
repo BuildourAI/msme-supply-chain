@@ -5,6 +5,7 @@ import { DEFAULT_POLICY, type Policy } from '@/lib/domain/policy'
 import * as S from '@/lib/seed/sourcing'
 import { reviewQueue, seededAliases, supplierDocuments } from '@/lib/seed/intake'
 import { useApp } from '@/state/app-store'
+import { useWorkspace } from '@/components/workspace/store'
 import { money } from '@/lib/domain/format'
 import * as C from '@/lib/domain/calc'
 import type { BuyerStatus, Decision } from '@/lib/domain/types'
@@ -134,7 +135,12 @@ interface Ctx {
   rows: DerivedRow[]
   intakeCounts: IntakeCounts
   visible: DerivedRow[]
-  selected: DerivedRow
+  /**
+   * The line the two detail panels are showing. Undefined when the company has
+   * no priced material yet — a real state on the first day, not an error, so
+   * the type says so and every reader is made to handle it.
+   */
+  selected: DerivedRow | undefined
   kpis: ReturnType<typeof deskKpis>
   select: (id: string) => void
   chooseVendor: (row: DerivedRow, vendorId: string) => void
@@ -156,7 +162,14 @@ const DeskCtx = createContext<Ctx>(null!)
 export const useDesk = () => useContext(DeskCtx)
 
 export function DeskProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initial)
+  const { bundle, mode } = useWorkspace()
+  // The owner's own company opens on whatever material it has; the sample opens
+  // on the line §9.1 is written around. `initial` is per-company because this
+  // provider is remounted on a key when the company changes.
+  const [state, dispatch] = useReducer(reducer, { initial, bundle }, ({ initial: base, bundle: b }) => ({
+    ...base,
+    selectedId: b.items.some((i) => i.id === base.selectedId) ? base.selectedId : (b.items[0]?.id ?? ''),
+  }))
   const { log, say } = useApp()
 
   // Rows are derived, never stored. Changing a vendor or a policy knob recomputes
@@ -164,22 +177,26 @@ export function DeskProvider({ children }: { children: React.ReactNode }) {
   // A decided line is the exception by design (§7): it keeps the figures it was
   // decided on, whatever the knobs do afterwards.
   const rows = useMemo(() => {
-    const live = buildRows(SEED, state.policy, state.overrides)
+    const live = buildRows(bundle, state.policy, state.overrides)
     return live.map((r) => {
       const d = state.decisions[r.item.id]
       return d ? { ...r, ...d.snapshot } : r
     })
-  }, [state.policy, state.overrides, state.decisions])
+  }, [bundle, state.policy, state.overrides, state.decisions])
 
   // §8.2 — counts come from document status, never by subtraction: a rejected
   // line is escalated to a person, it does not become "auto-filed".
   const intakeCounts = useMemo<IntakeCounts>(() => {
+    // The owner's company has no document inbox yet — their supplier rates are
+    // typed in directly. Counting the sample's documents here would put someone
+    // else's fourteen quotes on their dashboard.
+    if (mode === 'mine') return { total: 0, auto: 0, review: 0, escalated: 0 }
     const review = reviewQueue.filter((l) => state.intake[l.id] === 'pending').length
     const confirmed = reviewQueue.filter((l) => state.intake[l.id] === 'confirmed').length
     const escalated = reviewQueue.filter((l) => state.intake[l.id] === 'rejected').length
     const autoDocs = supplierDocuments.filter((d) => d.status === 'auto').length
     return { total: supplierDocuments.length, auto: autoDocs + confirmed, review, escalated }
-  }, [state.intake])
+  }, [mode, state.intake])
 
   // KPIs are computed over ALL rows, never the filtered view: filtering the table
   // must not change "4 lines need a decision" or the numbers stop meaning anything.
@@ -207,6 +224,8 @@ export function DeskProvider({ children }: { children: React.ReactNode }) {
     return out
   }, [rows, state.query, state.statusFilter, state.sort])
 
+  // Undefined when the company has no priced material yet. Every screen that
+  // reads it either guards or is behind an empty state that never renders it.
   const selected = useMemo(
     () => rows.find((r) => r.item.id === state.selectedId) ?? rows[0],
     [rows, state.selectedId],
