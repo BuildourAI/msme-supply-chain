@@ -41,6 +41,72 @@ export interface Categories {
   units: Uom[]
 }
 
+/* ------------------------------------------------------ the sourcing desk -- */
+
+/**
+ * What an owner actually does, as three records.
+ *
+ * The build already holds masters — materials, suppliers, the rates they quote.
+ * These are the transactions on top of them: what you asked for, what came
+ * back, and what you ordered. They live here rather than in
+ * `lib/domain/types.ts` because that file's shapes are pinned by the
+ * reconciliation suites, and nothing here has any business changing them.
+ *
+ * They are joined but not enforced into a funnel. Every small firm in the
+ * source set quotes on WhatsApp, so an owner who never raises a request must
+ * still be able to record a quote, and somebody who already knows the price
+ * must still be able to raise an order. A system that refuses the way people
+ * actually work is a system they keep a parallel notebook for.
+ */
+export type RfqState = 'draft' | 'sent' | 'quoted' | 'awarded' | 'closed'
+export type QuoteState = 'received' | 'accepted' | 'rejected'
+export type OrderState = 'draft' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled'
+
+export interface Rfq {
+  id: string
+  /** what it is called on the screen and on the phone — RFQ-1, RFQ-2 */
+  no: string
+  itemId: string
+  qty: number
+  /** the date the material is actually wanted by */
+  neededBy: string
+  /** who was asked. Empty is allowed: a draft is a note to yourself. */
+  vendorIds: string[]
+  state: RfqState
+  raisedOn: string
+  note?: string
+}
+
+export interface Quote {
+  id: string
+  /** absent when the price arrived without a request behind it */
+  rfqId?: string
+  vendorId: string
+  itemId: string
+  unitPrice: number
+  /** smallest quantity they will sell at this price */
+  moq: number
+  leadDays: number
+  /** their own reference, if they gave one */
+  ref?: string
+  state: QuoteState
+  on: string
+}
+
+export interface PurchaseOrder {
+  id: string
+  no: string
+  vendorId: string
+  itemId: string
+  qty: number
+  unitPrice: number
+  orderedOn: string
+  expectedOn: string
+  state: OrderState
+  /** the quote it came from, when it came from one */
+  quoteId?: string
+}
+
 export interface Workspace {
   id: string
   createdAt: string
@@ -58,6 +124,10 @@ export interface Workspace {
   /** this company's vocabulary, keyed by vendor id and item id */
   vendorType: Record<string, string>
   itemGroup: Record<string, string>
+  /** what you asked for, what came back, what you ordered */
+  rfqs: Rfq[]
+  quotes: Quote[]
+  orders: PurchaseOrder[]
   /** a wizard closed halfway reopens where it was */
   drafts: Record<string, unknown>
 }

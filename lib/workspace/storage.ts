@@ -69,9 +69,40 @@ export function parseStored(raw: string | null): Stored | null {
     if (typeof ws.id !== 'string' || !ws.company || typeof ws.company.name !== 'string') return null
     if (!Array.isArray(ws.items) || !Array.isArray(ws.vendors)) return null
     if (!v.session || typeof v.session.actor !== 'string') return null
-    return v as Stored
+    return { ...v, workspace: migrate(ws) } as Stored
   } catch {
     return null
+  }
+}
+
+/**
+ * A workspace saved before a field existed is not a broken workspace.
+ *
+ * Somebody who set their company up last week and comes back after an update
+ * must not lose it because the build has since grown requests, quotes and
+ * orders. Every list the app reads is filled in here if it is missing, so the
+ * screens can index straight into them without guarding each one.
+ */
+function migrate(ws: Workspace): Workspace {
+  const list = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
+  return {
+    ...ws,
+    people: list(ws.people),
+    items: list(ws.items),
+    vendors: list(ws.vendors),
+    vendorItems: list(ws.vendorItems),
+    stockLots: list(ws.stockLots),
+    rfqs: list(ws.rfqs),
+    quotes: list(ws.quotes),
+    orders: list(ws.orders),
+    vendorType: ws.vendorType ?? {},
+    itemGroup: ws.itemGroup ?? {},
+    drafts: ws.drafts ?? {},
+    categories: {
+      supplierType: list(ws.categories?.supplierType),
+      materialGroup: list(ws.categories?.materialGroup),
+      units: list(ws.categories?.units),
+    },
   }
 }
 

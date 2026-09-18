@@ -1,0 +1,339 @@
+/**
+ * The sourcing desk's own logic: numbering, joins, and what a delete takes
+ * with it.
+ *
+ * Everything a screen needs is computed here so that the screens stay what they
+ * look like in the reference portal — a title, a table, and nothing else. No
+ * component does a join, sums a total or decides a state.
+ *
+ * Deliberately not a workflow engine. The three records reference each other
+ * but nothing forces the order: a quote can arrive with no request behind it, an
+ * order can be raised with no quote. Small firms quote on WhatsApp and settle
+ * prices on the phone, and a system that refuses that is one they keep a
+ * parallel notebook for. What the joins do is notice the connection when it is
+ * there — a quote recorded against a request moves the request on by itself.
+ */
+import type { Item, Vendor } from '@/lib/domain/types'
+import type { PurchaseOrder, Quote, Rfq, RfqState, Workspace } from './types'
+
+/* ------------------------------------------------------------- numbering -- */
+
+/**
+ * The next document number. Counts up from the highest ever issued, never from
+ * how many survive — a deleted RFQ-3 must not be handed out again, or last
+ * month's quotes would attach themselves to a different request.
+ */
+export function nextNo(prefix: string, existing: { no: string }[]): string {
+  const re = new RegExp(`^${prefix}-(\\d+)$`)
+  const highest = existing.reduce((max, e) => {
+    const m = re.exec(e.no)
+    return m ? Math.max(max, Number(m[1])) : max
+  }, 0)
+  return `${prefix}-${highest + 1}`
+}
+
+/* ----------------------------------------------------------------- joins -- */
+
+const byId = <T extends { id: string }>(xs: T[], id: string) => xs.find((x) => x.id === id)
+
+export const itemOf = (ws: Workspace, id: string): Item | undefined => byId(ws.items, id)
+export const vendorOf = (ws: Workspace, id: string): Vendor | undefined => byId(ws.vendors, id)
+
+export interface SupplierRow {
+  vendor: Vendor
+  type: string
+  /** how many materials they quote a standing rate for */
+  supplies: number
+  /** the quickest they say they can deliver, across those materials */
+  leadDays: number | null
+  openOrders: number
+}
+
+export function supplierRows(ws: Workspace): SupplierRow[] {
+  return ws.vendors.map((vendor) => {
+    const mine = ws.vendorItems.filter((vi) => vi.vendorId === vendor.id)
+    const leads = mine.map((vi) => vi.quotedLeadTimeDays).filter((n) => n > 0)
+    return {
+      vendor,
+      type: ws.vendorType[vendor.id] ?? '',
+      supplies: mine.length,
+      leadDays: leads.length ? Math.min(...leads) : null,
+      openOrders: ws.orders.filter(
+        (o) => o.vendorId === vendor.id && o.state !== 'delivered' && o.state !== 'cancelled',
+      ).length,
+    }
+  })
+}
+
+export interface MaterialRow {
+  item: Item
+  group: string
+  /** what is on the shelf and issuable */
+  onHand: number
+  /** how many suppliers quote it — zero is the state worth seeing */
+  suppliers: number
+}
+
+export function materialRows(ws: Workspace): MaterialRow[] {
+  return ws.items.map((item) => ({
+    item,
+    group: ws.itemGroup[item.id] ?? '',
+    onHand: ws.stockLots
+      .filter((l) => l.itemId === item.id && l.usability === 'usable')
+      .reduce((a, l) => a + l.qty, 0),
+    suppliers: ws.vendorItems.filter((vi) => vi.itemId === item.id).length,
+  }))
+}
+
+export interface RfqRow {
+  rfq: Rfq
+  item: Item | undefined
+  vendors: Vendor[]
+  quotes: Quote[]
+}
+
+export function rfqRows(ws: Workspace): RfqRow[] {
+  return [...ws.rfqs]
+    .sort((a, b) => b.raisedOn.localeCompare(a.raisedOn) || b.no.localeCompare(a.no))
+    .map((rfq) => ({
+      rfq,
+      item: itemOf(ws, rfq.itemId),
+      vendors: rfq.vendorIds.map((id) => vendorOf(ws, id)).filter(Boolean) as Vendor[],
+      quotes: ws.quotes.filter((q) => q.rfqId === rfq.id),
+    }))
+}
+
+export interface QuoteRow {
+  quote: Quote
+  vendor: Vendor | undefined
+  item: Item | undefined
+  rfq: Rfq | undefined
+}
+
+export function quoteRows(ws: Workspace): QuoteRow[] {
+  return [...ws.quotes]
+    .sort((a, b) => b.on.localeCompare(a.on))
+    .map((quote) => ({
+      quote,
+      vendor: vendorOf(ws, quote.vendorId),
+      item: itemOf(ws, quote.itemId),
+      rfq: quote.rfqId ? byId(ws.rfqs, quote.rfqId) : undefined,
+    }))
+}
+
+/**
+ * Quotes grouped by the request they answer, which is how the reference shows
+ * them — the comparison is the point, and a flat list of prices against
+ * different materials compares nothing. Quotes with no request behind them are
+ * a group of their own rather than hidden.
+ */
+export interface QuoteGroup {
+  rfq: Rfq | null
+  rows: QuoteRow[]
+}
+
+export function quoteGroups(ws: Workspace): QuoteGroup[] {
+  const rows = quoteRows(ws)
+  const groups: QuoteGroup[] = ws.rfqs
+    .map((rfq) => ({ rfq, rows: rows.filter((r) => r.quote.rfqId === rfq.id) }))
+    .filter((g) => g.rows.length > 0)
+  const loose = rows.filter((r) => !r.quote.rfqId)
+  return loose.length ? [...groups, { rfq: null, rows: loose }] : groups
+}
+
+export interface OrderRow {
+  order: PurchaseOrder
+  vendor: Vendor | undefined
+  item: Item | undefined
+  total: number
+}
+
+export function orderRows(ws: Workspace): OrderRow[] {
+  return [...ws.orders]
+    .sort((a, b) => b.orderedOn.localeCompare(a.orderedOn) || b.no.localeCompare(a.no))
+    .map((order) => ({
+      order,
+      vendor: vendorOf(ws, order.vendorId),
+      item: itemOf(ws, order.itemId),
+      total: Math.round(order.qty * order.unitPrice * 100) / 100,
+    }))
+}
+
+/* ----------------------------------------------------------- transitions -- */
+
+/**
+ * Where a request has got to, given the quotes against it.
+ *
+ * Only the states the data can prove are moved. Draft and closed are decisions
+ * a person makes, so they are left alone: a request somebody has deliberately
+ * closed does not reopen itself because a late quote arrived.
+ */
+export function rfqStateFrom(rfq: Rfq, quotes: Quote[]): RfqState {
+  if (rfq.state === 'draft' || rfq.state === 'closed') return rfq.state
+  const mine = quotes.filter((q) => q.rfqId === rfq.id)
+  if (mine.some((q) => q.state === 'accepted')) return 'awarded'
+  if (mine.length > 0) return 'quoted'
+  return 'sent'
+}
+
+/** Re-reads every request against the quotes, after any quote changes. */
+export function syncRfqStates(ws: Workspace): Workspace {
+  const rfqs = ws.rfqs.map((r) => {
+    const state = rfqStateFrom(r, ws.quotes)
+    return state === r.state ? r : { ...r, state }
+  })
+  return rfqs.every((r, i) => r === ws.rfqs[i]) ? ws : { ...ws, rfqs }
+}
+
+/**
+ * An order prefilled from a quote. It is offered, never posted: §11 has said
+ * from the start that the system suggests and drafts, and that a person places
+ * the order. Accepting a price is not the same act as committing the money.
+ */
+export function orderFromQuote(ws: Workspace, quote: Quote, today: string): Omit<PurchaseOrder, 'id'> {
+  return {
+    no: nextNo('PO', ws.orders),
+    vendorId: quote.vendorId,
+    itemId: quote.itemId,
+    qty: Math.max(quote.moq, 0) || 0,
+    unitPrice: quote.unitPrice,
+    orderedOn: today,
+    expectedOn: addDays(today, quote.leadDays || 0),
+    state: 'draft',
+    quoteId: quote.id,
+  }
+}
+
+export function addDays(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+/* --------------------------------------------------------------- deletes -- */
+
+/**
+ * What else goes when this goes.
+ *
+ * A delete that silently takes six other records with it is how a person loses
+ * an afternoon's typing. The screen asks once, and it can only ask usefully if
+ * it can say what is attached.
+ */
+export interface DeleteImpact {
+  /** one line per kind of thing that would go, already worded for the dialog */
+  losses: string[]
+  /** nothing attached — the dialog can be a single confirm */
+  clean: boolean
+}
+
+const count = (n: number, one: string, many = `${one}s`) =>
+  `${n} ${n === 1 ? one : many}`
+
+export function vendorImpact(ws: Workspace, vendorId: string): DeleteImpact {
+  const rates = ws.vendorItems.filter((vi) => vi.vendorId === vendorId).length
+  const quotes = ws.quotes.filter((q) => q.vendorId === vendorId).length
+  const orders = ws.orders.filter((o) => o.vendorId === vendorId).length
+  const asked = ws.rfqs.filter((r) => r.vendorIds.includes(vendorId)).length
+  const losses = [
+    rates && `${count(rates, 'rate')} they quoted`,
+    quotes && count(quotes, 'quote'),
+    orders && count(orders, 'purchase order'),
+    asked && `they are on ${count(asked, 'request')}`,
+  ].filter(Boolean) as string[]
+  return { losses, clean: losses.length === 0 }
+}
+
+export function itemImpact(ws: Workspace, itemId: string): DeleteImpact {
+  const rates = ws.vendorItems.filter((vi) => vi.itemId === itemId).length
+  const lots = ws.stockLots.filter((l) => l.itemId === itemId).length
+  const rfqs = ws.rfqs.filter((r) => r.itemId === itemId).length
+  const quotes = ws.quotes.filter((q) => q.itemId === itemId).length
+  const orders = ws.orders.filter((o) => o.itemId === itemId).length
+  const losses = [
+    rates && `${count(rates, 'supplier rate')}`,
+    lots && `${count(lots, 'stock count')}`,
+    rfqs && count(rfqs, 'request'),
+    quotes && count(quotes, 'quote'),
+    orders && count(orders, 'purchase order'),
+  ].filter(Boolean) as string[]
+  return { losses, clean: losses.length === 0 }
+}
+
+export function rfqImpact(ws: Workspace, rfqId: string): DeleteImpact {
+  const quotes = ws.quotes.filter((q) => q.rfqId === rfqId).length
+  // A quote is evidence of a price somebody gave: it outlives the request and
+  // simply stops pointing at one.
+  const losses = quotes
+    ? [`${count(quotes, 'quote')} against it stay, no longer linked to a request`]
+    : []
+  return { losses, clean: losses.length === 0 }
+}
+
+/** Removing a supplier, and everything that only existed because of them. */
+export function removeVendor(ws: Workspace, vendorId: string): Workspace {
+  return syncRfqStates({
+    ...ws,
+    vendors: ws.vendors.filter((v) => v.id !== vendorId),
+    vendorItems: ws.vendorItems.filter((vi) => vi.vendorId !== vendorId),
+    quotes: ws.quotes.filter((q) => q.vendorId !== vendorId),
+    orders: ws.orders.filter((o) => o.vendorId !== vendorId),
+    rfqs: ws.rfqs.map((r) => ({ ...r, vendorIds: r.vendorIds.filter((id) => id !== vendorId) })),
+    vendorType: Object.fromEntries(
+      Object.entries(ws.vendorType).filter(([id]) => id !== vendorId),
+    ),
+  })
+}
+
+export function removeItem(ws: Workspace, itemId: string): Workspace {
+  return syncRfqStates({
+    ...ws,
+    items: ws.items.filter((i) => i.id !== itemId),
+    vendorItems: ws.vendorItems.filter((vi) => vi.itemId !== itemId),
+    stockLots: ws.stockLots.filter((l) => l.itemId !== itemId),
+    rfqs: ws.rfqs.filter((r) => r.itemId !== itemId),
+    quotes: ws.quotes.filter((q) => q.itemId !== itemId),
+    orders: ws.orders.filter((o) => o.itemId !== itemId),
+    itemGroup: Object.fromEntries(
+      Object.entries(ws.itemGroup).filter(([id]) => id !== itemId),
+    ),
+  })
+}
+
+export function removeRfq(ws: Workspace, rfqId: string): Workspace {
+  return syncRfqStates({
+    ...ws,
+    rfqs: ws.rfqs.filter((r) => r.id !== rfqId),
+    quotes: ws.quotes.map((q) => (q.rfqId === rfqId ? { ...q, rfqId: undefined } : q)),
+  })
+}
+
+export function removeQuote(ws: Workspace, quoteId: string): Workspace {
+  return syncRfqStates({
+    ...ws,
+    quotes: ws.quotes.filter((q) => q.id !== quoteId),
+    orders: ws.orders.map((o) => (o.quoteId === quoteId ? { ...o, quoteId: undefined } : o)),
+  })
+}
+
+export function removeOrder(ws: Workspace, orderId: string): Workspace {
+  return { ...ws, orders: ws.orders.filter((o) => o.id !== orderId) }
+}
+
+/**
+ * Accepting one quote rejects the others on the same request. A request has one
+ * winner; leaving three marked accepted would make the screen a lie.
+ */
+export function acceptQuote(ws: Workspace, quoteId: string): Workspace {
+  const target = ws.quotes.find((q) => q.id === quoteId)
+  if (!target) return ws
+  return syncRfqStates({
+    ...ws,
+    quotes: ws.quotes.map((q) => {
+      if (q.id === quoteId) return { ...q, state: 'accepted' as const }
+      if (target.rfqId && q.rfqId === target.rfqId && q.state === 'accepted') {
+        return { ...q, state: 'rejected' as const }
+      }
+      return q
+    }),
+  })
+}
