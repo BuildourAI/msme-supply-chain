@@ -6,6 +6,9 @@ import { Icon } from '@/components/ui/icons'
 import { useWorkspace } from '@/components/workspace/store'
 import { issueId } from '@/lib/workspace/defaults'
 import { backfillRates, buildRate, buildVendor } from '@/lib/workspace/records'
+import { setValues } from '@/lib/workspace/fields'
+import { CustomFields } from '@/components/sheet/CustomFields'
+import type { Workspace } from '@/lib/workspace/types'
 import type { Vendor, VendorItem } from '@/lib/domain/types'
 
 /**
@@ -33,6 +36,9 @@ export function SupplierForm({ open, onClose, editing }: {
   const [name, setName] = useState('')
   const [type, setType] = useState('')
   const [terms, setTerms] = useState('30')
+  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
+  const [custom, setCustom] = useState<Record<string, string>>({})
   const [lines, setLines] = useState<Line[]>([])
   const [tried, setTried] = useState(false)
 
@@ -43,6 +49,9 @@ export function SupplierForm({ open, onClose, editing }: {
       setName(editing.name)
       setType(workspace.vendorType[editing.id] ?? workspace.categories.supplierType[0] ?? '')
       setTerms(String(editing.paymentTermsDays))
+      setPhone(workspace.vendorContact[editing.id]?.phone ?? '')
+      setEmail(workspace.vendorContact[editing.id]?.email ?? '')
+      setCustom({ ...(workspace.custom[editing.id] ?? {}) })
       setLines(workspace.vendorItems
         .filter((vi) => vi.vendorId === editing.id)
         .map((vi) => ({
@@ -55,6 +64,7 @@ export function SupplierForm({ open, onClose, editing }: {
       setName('')
       setType(workspace.categories.supplierType[0] ?? '')
       setTerms('30')
+      setPhone(''); setEmail(''); setCustom({})
       setLines([])
     }
   }, [open, editing]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -90,13 +100,18 @@ export function SupplierForm({ open, onClose, editing }: {
         { vendorId: id, itemId: l.itemId, rate: n(l.rate), leadDays: n(l.leadDays), preferred: l.preferred },
         w.vendorItems.find((vi) => vi.vendorId === id && vi.itemId === l.itemId),
       ))
-      return {
+      const contact = { phone: phone.trim() || undefined, email: email.trim() || undefined }
+      const withRecord: Workspace = {
         ...w,
         vendors: editing ? w.vendors.map((v) => (v.id === id ? vendor : v)) : [...w.vendors, vendor],
         items: backfillRates(w.items, rates),
         vendorItems: [...w.vendorItems.filter((vi) => vi.vendorId !== id), ...rates],
         vendorType: { ...w.vendorType, [id]: type },
+        vendorContact: contact.phone || contact.email
+          ? { ...w.vendorContact, [id]: contact }
+          : Object.fromEntries(Object.entries(w.vendorContact).filter(([k]) => k !== id)),
       }
+      return setValues(withRecord, id, custom)
     })
     onClose()
   }
@@ -123,11 +138,23 @@ export function SupplierForm({ open, onClose, editing }: {
           </Field>
         </div>
 
-        <Field label="Days they give you to pay" htmlFor="sf-terms"
-          error={tried && !termsOk ? 'Put in a number of days, or zero.' : null}>
-          <NumberInput id="sf-terms" value={terms} onChange={setTerms} unit="days" step="1"
-            invalid={tried && !termsOk} />
-        </Field>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field label="Days they give you to pay" htmlFor="sf-terms"
+            error={tried && !termsOk ? 'Put in a number of days, or zero.' : null}>
+            <NumberInput id="sf-terms" value={terms} onChange={setTerms} unit="days" step="1"
+              invalid={tried && !termsOk} />
+          </Field>
+          {/*
+            * Optional, and only needed when you want to hand them a request.
+            * Both stay on this machine — nothing here is sent anywhere.
+            */}
+          <Field label="Phone" hint="With the country code, for WhatsApp." htmlFor="sf-phone">
+            <TextInput id="sf-phone" value={phone} onChange={setPhone} placeholder="+91 98220 11234" />
+          </Field>
+          <Field label="Email" htmlFor="sf-email">
+            <TextInput id="sf-email" value={email} onChange={setEmail} placeholder="sales@shahmetals.in" />
+          </Field>
+        </div>
 
         <div>
           <p className="text-[13px] font-medium text-ink">What they supply</p>
@@ -179,6 +206,8 @@ export function SupplierForm({ open, onClose, editing }: {
             </button>
           )}
         </div>
+
+        <CustomFields entity="supplier" values={custom} onChange={setCustom} />
       </div>
 
       <footer className="flex items-center gap-2 border-t border-line-soft px-4 py-3">

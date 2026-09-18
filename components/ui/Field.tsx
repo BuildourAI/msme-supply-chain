@@ -44,7 +44,7 @@ export function Field({ label, hint, error, children, htmlFor }: {
   )
 }
 
-export function TextInput({ value, onChange, placeholder, id, invalid, autoFocus, onEnter }: {
+export function TextInput({ value, onChange, placeholder, id, invalid, autoFocus, onEnter, label }: {
   value: string
   onChange: (v: string) => void
   placeholder?: string
@@ -52,10 +52,12 @@ export function TextInput({ value, onChange, placeholder, id, invalid, autoFocus
   invalid?: boolean
   autoFocus?: boolean
   onEnter?: () => void
+  /** for an input with no visible <Field> label beside it */
+  label?: string
 }) {
   return (
     <input
-      id={id} value={value} placeholder={placeholder}
+      id={id} value={value} placeholder={placeholder} aria-label={label}
       data-autofocus={autoFocus ? '' : undefined}
       aria-invalid={invalid || undefined}
       onChange={(e) => onChange(e.target.value)}
@@ -184,5 +186,39 @@ export function Chips({ value, onChange, options }: {
         </button>
       ))}
     </div>
+  )
+}
+
+/**
+ * Several lines of text.
+ *
+ * Added because pasting a block of spreadsheet cells needs somewhere to paste
+ * it, and `TextInput` is an `<input>` — a multi-line paste into one collapses
+ * to a single line. Every other textarea in the build is hand-rolled with its
+ * own class string, which is the drift this file exists to stop.
+ */
+export function Textarea({
+  value, onChange, id, rows = 4, placeholder, invalid, autoFocus, mono,
+}: {
+  value: string
+  onChange: (v: string) => void
+  id?: string
+  rows?: number
+  placeholder?: string
+  invalid?: boolean
+  autoFocus?: boolean
+  /** for pasted data, where columns lining up is the whole point */
+  mono?: boolean
+}) {
+  return (
+    <textarea
+      id={id}
+      value={value}
+      rows={rows}
+      placeholder={placeholder}
+      data-autofocus={autoFocus ? '' : undefined}
+      onChange={(e) => onChange(e.target.value)}
+      className={`${BASE} ${invalid ? BAD : OK} resize-y leading-relaxed ${mono ? 'mono text-[12px]' : ''}`}
+    />
   )
 }

@@ -140,6 +140,29 @@ describe('arranging the columns', () => {
     expect(ws.views.supplier.labels.terms).toBeUndefined()
   })
 
+  it('keeps a column auto-hidden when something else pins the arrangement', () => {
+    /*
+     * Adding a custom field writes the order out. If it wrote only the order,
+     * the until-used rule would stop applying and Phone and Email would appear
+     * as two empty columns — which is exactly what an import used to do.
+     */
+    const { ws } = seeded()
+    expect(visibleColumns(ws, 'supplier').map((c) => c.key)).not.toContain('phone')
+    expect(visibleColumns(ws, 'supplier').map((c) => c.key)).not.toContain('email')
+
+    const moved = moveColumn(ws, 'supplier', 'type', -1)
+    expect(visibleColumns(moved, 'supplier').map((c) => c.key)).not.toContain('phone')
+  })
+
+  it('keeps a column shown once it is shown on purpose', () => {
+    let { ws } = seeded()
+    ws = setHidden(ws, 'supplier', 'phone', false)
+    expect(visibleColumns(ws, 'supplier').map((c) => c.key)).toContain('phone')
+    // and it stays shown even though no supplier has a number yet
+    ws = moveColumn(ws, 'supplier', 'type', -1)
+    expect(visibleColumns(ws, 'supplier').map((c) => c.key)).toContain('phone')
+  })
+
   it('keeps phone and email out of the way until one is filled in', () => {
     const ws = blank()
     expect(visibleColumns(ws, 'supplier').map((c) => c.key)).not.toContain('phone')

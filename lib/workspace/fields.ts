@@ -183,19 +183,17 @@ export function nextFieldId(ws: Workspace): string {
 export function addField(ws: Workspace, def: Omit<FieldDef, 'id'>): { ws: Workspace; id: string } {
   const id = nextFieldId(ws)
   const view = ws.views?.[def.entity] ?? EMPTY_VIEW
+  // a new column goes at the end of wherever things have been arranged, which
+  // means writing out the current arrangement the first time
+  const { order, hidden } = pin(ws, def.entity)
   return {
     id,
     ws: {
       ...ws,
       fields: [...(ws.fields ?? []), { ...def, id }],
-      // a new column goes at the end of wherever the person has arranged things,
-      // which means writing out the current order the first time
       views: {
         ...ws.views,
-        [def.entity]: {
-          ...view,
-          order: [...(view.order?.length ? view.order : resolveColumns(ws, def.entity).map((c) => c.key)), id],
-        },
+        [def.entity]: { ...view, order: [...order, id], hidden },
       },
     },
   }
@@ -246,30 +244,47 @@ function writeView(ws: Workspace, entity: SheetEntity, patch: Partial<TableView>
   return { ...ws, views: { ...ws.views, [entity]: { ...current, ...patch } } }
 }
 
+/**
+ * The arrangement as it stands, written down.
+ *
+ * Needed the moment anything is changed, because the until-used rule below only
+ * applies while a view is untouched — and "untouched" has to mean the whole
+ * view, not just the one column. Adding a custom field used to write out the
+ * order and nothing else, which quietly promoted Phone and Email from
+ * auto-hidden to visible-and-empty. Capturing what is hidden at the same moment
+ * keeps every column exactly where it was.
+ */
+function pin(ws: Workspace, entity: SheetEntity): Pick<TableView, 'order' | 'hidden'> {
+  const view = ws.views?.[entity] ?? EMPTY_VIEW
+  if (view.order?.length) return { order: view.order, hidden: view.hidden ?? [] }
+  const columns = resolveColumns(ws, entity)
+  return {
+    order: columns.map((c) => c.key),
+    hidden: columns.filter((c) => c.hidden).map((c) => c.key),
+  }
+}
+
 /** Moving a column writes the whole order out, since a partial one means nothing. */
 export function moveColumn(ws: Workspace, entity: SheetEntity, key: string, by: -1 | 1): Workspace {
-  const keys = resolveColumns(ws, entity).map((c) => c.key)
-  const at = keys.indexOf(key)
+  const { order, hidden } = pin(ws, entity)
+  const at = order.indexOf(key)
   const to = at + by
-  if (at < 0 || to < 0 || to >= keys.length) return ws
-  const next = [...keys]
+  if (at < 0 || to < 0 || to >= order.length) return ws
+  const next = [...order]
   ;[next[at], next[to]] = [next[to], next[at]]
-  return writeView(ws, entity, { order: next })
+  return writeView(ws, entity, { order: next, hidden })
 }
 
 export function setHidden(ws: Workspace, entity: SheetEntity, key: string, hidden: boolean): Workspace {
-  const view = ws.views?.[entity] ?? EMPTY_VIEW
-  const set = new Set(view.hidden ?? [])
+  const pinned = pin(ws, entity)
+  const set = new Set(pinned.hidden)
   if (hidden) set.add(key); else set.delete(key)
   /*
-   * Showing a column also pins the order. Without it, a column that was hidden
+   * Showing a column pins the whole arrangement. Without that, a column hidden
    * by the until-used rule would go back to hiding itself the moment the last
    * phone number was deleted, undoing a choice somebody made on purpose.
    */
-  return writeView(ws, entity, {
-    hidden: [...set],
-    order: view.order?.length ? view.order : resolveColumns(ws, entity).map((c) => c.key),
-  })
+  return writeView(ws, entity, { order: pinned.order, hidden: [...set] })
 }
 
 /** Renaming to the built-in name clears the override rather than pinning it. */

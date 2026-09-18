@@ -18,9 +18,17 @@ export type IconName =
   | 'activity' | 'alert' | 'clock' | 'cash' | 'calendar' | 'menu' | 'help'
   | 'close' | 'scale' | 'doc' | 'arrow-down' | 'info' | 'mail' | 'camera' | 'filter'
   | 'ruler' | 'eye' | 'hash' | 'pencil' | 'trash' | 'plus' | 'star'
+  | 'upload' | 'download' | 'columns' | 'share' | 'whatsapp' | 'undo'
 
 const PATHS: Record<IconName, React.ReactNode> = {
   home: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5.5 9.5V20h13V9.5" /></>,
+  upload: <><path d="M4 15.5V19a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-3.5" /><path d="M12 15.5V3.5M8 7.5l4-4 4 4" /></>,
+  download: <><path d="M4 15.5V19a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-3.5" /><path d="M12 3.5v12M8 11.5l4 4 4-4" /></>,
+  columns: <><rect x="3" y="4" width="18" height="16" rx="1.5" /><path d="M9.5 4v16M15 4v16" /></>,
+  share: <><circle cx="17.5" cy="5.5" r="2.5" /><circle cx="6.5" cy="12" r="2.5" /><circle cx="17.5" cy="18.5" r="2.5" /><path d="m8.8 10.8 6.4-3.6M8.8 13.2l6.4 3.6" /></>,
+  // the outline of the app everybody in this market actually sends documents on
+  whatsapp: <><path d="M3.5 20.5 5 16.3A8 8 0 1 1 8 19.2z" /><path d="M9 9.2c0 3 2.2 5.2 5 5.4.6 0 1.2-.5 1.3-1.1l-1.7-.9-.9.8a5 5 0 0 1-2-2l.8-.9-.9-1.7c-.6.1-1.1.7-1.1 1.3z" /></>,
+  undo: <><path d="M4 9.5h10.5a5 5 0 0 1 0 10H9" /><path d="m7.5 5.5-3.5 4 3.5 4" /></>,
   report: <><path d="M4 20V4h9l5 5v11z" /><path d="M13 4v5h5" /><path d="M8 13h6M8 16.5h4" /></>,
   cart: <><circle cx="9.5" cy="19.5" r="1.4" /><circle cx="17.5" cy="19.5" r="1.4" /><path d="M2.5 3.5h2.7l2.4 11.2h11l2-7.7H6.4" /></>,
   tray: <><path d="M3.5 13.5V19a1.5 1.5 0 0 0 1.5 1.5h14a1.5 1.5 0 0 0 1.5-1.5v-5.5" /><path d="M3.5 13.5h4.2l1.3 2.2h6l1.3-2.2h4.2" /><path d="M12 3v7.5M9 8l3 3 3-3" /></>,

@@ -199,6 +199,8 @@ export interface ImportUndo {
   cells: [string, string, string][]
   /** fields the mapping step created, which nothing else has used */
   fieldsCreated: string[]
+  /** opening stock lots written by an on-hand column */
+  lotsCreated?: string[]
   added: number
   changed: number
 }

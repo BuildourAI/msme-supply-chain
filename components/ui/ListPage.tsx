@@ -25,7 +25,7 @@ export interface FilterOption {
 }
 
 export function ListPage<T>({
-  title, noun, rows, search, filter, action, children, empty,
+  title, noun, rows, search, filter, action, tools, children, empty,
 }: {
   title: string
   /** singular; the count line reads "3 suppliers" */
@@ -39,6 +39,14 @@ export function ListPage<T>({
     of: (row: T) => string
   }
   action?: { label: string; onClick: () => void; icon?: IconName }
+  /**
+   * Quieter controls beside the main button — columns, import, export.
+   *
+   * In the header rather than in the search row, because that row is hidden
+   * when there is nothing to search yet, and an empty list is the moment
+   * Import is most worth reaching.
+   */
+  tools?: React.ReactNode
   /** given the rows that survive search and filter */
   children: (shown: T[]) => React.ReactNode
   /** what to say when there is nothing at all yet */
@@ -70,13 +78,16 @@ export function ListPage<T>({
               : `${total} ${total === 1 ? noun : `${noun}s`}`}
           </p>
         </div>
-        {action && (
-          <button type="button" onClick={action.onClick}
-            className="press ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-accent-ink bg-accent-ink px-3.5 py-2 text-[13px] font-semibold text-on-accent transition-colors hover:bg-accent">
-            <Icon name={action.icon ?? 'plus'} className="size-3.5" />
-            {action.label}
-          </button>
-        )}
+        <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
+          {tools}
+          {action && (
+            <button type="button" onClick={action.onClick}
+              className="press inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-accent-ink bg-accent-ink px-3.5 py-2 text-[13px] font-semibold text-on-accent transition-colors hover:bg-accent">
+              <Icon name={action.icon ?? 'plus'} className="size-3.5" />
+              {action.label}
+            </button>
+          )}
+        </div>
       </header>
 
       {total > 0 && (search || filter) && (
