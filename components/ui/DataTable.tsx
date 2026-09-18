@@ -1,5 +1,5 @@
 'use client'
-import { Icon } from './icons'
+import { Icon, type IconName } from './icons'
 
 /**
  * The table from the reference portal, and nothing more.
@@ -23,7 +23,9 @@ export interface Column<T> {
   cell: (row: T) => React.ReactNode
 }
 
-export function DataTable<T>({ columns, rows, keyOf, onEdit, onDelete, editLabel, deleteLabel }: {
+export function DataTable<T>({
+  columns, rows, keyOf, onEdit, onDelete, editLabel, deleteLabel, extra,
+}: {
   columns: Column<T>[]
   rows: T[]
   keyOf: (row: T) => string
@@ -32,8 +34,14 @@ export function DataTable<T>({ columns, rows, keyOf, onEdit, onDelete, editLabel
   /** "Edit R-150K" beats "Edit" repeated down the column for a screen reader */
   editLabel?: (row: T) => string
   deleteLabel?: (row: T) => string
+  /**
+   * One more thing a row can do, before the pencil and the bin. Deliberately
+   * one and not a list: a row with five icons at the end of it is a menu, and
+   * the whole point of this table is that it is not one.
+   */
+  extra?: { icon: IconName; label: (row: T) => string; onClick: (row: T) => void }
 }) {
-  const acts = Boolean(onEdit || onDelete)
+  const acts = Boolean(onEdit || onDelete || extra)
   return (
     <div className="scroll-x relative overflow-x-auto rounded-xl border border-line bg-surface">
       <table className="w-full border-collapse text-[13px]">
@@ -62,6 +70,14 @@ export function DataTable<T>({ columns, rows, keyOf, onEdit, onDelete, editLabel
               {acts && (
                 <td className="whitespace-nowrap px-4 py-3 text-right">
                   <span className="inline-flex items-center gap-1">
+                    {extra && (
+                      <button type="button" onClick={() => extra.onClick(row)}
+                        title={extra.label(row)}
+                        className="press rounded-md p-1.5 text-ink-3 transition-colors hover:bg-surface-3 hover:text-ink">
+                        <Icon name={extra.icon} className="size-4" />
+                        <span className="sr-only">{extra.label(row)}</span>
+                      </button>
+                    )}
                     {onEdit && (
                       <button type="button" onClick={() => onEdit(row)}
                         title={editLabel?.(row) ?? 'Edit'}

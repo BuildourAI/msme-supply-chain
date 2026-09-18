@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { ListPage } from '@/components/ui/ListPage'
 import { DataTable, StatePill, Tags, type PillTone } from '@/components/ui/DataTable'
 import { DeskTools } from '@/components/sheet/DeskTools'
+import { RfqDocument, SentSummary } from '@/components/sourcing/RfqDocument'
 import { buildColumns, type DrawnColumn } from '@/components/sheet/columns'
 import { RfqForm } from '@/components/sourcing/RfqForm'
 import { ConfirmDelete } from '@/components/sourcing/ConfirmDelete'
@@ -36,6 +37,7 @@ function Rfqs() {
   const [editing, setEditing] = useState<Rfq | null>(null)
   const [adding, setAdding] = useState(false)
   const [deleting, setDeleting] = useState<Rfq | null>(null)
+  const [papering, setPapering] = useState<Rfq | null>(null)
 
   if (!workspace) return null
   const ws = workspace
@@ -68,7 +70,10 @@ function Rfqs() {
     back: {
       align: 'right',
       cell: (r) => (r.quotes.length === 0
-        ? <span className="text-ink-4">none yet</span>
+        // nothing back is only worth remarking on once it has been asked for,
+        // which is what the send log knows and the request record does not
+        ? <SentSummary rfqId={r.rfq.id} backCount={0}
+            fallback={<span className="text-ink-4">none yet</span>} />
         : `${r.quotes.length} quote${r.quotes.length === 1 ? '' : 's'}`),
       text: (r) => String(r.quotes.length),
     },
@@ -109,6 +114,11 @@ function Rfqs() {
         {(shown) => (
           <DataTable
             columns={kit.columns} rows={shown} keyOf={(r) => r.rfq.id}
+            extra={{
+              icon: 'doc',
+              label: (r) => `Make the ${r.rfq.no} document`,
+              onClick: (r) => setPapering(r.rfq),
+            }}
             onEdit={(r) => setEditing(r.rfq)}
             onDelete={(r) => setDeleting(r.rfq)}
             editLabel={(r) => `Edit ${r.rfq.no}`}
@@ -116,6 +126,8 @@ function Rfqs() {
           />
         )}
       </ListPage>
+
+      <RfqDocument open={papering !== null} rfq={papering} onClose={() => setPapering(null)} />
 
       <RfqForm open={adding || editing !== null} editing={editing}
         onClose={() => { setAdding(false); setEditing(null) }} />

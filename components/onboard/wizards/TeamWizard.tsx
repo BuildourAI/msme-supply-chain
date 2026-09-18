@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { Wizard, type WizardStep } from '@/components/ui/Wizard'
-import { Chips, Field, TextInput } from '@/components/ui/Field'
+import { Chips, Field, Textarea, TextInput } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/icons'
 import { useWorkspace } from '@/components/workspace/store'
 import { ROLE_LABEL, type Person, type PersonRole } from '@/lib/workspace/types'
@@ -27,6 +27,10 @@ export function TeamWizard({ open, onClose }: { open: boolean; onClose: () => vo
   const [people, setPeople] = useState<Person[]>([])
   const [name, setName] = useState('')
   const [role, setRole] = useState<PersonRole>('stores')
+  const [address, setAddress] = useState('')
+  const [gstin, setGstin] = useState('')
+  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
 
   useEffect(() => {
     if (!open || !workspace) return
@@ -34,6 +38,10 @@ export function TeamWizard({ open, onClose }: { open: boolean; onClose: () => vo
     setMakes(workspace.company.makes)
     setPeople(workspace.people)
     setName(''); setRole('stores')
+    setAddress(workspace.company.address ?? '')
+    setGstin(workspace.company.gstin ?? '')
+    setPhone(workspace.company.phone ?? '')
+    setEmail(workspace.company.email ?? '')
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open || !workspace) return null
@@ -61,6 +69,35 @@ export function TeamWizard({ open, onClose }: { open: boolean; onClose: () => vo
             <TextInput id="tw-makes" value={makes} onChange={setMakes}
               placeholder="industrial heaters and control panels" />
           </Field>
+        </div>
+      ),
+    },
+    {
+      label: 'Letterhead',
+      title: 'What goes at the top of a document?',
+      why: 'All optional, and only used when you send a supplier a request for prices. A request with no address on it is not one anybody acts on.',
+      invalid: null,
+      body: (
+        <div className="space-y-3.5">
+          <Field label="Address" htmlFor="tw-address">
+            <Textarea id="tw-address" value={address} onChange={setAddress} rows={2}
+              placeholder="Plot 44, MIDC Bhosari, Pune 411026" />
+          </Field>
+          <div className="grid gap-3.5 sm:grid-cols-3">
+            <Field label="GSTIN" htmlFor="tw-gstin">
+              <TextInput id="tw-gstin" value={gstin} onChange={setGstin} placeholder="27AABCP1234M1Z5" />
+            </Field>
+            <Field label="Phone" htmlFor="tw-phone">
+              <TextInput id="tw-phone" value={phone} onChange={setPhone} placeholder="+91 98220 11234" />
+            </Field>
+            <Field label="Email" htmlFor="tw-email">
+              <TextInput id="tw-email" value={email} onChange={setEmail} placeholder="buying@yourfirm.in" />
+            </Field>
+          </div>
+          <p className="text-[11.5px] leading-snug text-ink-3">
+            These stay on this machine. Nothing here is sent anywhere — a request is a file you
+            hand to a supplier yourself.
+          </p>
         </div>
       ),
     },
@@ -110,7 +147,16 @@ export function TeamWizard({ open, onClose }: { open: boolean; onClose: () => vo
   const save = () => {
     update((w) => ({
       ...w,
-      company: { name: company.trim(), makes: makes.trim() },
+      company: {
+        name: company.trim(),
+        makes: makes.trim(),
+        // kept undefined rather than '' when blank, so the document knows the
+        // difference between "not filled in" and "an empty line to print"
+        address: address.trim() || undefined,
+        gstin: gstin.trim() || undefined,
+        phone: phone.trim() || undefined,
+        email: email.trim() || undefined,
+      },
       people,
     }))
     onClose()
