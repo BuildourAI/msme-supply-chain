@@ -175,7 +175,7 @@ export const STAGES: Stage[] = [
     ],
     modules: [
       { label: 'Line Watch', href: '/production/line-watch', note: 'the owner’s floor view — live' },
-      { label: 'Feeds map', href: '/production#feeds', note: 'live — if I run out of X I cannot make Y' },
+      { label: 'Feeds map', href: '/production/feeds', note: 'live — if I run out of X I cannot make Y' },
       { label: 'Painkillers solved', href: '/production/painkillers', note: 'the four pains — two removed, one part-answered, one not' },
       { label: 'Capacity & promise dates', lock: { phase: 'Track 0', needs: 'Machine and labour capacity per work centre.' } },
       { label: 'Full BOM explosion', lock: { phase: 'Excluded', needs: '', excludedReason: 'Surface the "feeds" link only for the material that is actually short (§12).' } },
