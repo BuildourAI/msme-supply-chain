@@ -4,7 +4,8 @@ import { Dialog } from '@/components/ui/Dialog'
 import { Field, NumberInput, Select, TextInput } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/icons'
 import { useWorkspace } from '@/components/workspace/store'
-import { nextId } from '@/lib/workspace/defaults'
+import { issueId } from '@/lib/workspace/defaults'
+import { backfillRates, buildRate, buildVendor } from '@/lib/workspace/records'
 import type { Vendor, VendorItem } from '@/lib/domain/types'
 
 /**
@@ -76,46 +77,23 @@ export function SupplierForm({ open, onClose, editing }: {
   const save = () => {
     setTried(true)
     if (!ok) return
-    const id = editing?.id ?? nextId('VN', ws.vendors)
-    const vendor: Vendor = { id, name: name.trim(), paymentTermsDays: termsN }
 
     const kept = lines.filter((l) => l.itemId
       && Number.isFinite(n(l.rate)) && n(l.rate) > 0
       && Number.isFinite(n(l.leadDays)) && n(l.leadDays) > 0)
 
-    const rates: VendorItem[] = kept.map((l) => {
-      const was = ws.vendorItems.find((vi) => vi.vendorId === id && vi.itemId === l.itemId)
-      return {
-        // anything already measured against this supplier is kept; only what
-        // the form asks about is overwritten
-        ...(was ?? {
-          freightPerUnit: 0, nonCreditableGst: 0, paymentTermCost: 0, rejectionAllowance: 0,
-          trailingRejectionRate: 0, onTimePct: 0, score: 0, quoteValidUntil: '',
-        }),
-        vendorId: id,
-        itemId: l.itemId,
-        rate: n(l.rate),
-        quotedLeadTimeDays: n(l.leadDays),
-        trailingLeadTimeDays: was?.trailingLeadTimeDays ?? n(l.leadDays),
-        isPreferred: l.preferred || undefined,
-      } as VendorItem
-    })
-
-    update((w) => {
-      const vendors = editing
-        ? w.vendors.map((v) => (v.id === id ? vendor : v))
-        : [...w.vendors, vendor]
-      // the valuation basis is the last purchase price; a material with no rate
-      // at all takes its first one from here
-      const items = w.items.map((it) => {
-        if (it.lastPurchaseRate > 0) return it
-        const q = rates.find((r) => r.itemId === it.id)
-        return q ? { ...it, lastPurchaseRate: q.rate } : it
-      })
+    // the id is issued inside the update, not before it — see `issueId`
+    update((w0) => {
+      const [w, id] = editing ? [w0, editing.id] : issueId(w0, 'VN')
+      const vendor = buildVendor({ id, name, paymentTermsDays: termsN })
+      const rates = kept.map((l) => buildRate(
+        { vendorId: id, itemId: l.itemId, rate: n(l.rate), leadDays: n(l.leadDays), preferred: l.preferred },
+        w.vendorItems.find((vi) => vi.vendorId === id && vi.itemId === l.itemId),
+      ))
       return {
         ...w,
-        vendors,
-        items,
+        vendors: editing ? w.vendors.map((v) => (v.id === id ? vendor : v)) : [...w.vendors, vendor],
+        items: backfillRates(w.items, rates),
         vendorItems: [...w.vendorItems.filter((vi) => vi.vendorId !== id), ...rates],
         vendorType: { ...w.vendorType, [id]: type },
       }

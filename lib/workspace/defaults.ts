@@ -37,21 +37,43 @@ export const STARTER_POLICY = DEFAULT_POLICY
 export const ID_PREFIX = { item: 'IT', vendor: 'VN', lot: 'LOT' } as const
 
 /**
- * Stable, readable and unique within one workspace — no dependency on a clock.
+ * The highest number any surviving record carries. Seeds the counter below.
  *
- * It counts up from the highest number already issued, never from how many
- * survive. A deleted material's id is not handed out again: stock lots and
- * supplier rates point at items by id, and an id that comes back around would
- * silently attach that history to a different material.
+ * On its own this is NOT safe to issue from, which is what it used to do:
+ * deleting the highest-numbered record lowers the maximum and hands its id
+ * straight back out. That was harmless only for as long as every side-table was
+ * pruned on delete. It stopped being harmless the moment custom field values,
+ * supplier contact details and the send log started keying off a record id — a
+ * recycled id silently gives a new supplier the deleted one's GST number, and
+ * that GST number prints on a document.
  */
-export function nextId(prefix: string, existing: { id: string }[]): string {
+export function highestIssued(prefix: string, existing: { id: string }[]): number {
   const re = new RegExp(`^${prefix}-(\\d+)$`)
-  const highest = existing.reduce((max, e) => {
+  return existing.reduce((max, e) => {
     const m = re.exec(e.id)
     return m ? Math.max(max, Number(m[1])) : max
   }, 0)
-  return `${prefix}-${String(highest + 1).padStart(3, '0')}`
 }
+
+/**
+ * Stable, readable, and never handed out twice — no dependency on a clock.
+ *
+ * The count lives on the workspace rather than being derived from what is
+ * there, so it only ever goes up. Issuing returns a new workspace alongside the
+ * id, which forces the caller to do it inside its `update` closure: computing
+ * an id outside one and writing it in a moment later is how two records added
+ * in quick succession end up sharing an id.
+ */
+export function issueId(ws: Workspace, prefix: string): [Workspace, string] {
+  const n = (ws.nextIds?.[prefix] ?? 0) + 1
+  return [
+    { ...ws, nextIds: { ...(ws.nextIds ?? {}), [prefix]: n } },
+    `${prefix}-${String(n).padStart(3, '0')}`,
+  ]
+}
+
+/** Every prefix the workspace issues, so a stored counter can be seeded. */
+export const ID_PREFIXES = ['VN', 'IT', 'RF', 'QT', 'PO', 'CF'] as const
 
 /**
  * A code suggested from the material's name: first letters of the first two
@@ -101,6 +123,14 @@ export function emptyWorkspace(input: {
     policy: { ...STARTER_POLICY },
     vendorType: {},
     itemGroup: {},
+    fields: [],
+    custom: {},
+    views: { supplier: BLANK_VIEW, material: BLANK_VIEW, rfq: BLANK_VIEW },
+    vendorContact: {},
+    sendLog: [],
+    nextIds: {},
     drafts: {},
   }
 }
+
+const BLANK_VIEW = { order: [], hidden: [], labels: {} }

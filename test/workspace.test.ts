@@ -12,7 +12,7 @@ import { trailingLeadTimeDays } from '@/lib/domain/calc'
 import type { Item, StockLot, Vendor, VendorItem } from '@/lib/domain/types'
 import { SAMPLE_BUNDLE, bundleFor, quotedItems, unquotedItems } from '@/lib/workspace/bundle'
 import { SOURCING_STEPS, progressOf } from '@/lib/workspace/checklist'
-import { emptyWorkspace, nextId, suggestCode } from '@/lib/workspace/defaults'
+import { emptyWorkspace, highestIssued, issueId, suggestCode } from '@/lib/workspace/defaults'
 import { NEEDS, needFor } from '@/lib/workspace/needs'
 import { parseStored } from '@/lib/workspace/storage'
 import type { Workspace } from '@/lib/workspace/types'
@@ -316,21 +316,61 @@ describe('storage', () => {
 })
 
 describe('ids and codes', () => {
+  const ws = (nextIds: Record<string, number> = {}): Workspace => ({
+    ...emptyWorkspace({
+      id: 'WS-T', createdAt: '2026-09-18', ownerName: 'R', contact: '',
+      companyName: 'C', makes: '',
+    }),
+    nextIds,
+  })
+
   it('counts up from nothing', () => {
-    expect(nextId('IT', [])).toBe('IT-001')
-    expect(nextId('IT', [{ id: 'IT-001' }])).toBe('IT-002')
+    const [w1, a] = issueId(ws(), 'IT')
+    const [, b] = issueId(w1, 'IT')
+    expect([a, b]).toEqual(['IT-001', 'IT-002'])
   })
 
-  it('never reuses the id of something deleted, even where a gap is left', () => {
-    // IT-002 was added and removed. Handing that id out again would attach its
-    // old stock lots and supplier rates to a different material.
-    const existing = [{ id: 'IT-001' }, { id: 'IT-003' }]
-    expect(nextId('IT', existing)).toBe('IT-004')
-    expect(nextId('IT', [{ id: 'IT-009' }])).toBe('IT-010')
+  it('never hands out an id twice, even after the newest record is deleted', () => {
+    /*
+     * This is the case the old implementation got wrong, and the old test
+     * missed. It derived the next id from the highest SURVIVING record, so
+     * deleting the newest one lowered the maximum and handed its id straight
+     * back out. Harmless while every side-table was pruned on delete; the
+     * moment custom field values and supplier contacts key off a record id, a
+     * recycled id gives a new supplier the deleted one's GST number.
+     */
+    let w = ws()
+    const issued: string[] = []
+    for (let i = 0; i < 3; i++) {
+      const [next, id] = issueId(w, 'VN')
+      w = next
+      issued.push(id)
+    }
+    expect(issued).toEqual(['VN-001', 'VN-002', 'VN-003'])
+
+    // VN-003 is deleted — the counter must not go backwards
+    const [after, reissued] = issueId(w, 'VN')
+    expect(reissued).toBe('VN-004')
+    expect(issued).not.toContain(reissued)
+    expect(after.nextIds.VN).toBe(4)
   })
 
-  it('ignores ids belonging to another prefix', () => {
-    expect(nextId('IT', [{ id: 'VN-007' }, { id: 'IT-002' }])).toBe('IT-003')
+  it('keeps a separate count per prefix', () => {
+    const [w1, v] = issueId(ws(), 'VN')
+    const [, i] = issueId(w1, 'IT')
+    expect([v, i]).toEqual(['VN-001', 'IT-001'])
+  })
+
+  it('seeds the count from records saved before the counter existed', () => {
+    // a blob written by an older build has ids but no nextIds
+    expect(highestIssued('IT', [{ id: 'IT-001' }, { id: 'IT-009' }])).toBe(9)
+    expect(highestIssued('IT', [{ id: 'VN-007' }])).toBe(0)
+    const [, id] = issueId(ws({ IT: 9 }), 'IT')
+    expect(id).toBe('IT-010')
+  })
+
+  it('ignores ids belonging to another prefix when seeding', () => {
+    expect(highestIssued('IT', [{ id: 'VN-007' }, { id: 'IT-002' }])).toBe(2)
   })
 
   it('suggests a code from the name and keeps it unique', () => {

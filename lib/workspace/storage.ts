@@ -12,7 +12,13 @@
  * with third-party cookies blocked, and when a quota is full, and a company's
  * set-up screen must not be the thing that breaks because of it.
  */
-import type { Session, Workspace, WorkspaceMode } from './types'
+import { DEFAULT_POLICY } from '@/lib/domain/policy'
+import type { Item, Vendor } from '@/lib/domain/types'
+import { highestIssued } from './defaults'
+import { SCHEMA } from './types'
+import type {
+  FieldDef, PurchaseOrder, Quote, Rfq, Session, TableView, Workspace, WorkspaceMode,
+} from './types'
 
 const KEY = 'msme.workspace.v1'
 
@@ -69,7 +75,7 @@ export function parseStored(raw: string | null): Stored | null {
     if (typeof ws.id !== 'string' || !ws.company || typeof ws.company.name !== 'string') return null
     if (!Array.isArray(ws.items) || !Array.isArray(ws.vendors)) return null
     if (!v.session || typeof v.session.actor !== 'string') return null
-    return { ...v, workspace: migrate(ws) } as Stored
+    return { ...v, workspace: migrate(ws as Partial<Workspace>) } as Stored
   } catch {
     return null
   }
@@ -79,30 +85,106 @@ export function parseStored(raw: string | null): Stored | null {
  * A workspace saved before a field existed is not a broken workspace.
  *
  * Somebody who set their company up last week and comes back after an update
- * must not lose it because the build has since grown requests, quotes and
- * orders. Every list the app reads is filled in here if it is missing, so the
- * screens can index straight into them without guarding each one.
+ * must not lose it because the build has since grown requests, quotes, custom
+ * columns and a send log.
+ *
+ * Two things about how this is written are deliberate, and both were learned
+ * the hard way. It takes a `Partial<Workspace>`, because what comes out of
+ * `JSON.parse` is whatever was saved months ago and typing it as a complete
+ * `Workspace` is a lie the compiler then enforces against us. And it builds the
+ * result key by key with **no spread of the input**, so that adding a field to
+ * `Workspace` fails to compile until it is handled here — which is the only
+ * thing that makes this file reliable. A spread would have made every new field
+ * a silent `undefined` in every existing browser.
+ *
+ * New fields must never be added to `parseStored`'s guard above. That guard
+ * decides whether somebody is signed in at all, and tightening it would sign
+ * out every existing owner.
  */
-function migrate(ws: Workspace): Workspace {
+function migrate(raw: Partial<Workspace>): Workspace {
   const list = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
+  const map = <T,>(v: unknown): Record<string, T> =>
+    (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, T>) : {})
+
+  const items = list<Item>(raw.items)
+  const vendors = list<Vendor>(raw.vendors)
+  const rfqs = list<Rfq>(raw.rfqs)
+  const quotes = list<Quote>(raw.quotes)
+  const orders = list<PurchaseOrder>(raw.orders)
+
+  /*
+   * The id counter is seeded from what is actually there the first time a blob
+   * is read, and only ever moves forward afterwards. Taking the higher of the
+   * two matters: a stored counter that somehow trails the data would otherwise
+   * start reissuing ids that are already in use.
+   */
+  const stored = map<number>(raw.nextIds)
+  const nextIds: Record<string, number> = { ...stored }
+  const seed = (prefix: string, from: { id: string }[]) => {
+    nextIds[prefix] = Math.max(stored[prefix] ?? 0, highestIssued(prefix, from))
+  }
+  seed('VN', vendors)
+  seed('IT', items)
+  seed('RF', rfqs)
+  seed('QT', quotes)
+  seed('PO', orders)
+  seed('CF', list<FieldDef>(raw.fields))
+
+  const view = (v: Partial<TableView> | undefined): TableView => ({
+    order: list<string>(v?.order),
+    hidden: list<string>(v?.hidden),
+    labels: map<string>(v?.labels),
+  })
+  const views = map<Partial<TableView>>(raw.views)
+
   return {
-    ...ws,
-    people: list(ws.people),
-    items: list(ws.items),
-    vendors: list(ws.vendors),
-    vendorItems: list(ws.vendorItems),
-    stockLots: list(ws.stockLots),
-    rfqs: list(ws.rfqs),
-    quotes: list(ws.quotes),
-    orders: list(ws.orders),
-    vendorType: ws.vendorType ?? {},
-    itemGroup: ws.itemGroup ?? {},
-    drafts: ws.drafts ?? {},
-    categories: {
-      supplierType: list(ws.categories?.supplierType),
-      materialGroup: list(ws.categories?.materialGroup),
-      units: list(ws.categories?.units),
+    id: raw.id ?? '',
+    createdAt: raw.createdAt ?? '',
+    owner: { name: raw.owner?.name ?? '', contact: raw.owner?.contact ?? '' },
+    company: {
+      name: raw.company?.name ?? '',
+      makes: raw.company?.makes ?? '',
+      address: raw.company?.address,
+      gstin: raw.company?.gstin,
+      phone: raw.company?.phone,
+      email: raw.company?.email,
     },
+    people: list(raw.people),
+    categories: {
+      supplierType: list(raw.categories?.supplierType),
+      materialGroup: list(raw.categories?.materialGroup),
+      units: list(raw.categories?.units),
+    },
+    items,
+    vendors,
+    vendorItems: list(raw.vendorItems),
+    stockLots: list(raw.stockLots),
+    /*
+     * Policy was never migrated, so a workspace saved before it existed loaded
+     * with `policy` undefined — and the material form reads
+     * `ws.policy.coverageCeiling.B` straight out, which threw the moment
+     * somebody clicked "Add a material". Merged rather than replaced so a
+     * partial policy keeps whatever the owner did set.
+     */
+    policy: { ...DEFAULT_POLICY, ...(raw.policy ?? {}) },
+    vendorType: map(raw.vendorType),
+    itemGroup: map(raw.itemGroup),
+    rfqs,
+    quotes,
+    orders,
+    fields: list(raw.fields),
+    custom: map(raw.custom),
+    views: {
+      supplier: view(views.supplier),
+      material: view(views.material),
+      rfq: view(views.rfq),
+    },
+    vendorContact: map(raw.vendorContact),
+    sendLog: list(raw.sendLog),
+    lastImport: raw.lastImport,
+    nextIds,
+    schema: SCHEMA,
+    drafts: map(raw.drafts),
   }
 }
 

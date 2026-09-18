@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Chips, Field, NumberInput, Select } from '@/components/ui/Field'
 import { useWorkspace } from '@/components/workspace/store'
-import { nextId } from '@/lib/workspace/defaults'
+import { issueId } from '@/lib/workspace/defaults'
 import { addDays, nextNo } from '@/lib/workspace/sourcing'
 import { money } from '@/lib/domain/format'
 import type { OrderState, PurchaseOrder } from '@/lib/workspace/types'
@@ -107,19 +107,21 @@ export function OrderForm({ open, onClose, editing }: {
   const save = () => {
     setTried(true)
     if (!ok) return
-    const id = editing?.id ?? nextId('PO', ws.orders)
-    const order: PurchaseOrder = {
-      id,
-      no: editing?.no ?? nextNo('PO', ws.orders),
-      vendorId, itemId,
-      qty: qtyN, unitPrice: priceN,
-      orderedOn, expectedOn, state,
-      quoteId: editing?.quoteId,
-    }
-    update((w) => ({
-      ...w,
-      orders: editing ? w.orders.map((o) => (o.id === id ? order : o)) : [...w.orders, order],
-    }))
+    update((w0) => {
+      const [w, id] = editing ? [w0, editing.id] : issueId(w0, 'PO')
+      const order: PurchaseOrder = {
+        id,
+        no: editing?.no ?? nextNo('PO', w.orders),
+        vendorId, itemId,
+        qty: qtyN, unitPrice: priceN,
+        orderedOn, expectedOn, state,
+        quoteId: editing?.quoteId,
+      }
+      return {
+        ...w,
+        orders: editing ? w.orders.map((o) => (o.id === id ? order : o)) : [...w.orders, order],
+      }
+    })
     onClose()
   }
 

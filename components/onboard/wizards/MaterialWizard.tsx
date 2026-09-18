@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react'
 import { Wizard, type WizardStep } from '@/components/ui/Wizard'
 import { Field, NumberInput, Select, TextInput } from '@/components/ui/Field'
 import { useWorkspace } from '@/components/workspace/store'
-import { UOM_LABEL, nextId, suggestCode } from '@/lib/workspace/defaults'
+import { UOM_LABEL, issueId, suggestCode } from '@/lib/workspace/defaults'
+import { buildItem } from '@/lib/workspace/records'
 import type { Item, Uom } from '@/lib/domain/types'
 
 /**
@@ -160,30 +161,29 @@ export function MaterialWizard({ open, onClose }: { open: boolean; onClose: () =
   ]
 
   const save = () => {
-    const item: Item = {
-      id: nextId('IT', ws.items),
-      code: shownCode.trim().toUpperCase(),
-      name: name.trim(),
-      uom,
-      // §13-4 flags a single class for everything as something to agree with the
-      // client; the rules step is where that is settled, so B is the default
-      // rather than a guess dressed up as a question.
-      itemClass: 'B',
-      coverageCeilingMonths: ws.policy.coverageCeiling.B,
-      moq: moqN,
-      safetyStock: Math.round(dailyN * cushionN * 1000) / 1000,
-      avgDailyConsumption: dailyN,
-      floorConsumptionPerDay: dailyN,
-      // Set from the first supplier quote. Guessing it here would put an
-      // invented rupee figure on every stock screen.
-      lastPurchaseRate: 0,
-      feeds: feeds.split(/[,\n]/).map((f) => f.trim()).filter(Boolean),
-    }
-    update((w) => ({
-      ...w,
-      items: [...w.items, item],
-      itemGroup: { ...w.itemGroup, [item.id]: group },
-    }))
+    update((w0) => {
+      const [w, id] = issueId(w0, 'IT')
+      const item = {
+        // §13-4 flags a single class for everything as something to agree with
+        // the client; the rules step is where that is settled, so the default
+        // comes from `buildItem` rather than being a guess dressed as a question.
+        ...buildItem(w, {
+          id,
+          name,
+          code: shownCode,
+          uom,
+          moq: moqN,
+          daily: dailyN,
+          cushionDays: cushionN,
+        }),
+        feeds: feeds.split(/[,\n]/).map((f) => f.trim()).filter(Boolean),
+      }
+      return {
+        ...w,
+        items: [...w.items, item],
+        itemGroup: { ...w.itemGroup, [id]: group },
+      }
+    })
     onClose()
   }
 

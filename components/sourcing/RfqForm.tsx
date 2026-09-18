@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Chips, Field, NumberInput, Select, TextInput } from '@/components/ui/Field'
 import { useWorkspace } from '@/components/workspace/store'
-import { nextId } from '@/lib/workspace/defaults'
+import { issueId } from '@/lib/workspace/defaults'
 import { nextNo } from '@/lib/workspace/sourcing'
 import type { Rfq, RfqState } from '@/lib/workspace/types'
 
@@ -67,24 +67,26 @@ export function RfqForm({ open, onClose, editing }: {
   const save = () => {
     setTried(true)
     if (!ok) return
-    const id = editing?.id ?? nextId('RF', ws.rfqs)
-    const rfq: Rfq = {
-      id,
-      no: editing?.no ?? nextNo('RFQ', ws.rfqs),
-      itemId,
-      qty: qtyN,
-      neededBy,
-      vendorIds,
-      // a request the data has moved on keeps where it got to
-      state: editing && (editing.state === 'quoted' || editing.state === 'awarded') && state === 'sent'
-        ? editing.state : state,
-      raisedOn: editing?.raisedOn ?? today,
-      note: note.trim() || undefined,
-    }
-    update((w) => ({
-      ...w,
-      rfqs: editing ? w.rfqs.map((r) => (r.id === id ? rfq : r)) : [...w.rfqs, rfq],
-    }))
+    update((w0) => {
+      const [w, id] = editing ? [w0, editing.id] : issueId(w0, 'RF')
+      const rfq: Rfq = {
+        id,
+        no: editing?.no ?? nextNo('RFQ', w.rfqs),
+        itemId,
+        qty: qtyN,
+        neededBy,
+        vendorIds,
+        // a request the data has moved on keeps where it got to
+        state: editing && (editing.state === 'quoted' || editing.state === 'awarded') && state === 'sent'
+          ? editing.state : state,
+        raisedOn: editing?.raisedOn ?? today,
+        note: note.trim() || undefined,
+      }
+      return {
+        ...w,
+        rfqs: editing ? w.rfqs.map((r) => (r.id === id ? rfq : r)) : [...w.rfqs, rfq],
+      }
+    })
     onClose()
   }
 

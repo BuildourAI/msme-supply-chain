@@ -107,11 +107,115 @@ export interface PurchaseOrder {
   quoteId?: string
 }
 
+/* --------------------------------------------- fields the owner invents -- */
+
+/**
+ * A column this build did not think of.
+ *
+ * Every business has a few — a GST number, an MSME registration, a drawing
+ * number, a rating somebody keeps in their head. A system that cannot hold them
+ * is a system with a spreadsheet open beside it, which is the thing this is
+ * supposed to replace.
+ *
+ * Values are kept as strings and interpreted through `kind`, so changing a
+ * field from text to number never destroys what somebody already typed. The
+ * kind decides the input, the alignment, the sort and how an import validates —
+ * not how it is stored.
+ */
+export type FieldKind = 'text' | 'number' | 'date' | 'choice' | 'yesno'
+
+/** The three lists that carry custom fields. Quotes and orders come later. */
+export type SheetEntity = 'supplier' | 'material' | 'rfq'
+
+export interface FieldDef {
+  id: string
+  entity: SheetEntity
+  label: string
+  kind: FieldKind
+  /** for `choice` — the list offered, which the owner edits */
+  choices?: string[]
+  /** for `number` — printed after the figure, e.g. "kg" */
+  unit?: string
+  /** print this on the RFQ document as well as the screen */
+  onDoc?: boolean
+}
+
+/**
+ * How one list's table is arranged.
+ *
+ * `order` holds built-in column keys and field ids in one sequence, because to
+ * the person arranging them they are the same thing — a column. `labels` only
+ * carries the ones that have been renamed, so a built-in head that nobody
+ * touched keeps following the build rather than freezing at whatever it said
+ * the day somebody opened this dialog.
+ */
+export interface TableView {
+  order: string[]
+  hidden: string[]
+  labels: Record<string, string>
+}
+
+/** A supplier's phone and email. `Vendor` is pinned, so they live beside it. */
+export interface VendorContact {
+  email?: string
+  phone?: string
+}
+
+/** That a request was handed to somebody, and how. The system never sends. */
+export interface SendEntry {
+  rfqId: string
+  vendorId: string
+  via: 'whatsapp' | 'email' | 'share' | 'download' | 'print'
+  at: string
+}
+
+/**
+ * Enough to put the last import back, and nothing more.
+ *
+ * Deliberately a list of what the import DID rather than a copy of what the
+ * workspace looked like before it. A snapshot is the obvious design and it is
+ * wrong twice over: restoring it throws away every unrelated edit made since,
+ * and because custom values for all three lists live in one map, undoing a
+ * supplier import would wipe values somebody had typed against materials.
+ *
+ * A delta undoes exactly the rows the import touched. Records it created are
+ * removed through the normal cascade helpers so nothing is orphaned; records it
+ * changed are put back field by field; cells and fields it added go with them.
+ */
+export interface ImportUndo {
+  id: string
+  entity: SheetEntity
+  at: string
+  source: string
+  /** ids this import brought into existence */
+  created: string[]
+  /** what the records it overwrote looked like first */
+  updated: { id: string; before: Record<string, unknown> }[]
+  /** rates written alongside a supplier or material, by vendorId|itemId */
+  vendorItemsBefore?: { key: string; before: VendorItem | null }[]
+  /** side-table entries it wrote, and what was there before */
+  sideBefore?: { map: 'vendorType' | 'itemGroup'; id: string; before: string | null }[]
+  /** custom cells it wrote: [recordId, fieldId, whatWasThereBefore] */
+  cells: [string, string, string][]
+  /** fields the mapping step created, which nothing else has used */
+  fieldsCreated: string[]
+  added: number
+  changed: number
+}
+
 export interface Workspace {
   id: string
   createdAt: string
   owner: { name: string; contact: string }
-  company: { name: string; makes: string }
+  /** `name` and `makes` are asked at sign-up; the rest is the RFQ letterhead */
+  company: {
+    name: string
+    makes: string
+    address?: string
+    gstin?: string
+    phone?: string
+    email?: string
+  }
   people: Person[]
   categories: Categories
   /** the masters the set-up steps write */
@@ -128,9 +232,39 @@ export interface Workspace {
   rfqs: Rfq[]
   quotes: Quote[]
   orders: PurchaseOrder[]
+  /** the columns the owner invented, and what each record holds in them */
+  fields: FieldDef[]
+  /**
+   * recordId → fieldId → value. One map across all three lists, which is safe
+   * because `nextId` gives each its own prefix — VN-001, IT-001, RF-001.
+   */
+  custom: Record<string, Record<string, string>>
+  /** how each list's table is arranged */
+  views: Record<SheetEntity, TableView>
+  /** where to reach a supplier, for handing them a request */
+  vendorContact: Record<string, VendorContact>
+  /** that a request was handed over, and how */
+  sendLog: SendEntry[]
+  /** the one import that can still be undone */
+  lastImport?: ImportUndo
+  /**
+   * The highest id issued per prefix, ever. Kept rather than derived so that
+   * deleting the newest record cannot hand its id to the next one — see
+   * `issueId` in `defaults.ts`.
+   */
+  nextIds: Record<string, number>
+  /**
+   * What shape this blob is in. Lets `migrate` be explicit about a change
+   * instead of null-coalescing every field for ever. The localStorage KEY must
+   * never change: bumping it signs everybody out.
+   */
+  schema?: number
   /** a wizard closed halfway reopens where it was */
   drafts: Record<string, unknown>
 }
+
+/** Raised whenever `migrate` has to do something a past version cannot undo. */
+export const SCHEMA = 2
 
 /** Which company the screens are reading. The sample is never written to. */
 export type WorkspaceMode = 'sample' | 'mine'

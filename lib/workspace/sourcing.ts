@@ -14,6 +14,7 @@
  * there — a quote recorded against a request moves the request on by itself.
  */
 import type { Item, Vendor } from '@/lib/domain/types'
+import { pruneCustom } from './fields'
 import type { PurchaseOrder, Quote, Rfq, RfqState, Workspace } from './types'
 
 /* ------------------------------------------------------------- numbering -- */
@@ -274,9 +275,17 @@ export function rfqImpact(ws: Workspace, rfqId: string): DeleteImpact {
   return { losses, clean: losses.length === 0 }
 }
 
-/** Removing a supplier, and everything that only existed because of them. */
+/**
+ * Removing a supplier, and everything that only existed because of them.
+ *
+ * `pruneCustom` goes around the outside of all three of these rather than each
+ * filtering its own side-tables, because the cascades are transitive: removing
+ * a material also removes the requests for it, and those requests have custom
+ * values of their own. Keeping only the keys that still name a live record
+ * cannot miss a path, and tidies anything an earlier version left behind.
+ */
 export function removeVendor(ws: Workspace, vendorId: string): Workspace {
-  return syncRfqStates({
+  return pruneCustom(syncRfqStates({
     ...ws,
     vendors: ws.vendors.filter((v) => v.id !== vendorId),
     vendorItems: ws.vendorItems.filter((vi) => vi.vendorId !== vendorId),
@@ -286,11 +295,11 @@ export function removeVendor(ws: Workspace, vendorId: string): Workspace {
     vendorType: Object.fromEntries(
       Object.entries(ws.vendorType).filter(([id]) => id !== vendorId),
     ),
-  })
+  }))
 }
 
 export function removeItem(ws: Workspace, itemId: string): Workspace {
-  return syncRfqStates({
+  return pruneCustom(syncRfqStates({
     ...ws,
     items: ws.items.filter((i) => i.id !== itemId),
     vendorItems: ws.vendorItems.filter((vi) => vi.itemId !== itemId),
@@ -301,15 +310,15 @@ export function removeItem(ws: Workspace, itemId: string): Workspace {
     itemGroup: Object.fromEntries(
       Object.entries(ws.itemGroup).filter(([id]) => id !== itemId),
     ),
-  })
+  }))
 }
 
 export function removeRfq(ws: Workspace, rfqId: string): Workspace {
-  return syncRfqStates({
+  return pruneCustom(syncRfqStates({
     ...ws,
     rfqs: ws.rfqs.filter((r) => r.id !== rfqId),
     quotes: ws.quotes.map((q) => (q.rfqId === rfqId ? { ...q, rfqId: undefined } : q)),
-  })
+  }))
 }
 
 export function removeQuote(ws: Workspace, quoteId: string): Workspace {

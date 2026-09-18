@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Field, NumberInput, Select, TextInput } from '@/components/ui/Field'
 import { useWorkspace } from '@/components/workspace/store'
-import { nextId, } from '@/lib/workspace/defaults'
+import { issueId } from '@/lib/workspace/defaults'
 import { syncRfqStates } from '@/lib/workspace/sourcing'
 import type { Quote } from '@/lib/workspace/types'
 
@@ -87,22 +87,24 @@ export function QuoteForm({ open, onClose, editing, forRfqId }: {
   const save = () => {
     setTried(true)
     if (!ok) return
-    const id = editing?.id ?? nextId('QT', ws.quotes)
-    const quote: Quote = {
-      id,
-      rfqId: rfqId || undefined,
-      vendorId, itemId,
-      unitPrice: priceN,
-      moq: moqN,
-      leadDays: leadN,
-      ref: ref.trim() || undefined,
-      state: editing?.state ?? 'received',
-      on: editing?.on ?? today,
-    }
-    update((w) => syncRfqStates({
-      ...w,
-      quotes: editing ? w.quotes.map((q) => (q.id === id ? quote : q)) : [...w.quotes, quote],
-    }))
+    update((w0) => {
+      const [w, id] = editing ? [w0, editing.id] : issueId(w0, 'QT')
+      const quote: Quote = {
+        id,
+        rfqId: rfqId || undefined,
+        vendorId, itemId,
+        unitPrice: priceN,
+        moq: moqN,
+        leadDays: leadN,
+        ref: ref.trim() || undefined,
+        state: editing?.state ?? 'received',
+        on: editing?.on ?? today,
+      }
+      return syncRfqStates({
+        ...w,
+        quotes: editing ? w.quotes.map((q) => (q.id === id ? quote : q)) : [...w.quotes, quote],
+      })
+    })
     onClose()
   }
 

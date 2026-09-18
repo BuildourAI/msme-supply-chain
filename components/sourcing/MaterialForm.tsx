@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Field, NumberInput, Select, TextInput } from '@/components/ui/Field'
 import { useWorkspace } from '@/components/workspace/store'
-import { UOM_LABEL, nextId, suggestCode } from '@/lib/workspace/defaults'
+import { UOM_LABEL, issueId, suggestCode } from '@/lib/workspace/defaults'
+import { buildItem } from '@/lib/workspace/records'
 import type { Item, Uom } from '@/lib/domain/types'
 
 /**
@@ -81,28 +82,23 @@ export function MaterialForm({ open, onClose, editing }: {
   const save = () => {
     setTried(true)
     if (!ok) return
-    const id = editing?.id ?? nextId('IT', ws.items)
-    const item: Item = {
-      ...(editing ?? {
-        itemClass: 'B' as const,
-        coverageCeilingMonths: ws.policy.coverageCeiling.B,
-        lastPurchaseRate: 0,
-        feeds: [],
-      }),
-      id,
-      code: shownCode.trim().toUpperCase(),
-      name: name.trim(),
-      uom,
-      moq: moqN,
-      avgDailyConsumption: dailyN,
-      floorConsumptionPerDay: dailyN,
-      safetyStock: Math.round(dailyN * cushionN * 1000) / 1000,
-    }
-    update((w) => ({
-      ...w,
-      items: editing ? w.items.map((i) => (i.id === id ? item : i)) : [...w.items, item],
-      itemGroup: { ...w.itemGroup, [id]: group },
-    }))
+    update((w0) => {
+      const [w, id] = editing ? [w0, editing.id] : issueId(w0, 'IT')
+      const item = buildItem(w, {
+        id,
+        name,
+        code: shownCode,
+        uom,
+        moq: moqN,
+        daily: dailyN,
+        cushionDays: cushionN,
+      }, editing ?? undefined)
+      return {
+        ...w,
+        items: editing ? w.items.map((i) => (i.id === id ? item : i)) : [...w.items, item],
+        itemGroup: { ...w.itemGroup, [id]: group },
+      }
+    })
     onClose()
   }
 

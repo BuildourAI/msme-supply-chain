@@ -10,7 +10,7 @@ import { useWorkspace } from '@/components/workspace/store'
 import {
   acceptQuote, nextNo, orderFromQuote, quoteGroups, removeQuote, type QuoteRow,
 } from '@/lib/workspace/sourcing'
-import { nextId } from '@/lib/workspace/defaults'
+import { issueId } from '@/lib/workspace/defaults'
 import { money, num, shortDate } from '@/lib/domain/format'
 import type { Quote, QuoteState } from '@/lib/workspace/types'
 
@@ -51,11 +51,12 @@ function Quotes() {
   /** Accepting is one act; raising the order is a second, and a person does it. */
   const accept = (row: QuoteRow) => {
     update((w) => {
-      const after = acceptQuote(w, row.quote.id)
+      const accepted = acceptQuote(w, row.quote.id)
+      const [after, id] = issueId(accepted, 'PO')
       const draft = orderFromQuote(after, row.quote, today)
       return {
         ...after,
-        orders: [...after.orders, { ...draft, id: nextId('PO', after.orders), no: nextNo('PO', after.orders) }],
+        orders: [...after.orders, { ...draft, id, no: nextNo('PO', after.orders) }],
       }
     })
   }

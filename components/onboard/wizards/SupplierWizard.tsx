@@ -4,7 +4,8 @@ import { Wizard, type WizardStep } from '@/components/ui/Wizard'
 import { Field, NumberInput, Select, TextInput } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/icons'
 import { useWorkspace } from '@/components/workspace/store'
-import { nextId } from '@/lib/workspace/defaults'
+import { issueId } from '@/lib/workspace/defaults'
+import { backfillRates, buildRate, buildVendor } from '@/lib/workspace/records'
 import { money } from '@/lib/domain/format'
 import type { Vendor, VendorItem } from '@/lib/domain/types'
 
@@ -192,45 +193,27 @@ export function SupplierWizard({ open, onClose }: { open: boolean; onClose: () =
   ]
 
   const save = () => {
-    const vendor: Vendor = {
-      id: nextId('VN', ws.vendors),
-      name: name.trim(),
-      paymentTermsDays: Number.isFinite(termsN) ? termsN : 0,
-    }
-    const vendorItems: VendorItem[] = filled.map((l) => ({
-      vendorId: vendor.id,
-      itemId: l.itemId,
-      rate: Number(l.rate),
-      freightPerUnit: 0,
-      nonCreditableGst: 0,
-      paymentTermCost: 0,
-      rejectionAllowance: 0,
-      quotedLeadTimeDays: Number(l.leadDays),
-      trailingLeadTimeDays: Number(l.leadDays),
-      // Measurements, and nothing has been measured yet. Zero is the honest
-      // value; the screens that read them say when a figure is unmeasured.
-      trailingRejectionRate: 0,
-      onTimePct: 0,
-      score: 0,
-      isPreferred: l.preferred || undefined,
-      quoteValidUntil: '',
-    }))
-
-    update((w) => {
-      // The valuation basis is the last purchase price (§13-1). A material with
-      // no rate at all is valued at nothing, so the first quote fills it in —
-      // and a later, cheaper quote does not overwrite what was actually paid.
-      const items = w.items.map((it) => {
-        if (it.lastPurchaseRate > 0) return it
-        const q = vendorItems.find((vi) => vi.itemId === it.id)
-        return q ? { ...it, lastPurchaseRate: q.rate } : it
+    update((w0) => {
+      const [w, id] = issueId(w0, 'VN')
+      const vendor = buildVendor({
+        id, name, paymentTermsDays: Number.isFinite(termsN) ? termsN : 0,
       })
+      const vendorItems = filled.map((l) => buildRate({
+        vendorId: id,
+        itemId: l.itemId,
+        rate: Number(l.rate),
+        leadDays: Number(l.leadDays),
+        preferred: l.preferred,
+      }))
       return {
         ...w,
-        items,
+        // The valuation basis is the last purchase price (§13-1). A material
+        // with no rate at all is valued at nothing, so the first quote fills it
+        // in — and a later, cheaper quote does not overwrite what was paid.
+        items: backfillRates(w.items, vendorItems),
         vendors: [...w.vendors, vendor],
         vendorItems: [...w.vendorItems, ...vendorItems],
-        vendorType: { ...w.vendorType, [vendor.id]: type },
+        vendorType: { ...w.vendorType, [id]: type },
       }
     })
     onClose()
