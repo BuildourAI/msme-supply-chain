@@ -122,6 +122,13 @@ function Chrome({ children }: { children: React.ReactNode }) {
    * system they have not set up yet, and answers "whose data is this?" with the
    * wrong name. Until there is a company, there is nothing to navigate.
    */
+  // The server cannot see browser storage, so on the root it does not yet know
+  // whether this is a first visit. Rendering the full chrome and then replacing
+  // it with a bare sign-in flashes the whole app at somebody who has not signed
+  // up — so the root waits the one frame instead. Every other route is the app
+  // either way, and renders immediately.
+  if (!ready && pathname === '/') return <div className="min-h-screen" aria-hidden />
+
   const signingIn = ready && !hasAccount && !insideApp && pathname === '/'
   if (signingIn) {
     return (
