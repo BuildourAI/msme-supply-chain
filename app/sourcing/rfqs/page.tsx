@@ -1,7 +1,9 @@
 'use client'
 import { useState } from 'react'
 import { ListPage } from '@/components/ui/ListPage'
-import { Column, DataTable, StatePill, Tags, type PillTone } from '@/components/ui/DataTable'
+import { DataTable, StatePill, Tags, type PillTone } from '@/components/ui/DataTable'
+import { DeskTools } from '@/components/sheet/DeskTools'
+import { buildColumns, type DrawnColumn } from '@/components/sheet/columns'
 import { RfqForm } from '@/components/sourcing/RfqForm'
 import { ConfirmDelete } from '@/components/sourcing/ConfirmDelete'
 import { DeskOnly } from '@/components/sourcing/DeskOnly'
@@ -39,37 +41,39 @@ function Rfqs() {
   const ws = workspace
   const rows = rfqRows(ws)
 
-  const columns: Column<RfqRow>[] = [
-    {
-      key: 'no', head: 'Request',
+  const drawn: Record<string, DrawnColumn<RfqRow>> = {
+    no: {
       cell: (r) => <span className="mono text-[12.5px] font-semibold text-ink">{r.rfq.no}</span>,
+      text: (r) => r.rfq.no,
     },
-    {
-      key: 'state', head: 'Status',
+    state: {
       cell: (r) => <StatePill label={LABEL[r.rfq.state]} tone={TONE[r.rfq.state]} />,
+      text: (r) => LABEL[r.rfq.state],
     },
-    {
-      key: 'item', head: 'Material',
+    item: {
       cell: (r) => (r.item
         ? <span className="font-medium text-ink">{r.item.name}</span>
         : <span className="text-ink-4">—</span>),
+      text: (r) => r.item?.name ?? '',
     },
-    {
-      key: 'asked', head: 'Asked',
+    asked: {
       cell: (r) => <Tags items={r.vendors.map((v) => v.name)} />,
+      text: (r) => r.vendors.map((v) => v.name).join('; '),
     },
-    {
-      key: 'qty', head: 'Qty', align: 'right',
+    qty: {
+      align: 'right',
       cell: (r) => `${num(r.rfq.qty, 3)}${r.item ? ` ${r.item.uom}` : ''}`,
+      text: (r) => String(r.rfq.qty),
     },
-    {
-      key: 'back', head: 'Back', align: 'right',
+    back: {
+      align: 'right',
       cell: (r) => (r.quotes.length === 0
         ? <span className="text-ink-4">none yet</span>
         : `${r.quotes.length} quote${r.quotes.length === 1 ? '' : 's'}`),
+      text: (r) => String(r.quotes.length),
     },
-    {
-      key: 'needed', head: 'Needed by', align: 'right',
+    needed: {
+      align: 'right',
       cell: (r) => {
         const late = r.rfq.neededBy < today && r.rfq.state !== 'awarded' && r.rfq.state !== 'closed'
         return (
@@ -79,27 +83,32 @@ function Rfqs() {
           </span>
         )
       },
+      text: (r) => r.rfq.neededBy,
     },
-  ]
+  }
+
+  const kit = buildColumns<RfqRow>(ws, 'rfq', (r) => r.rfq.id, drawn)
 
   return (
     <>
       <ListPage
         title="Requests" noun="request" rows={rows}
-        search={(r) => `${r.rfq.no} ${r.item?.name ?? ''} ${r.vendors.map((v) => v.name).join(' ')}`}
+        search={(r) => `${r.rfq.no} ${r.item?.name ?? ''} ${r.vendors.map((v) => v.name).join(' ')} ${kit.searchText(r)}`}
         filter={{
           label: 'All statuses',
           options: (Object.keys(LABEL) as RfqState[]).map((s) => ({ value: s, label: LABEL[s] })),
           of: (r) => r.rfq.state,
         }}
         action={{ label: 'New request', onClick: () => setAdding(true) }}
+        tools={<DeskTools entity="rfq" noun="request" title="Requests"
+          rows={() => kit.toRows(rows)} />}
         empty={{
           line: 'Nothing asked for yet. A request records what you want, from whom, and by when.',
           cta: 'Create your first request',
         }}>
         {(shown) => (
           <DataTable
-            columns={columns} rows={shown} keyOf={(r) => r.rfq.id}
+            columns={kit.columns} rows={shown} keyOf={(r) => r.rfq.id}
             onEdit={(r) => setEditing(r.rfq)}
             onDelete={(r) => setDeleting(r.rfq)}
             editLabel={(r) => `Edit ${r.rfq.no}`}

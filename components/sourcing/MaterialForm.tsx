@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Field, NumberInput, Select, TextInput } from '@/components/ui/Field'
 import { useWorkspace } from '@/components/workspace/store'
+import { setValues } from '@/lib/workspace/fields'
+import { CustomFields } from '@/components/sheet/CustomFields'
 import { UOM_LABEL, issueId, suggestCode } from '@/lib/workspace/defaults'
 import { buildItem } from '@/lib/workspace/records'
 import type { Item, Uom } from '@/lib/domain/types'
@@ -35,6 +37,7 @@ export function MaterialForm({ open, onClose, editing }: {
   const [moq, setMoq] = useState('')
   const [daily, setDaily] = useState('')
   const [cushion, setCushion] = useState('7')
+  const [custom, setCustom] = useState<Record<string, string>>({})
   const [tried, setTried] = useState(false)
 
   useEffect(() => {
@@ -93,11 +96,11 @@ export function MaterialForm({ open, onClose, editing }: {
         daily: dailyN,
         cushionDays: cushionN,
       }, editing ?? undefined)
-      return {
+      return setValues({
         ...w,
         items: editing ? w.items.map((i) => (i.id === id ? item : i)) : [...w.items, item],
         itemGroup: { ...w.itemGroup, [id]: group },
-      }
+      }, id, custom)
     })
     onClose()
   }
@@ -161,6 +164,8 @@ export function MaterialForm({ open, onClose, editing }: {
             </strong> back as cushion.
           </p>
         )}
+
+        <CustomFields entity="material" values={custom} onChange={setCustom} />
       </div>
 
       <footer className="flex items-center gap-2 border-t border-line-soft px-4 py-3">

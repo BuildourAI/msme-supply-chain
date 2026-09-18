@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Chips, Field, NumberInput, Select, TextInput } from '@/components/ui/Field'
 import { useWorkspace } from '@/components/workspace/store'
+import { setValues } from '@/lib/workspace/fields'
+import { CustomFields } from '@/components/sheet/CustomFields'
 import { issueId } from '@/lib/workspace/defaults'
 import { nextNo } from '@/lib/workspace/sourcing'
 import type { Rfq, RfqState } from '@/lib/workspace/types'
@@ -36,11 +38,13 @@ export function RfqForm({ open, onClose, editing }: {
   const [vendorIds, setVendorIds] = useState<string[]>([])
   const [state, setState] = useState<RfqState>('sent')
   const [note, setNote] = useState('')
+  const [custom, setCustom] = useState<Record<string, string>>({})
   const [tried, setTried] = useState(false)
 
   useEffect(() => {
     if (!open || !workspace) return
     setTried(false)
+    setCustom(editing ? { ...(workspace.custom[editing.id] ?? {}) } : {})
     if (editing) {
       setItemId(editing.itemId); setQty(String(editing.qty))
       setNeededBy(editing.neededBy); setVendorIds(editing.vendorIds)
@@ -82,10 +86,10 @@ export function RfqForm({ open, onClose, editing }: {
         raisedOn: editing?.raisedOn ?? today,
         note: note.trim() || undefined,
       }
-      return {
+      return setValues({
         ...w,
         rfqs: editing ? w.rfqs.map((r) => (r.id === id ? rfq : r)) : [...w.rfqs, rfq],
-      }
+      }, id, custom)
     })
     onClose()
   }
@@ -161,6 +165,8 @@ export function RfqForm({ open, onClose, editing }: {
             <TextInput value={note} onChange={setNote} placeholder="Half-hard temper" />
           </Field>
         </div>
+
+        <CustomFields entity="rfq" values={custom} onChange={setCustom} />
       </div>
 
       <footer className="flex items-center gap-2 border-t border-line-soft px-4 py-3">
