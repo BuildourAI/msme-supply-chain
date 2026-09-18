@@ -11,6 +11,7 @@ import { AGE_LABEL, blockedStock, CAUSE_LABEL, ROUTE_LABEL } from '@/lib/seed/bl
 import { lakh, money, num } from '@/lib/domain/format'
 import { TODAY_SOURCING } from '@/lib/seed/sourcing'
 import { daysBetween } from '@/lib/domain/calc'
+import { StageGate } from '@/components/onboard/StageGate'
 
 /**
  * SRC-04 on its own page.
@@ -164,7 +165,7 @@ function HeadSort({ col, label, sort, setSort, right }: {
   )
 }
 
-export default function Page() {
+function PageBody() {
   const [by, setBy] = useState<By>('cause')
   const [filters, setFilters] = useState<Partial<Record<Col, string>>>({})
   const [sort, setSort] = useState<{ col: SortCol; dir: 'asc' | 'desc' }>({ col: 'value', dir: 'desc' })
@@ -507,4 +508,8 @@ export default function Page() {
       </div>
     </>
   )
+}
+
+export default function Page() {
+  return <StageGate><PageBody /></StageGate>
 }

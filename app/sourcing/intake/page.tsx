@@ -10,6 +10,7 @@ import { Note } from '@/components/ui/Note'
 import { docMeta, documentLines, reviewQueue, supplierDocuments } from '@/lib/seed/intake'
 import { shortDate } from '@/lib/domain/format'
 import type { Tone } from '@/lib/domain/format'
+import { StageGate } from '@/components/onboard/StageGate'
 
 /**
  * SRC-02 on its own page.
@@ -258,6 +259,10 @@ function IntakePage() {
   )
 }
 
-export default function Page() {
+function PageBody() {
   return <DocViewerProvider><IntakePage /></DocViewerProvider>
+}
+
+export default function Page() {
+  return <StageGate><PageBody /></StageGate>
 }

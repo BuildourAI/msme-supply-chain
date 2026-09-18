@@ -13,6 +13,7 @@ import { GuardrailPanel, LandedCostCompare } from '@/components/desk/Panels'
 import { lakh, longDate, money, num, STATUS_LABEL, STATUS_TONE } from '@/lib/domain/format'
 import { VALUATION_BASIS } from '@/lib/domain/policy'
 import { useApp } from '@/state/app-store'
+import { StageGate } from '@/components/onboard/StageGate'
 
 type Tab = 'desk' | 'history' | 'policy'
 
@@ -341,6 +342,10 @@ function Desk() {
   )
 }
 
-export default function Page() {
+function PageBody() {
   return <Desk />
+}
+
+export default function Page() {
+  return <StageGate><PageBody /></StageGate>
 }

@@ -19,6 +19,7 @@ import type { Derived } from '@/lib/domain/types'
 import { useDesk } from '@/components/desk/store'
 import { useWorkspace } from '@/components/workspace/store'
 import { Login } from '@/components/onboard/Login'
+import { Checklist } from '@/components/onboard/Checklist'
 import { useInventory } from '@/components/inventory/store'
 import { useInbound } from '@/components/inbound/store'
 import { useDispatch } from '@/components/dispatch/store'
@@ -70,7 +71,86 @@ export default function Page() {
   return <Dashboard />
 }
 
+/**
+ * In the owner's own company the checklist is the page until sourcing is set
+ * up. Sixteen executive figures over an empty company would be sixteen zeroes
+ * and four charts of nothing, which is exactly the overwhelming-and-useless
+ * combination this change exists to remove.
+ */
+function OwnerHome() {
+  const { workspace } = useWorkspace()
+  const { rows } = useDesk()
+  if (!workspace) return null
+  return (
+    <div className="anim-page">
+      <header className="mb-3">
+        <p className="mono text-[10.5px] uppercase tracking-wider text-ink-3">{workspace.company.name}</p>
+        <h1 className="text-[26px] font-extrabold leading-none tracking-[-0.03em]">
+          Welcome, {workspace.owner.name}
+        </h1>
+      </header>
+      <Checklist />
+      {rows.length > 0 && <OwnerDesk />}
+    </div>
+  )
+}
+
+/**
+ * The first thing the owner's own numbers produce: the lines that need buying,
+ * and the ones that do not. One card, because one card is all the data there is
+ * on the day the set-up finishes.
+ */
+function OwnerDesk() {
+  const { rows, kpis } = useDesk()
+  const decide = rows.filter(needsDecision)
+  return (
+    <Card index={1} title="What needs a decision today" live
+      sub="From your materials, your suppliers and your count"
+      actions={<Link href="/sourcing/desk"
+        className="press text-[12px] font-semibold text-accent-ink hover:underline">
+        Open the desk →
+      </Link>}>
+      {decide.length === 0 ? (
+        <p className="px-4 py-5 text-center text-[12.5px] leading-relaxed text-ink-2">
+          Nothing is below its reorder point. {rows.length} material{rows.length === 1 ? '' : 's'}{' '}
+          checked against what you use and how long your suppliers take.
+        </p>
+      ) : (
+        <ul className="divide-y divide-line-soft">
+          {decide.slice(0, 6).map((r) => (
+            <li key={r.item.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-2.5">
+              <span className="min-w-0">
+                <span className="block truncate text-[13px] font-medium">{r.item.name}</span>
+                <span className="mono block text-[10.5px] text-ink-3">{r.item.code}</span>
+              </span>
+              <StatusPill tone={STATUS_TONE[r.status.value]} label={STATUS_LABEL[r.status.value]}
+                explain={r.status.note} />
+              <span className="num ml-auto text-right text-[12.5px]">
+                <Num d={r.coverDays} format="raw" dp={0} suffix="days left" size="sm" />
+              </span>
+              <span className="num w-full text-right text-[11.5px] text-ink-3 sm:w-auto">
+                buy <Num d={r.reorderQty} format="raw" dp={0} suffix={r.item.uom} size="sm" />
+                {' from '}{r.chosen.vendor.name}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex flex-wrap items-center gap-2 border-t border-line-soft px-4 py-2.5 text-[12px] text-ink-3">
+        <span>Cash to release <Num d={kpis.toRelease} format="money" /></span>
+        {kpis.heldCount > 0 && <Pill tone="warn">{kpis.heldCount} held by your ceiling</Pill>}
+      </div>
+    </Card>
+  )
+}
+
 function Dashboard() {
+  const wsMode = useWorkspace().mode
+  if (wsMode === 'mine') return <OwnerHome />
+  return <SampleDashboard />
+}
+
+function SampleDashboard() {
   /* One switch for the whole page. Closed, it is sixteen figures and their
      pictures on one screen; open, every tile explains itself and the sections
      get their footnotes back. The default is the quick view, because that is

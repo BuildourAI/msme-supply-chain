@@ -91,15 +91,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     if (held) {
       setWorkspace(held.workspace)
       setSession(held.session)
-      if (!asked) setModeState('mine')
+      if (!asked) setModeState(held.mode ?? 'mine')
     }
     setToday(todayIso())
     setReady(true)
   }, [])
 
-  const persist = useCallback((ws: Workspace, sess: Session) => {
+  const persist = useCallback((ws: Workspace, sess: Session, m: WorkspaceMode) => {
     if (!store) return
-    setPersistent(store.save({ workspace: ws, session: sess }))
+    setPersistent(store.save({ workspace: ws, session: sess, mode: m }))
   }, [store])
 
   const createWorkspace = useCallback<WorkspaceCtx['createWorkspace']>((input) => {
@@ -112,14 +112,18 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     setWorkspace(ws)
     setSession(sess)
     setModeState('mine')
-    persist(ws, sess)
+    persist(ws, sess, 'mine')
   }, [persist])
 
   const update = useCallback<WorkspaceCtx['update']>((fn) => {
     setWorkspace((prev) => {
       if (!prev) return prev
       const next = fn(prev)
-      if (store) setPersistent(store.save({ workspace: next, session: { actor: next.owner.name, role: 'owner' } }))
+      if (store) {
+        setPersistent(store.save({
+          workspace: next, session: { actor: next.owner.name, role: 'owner' }, mode: 'mine',
+        }))
+      }
       return next
     })
   }, [store])
@@ -137,14 +141,20 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const browseSample = useCallback(() => {
     setInsideApp(true)
     setModeState('sample')
-  }, [])
+    if (workspace) persist(workspace, session, 'sample')
+  }, [workspace, session, persist])
 
   /** The sample is never written to, so switching to it is just a different read. */
   const setMode = useCallback((m: WorkspaceMode) => {
     setInsideApp(true)
-    setModeState(workspace ? m : 'sample')
-    setSession(m === 'mine' && workspace ? { actor: workspace.owner.name, role: 'owner' } : SAMPLE_SESSION)
-  }, [workspace])
+    const to = workspace ? m : 'sample'
+    setModeState(to)
+    const sess = to === 'mine' && workspace
+      ? { actor: workspace.owner.name, role: 'owner' as const }
+      : SAMPLE_SESSION
+    setSession(sess)
+    if (workspace) persist(workspace, sess, to)
+  }, [workspace, persist])
 
   const bundle = useMemo(
     () => (mode === 'mine' && workspace ? bundleFor(workspace, today) : SAMPLE_BUNDLE),

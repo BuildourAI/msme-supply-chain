@@ -256,6 +256,22 @@ describe('what each screen is waiting for', () => {
     expect(needFor('/sourcing/intake')!.blocked(ws)).toBeNull()
   })
 
+  it('offers the step that actually unblocks it, not a fixed one', () => {
+    const ws = fresh()
+    // nothing at all: every screen sends you to add a material
+    for (const path of Object.keys(NEEDS)) {
+      expect(NEEDS[path].step(ws), path).toBe('materials')
+    }
+    // materials in, nothing else: the desk now wants a supplier
+    ws.items = [material()]
+    expect(NEEDS['/sourcing/desk'].step(ws)).toBe('suppliers')
+    expect(NEEDS['/sourcing/blocked'].step(ws)).toBe('stock')
+    // supplier in: the desk wants the count
+    ws.vendors = [supplier()]
+    ws.vendorItems = [quote()]
+    expect(NEEDS['/sourcing/desk'].step(ws)).toBe('stock')
+  })
+
   it('holds the comparison back until two suppliers quote the same material', () => {
     const ws = setUp()
     expect(needFor('/sourcing/compare')!.blocked(ws)).toMatch(/one supplier so far/)

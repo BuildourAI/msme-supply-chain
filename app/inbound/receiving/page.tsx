@@ -10,6 +10,7 @@ import { buildRows, type SeedBundle } from '@/lib/domain/derive'
 import { DEFAULT_POLICY } from '@/lib/domain/policy'
 import * as S from '@/lib/seed/sourcing'
 import { longDate } from '@/lib/domain/format'
+import { StageGate } from '@/components/onboard/StageGate'
 
 const seed: SeedBundle = {
   today: S.TODAY_SOURCING, items: S.items, vendors: S.vendors, vendorItems: S.vendorItems,
@@ -20,7 +21,7 @@ const leadRows = buildRows(seed, DEFAULT_POLICY).map((r) => ({
   quoted: r.chosen.vendorItem.quotedLeadTimeDays, actual: r.leadTime,
 }))
 
-export default function Page() {
+function PageBody() {
   const { queue, today } = useInbound()
   return (
     <>
@@ -46,4 +47,8 @@ export default function Page() {
       </div>
     </>
   )
+}
+
+export default function Page() {
+  return <StageGate later="Inbound and jobwork"><PageBody /></StageGate>
 }

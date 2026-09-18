@@ -9,6 +9,7 @@ import { buildRows, type SeedBundle } from '@/lib/domain/derive'
 import { DEFAULT_POLICY } from '@/lib/domain/policy'
 import * as S from '@/lib/seed/sourcing'
 import { lakh, longDate } from '@/lib/domain/format'
+import { StageGate } from '@/components/onboard/StageGate'
 
 const seed: SeedBundle = {
   today: S.TODAY_SOURCING, items: S.items, vendors: S.vendors, vendorItems: S.vendorItems,
@@ -23,7 +24,7 @@ const needs = buildRows(seed, DEFAULT_POLICY)
     rate: r.item.lastPurchaseRate,
   }))
 
-export default function Page() {
+function PageBody() {
   const { offcutValue, cutRows, today } = useInventory()
   const below = cutRows.filter((r) => r.belowPlan).length
   return (
@@ -50,4 +51,8 @@ export default function Page() {
       </div>
     </>
   )
+}
+
+export default function Page() {
+  return <StageGate later="Inventory and warehousing"><PageBody /></StageGate>
 }

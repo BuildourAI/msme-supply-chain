@@ -12,13 +12,19 @@
  * with third-party cookies blocked, and when a quota is full, and a company's
  * set-up screen must not be the thing that breaks because of it.
  */
-import type { Session, Workspace } from './types'
+import type { Session, Workspace, WorkspaceMode } from './types'
 
 const KEY = 'msme.workspace.v1'
 
 export interface Stored {
   workspace: Workspace
   session: Session
+  /**
+   * Which company was on screen. Somebody who goes to look at the sample and
+   * then follows a link should still be looking at the sample — snapping them
+   * back to their own data mid-browse reads as the app losing their place.
+   */
+  mode?: WorkspaceMode
 }
 
 export interface WorkspaceStore {

@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { STAGES, type ModuleEntry } from '@/lib/seed/stages'
 import { Icon, Logo, STAGE_ICON, type IconName } from '@/components/ui/icons'
 import { LockDialog, type Locked } from './LockDialog'
+import { Checklist } from '@/components/onboard/Checklist'
+import { useWorkspace } from '@/components/workspace/store'
 
 const PAINKILLERS = 'Painkillers solved'
 
@@ -49,6 +51,7 @@ const MenuRule = ({ label }: { label: string }) => (
  * document and make every by-name lookup ambiguous.
  */
 export function Sidebar({ drawer, onClose }: { drawer: boolean; onClose: () => void }) {
+  const { mode } = useWorkspace()
   const pathname = usePathname()
   const [open, setOpen] = useState<string | null>(null)
   const [lock, setLock] = useState<Locked | null>(null)
@@ -159,17 +162,22 @@ export function Sidebar({ drawer, onClose }: { drawer: boolean; onClose: () => v
         {/* The promise, where the reference puts its upgrade card. It used to
             be a footer nobody scrolled to; here it is on every screen. */}
         <div className="shrink-0 border-t border-line p-2">
-          <div className="rounded-lg bg-accent-tint p-2.5">
-            <p className="text-[12px] font-bold leading-tight">Suggests, never sends</p>
-            <p className="mt-1 text-[10.5px] leading-snug text-ink-2">
-              It drafts an order, holds a line and recommends. It never places an order, contacts a
-              supplier or edits a customer record. All figures are sample data.
-            </p>
-            <Link href="/reports"
-              className="press mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-accent-ink hover:underline">
-              See it reconcile <Icon name="arrow-right" className="size-3" />
-            </Link>
-          </div>
+          {/* In the owner's own company this slot carries how far through the
+              set-up they are, which is the thing worth a permanent place on
+              every screen until it is finished. */}
+          {mode === 'mine' ? <Checklist compact /> : (
+            <div className="rounded-lg bg-accent-tint p-2.5">
+              <p className="text-[12px] font-bold leading-tight">Suggests, never sends</p>
+              <p className="mt-1 text-[10.5px] leading-snug text-ink-2">
+                It drafts an order, holds a line and recommends. It never places an order, contacts a
+                supplier or edits a customer record. All figures are sample data.
+              </p>
+              <Link href="/reports"
+                className="press mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-accent-ink hover:underline">
+                See it reconcile <Icon name="arrow-right" className="size-3" />
+              </Link>
+            </div>
+          )}
           <Link href="/reports"
             className="press mt-1 flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[12px] text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink">
             <Icon name="help" className="size-4 text-ink-3" /> Help &amp; Support

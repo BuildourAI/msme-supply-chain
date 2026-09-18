@@ -10,6 +10,7 @@ import { DEFAULT_POLICY } from '@/lib/domain/policy'
 import { addDays, daysBetween } from '@/lib/domain/calc'
 import * as S from '@/lib/seed/sourcing'
 import { longDate, money, qtyText, shortDate } from '@/lib/domain/format'
+import { StageGate } from '@/components/onboard/StageGate'
 
 const seed: SeedBundle = {
   today: S.TODAY_SOURCING, items: S.items, vendors: S.vendors, vendorItems: S.vendorItems,
@@ -17,7 +18,7 @@ const seed: SeedBundle = {
 }
 const rows = buildRows(seed, DEFAULT_POLICY)
 
-export default function Page() {
+function PageBody() {
   const { syncRows, outOfSync, today, policy } = useInbound()
 
   // The board reads the ACKNOWLEDGED quantity and date, because that is what will
@@ -72,4 +73,8 @@ export default function Page() {
       </div>
     </>
   )
+}
+
+export default function Page() {
+  return <StageGate later="Inbound and jobwork"><PageBody /></StageGate>
 }

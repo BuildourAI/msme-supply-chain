@@ -6,8 +6,9 @@ import { JobworkRegister } from '@/components/inbound/Jobwork'
 import { useInbound } from '@/components/inbound/store'
 import { Note } from '@/components/ui/Note'
 import { lakh, longDate } from '@/lib/domain/format'
+import { StageGate } from '@/components/onboard/StageGate'
 
-export default function Page() {
+function PageBody() {
   const { challanRows, jobworkTotal, today } = useInbound()
   const overdue = challanRows.filter((r) => r.overdue).length
   return (
@@ -32,4 +33,8 @@ export default function Page() {
       <JobworkRegister />
     </>
   )
+}
+
+export default function Page() {
+  return <StageGate later="Inbound and jobwork"><PageBody /></StageGate>
 }

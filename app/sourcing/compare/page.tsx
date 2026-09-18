@@ -7,6 +7,7 @@ import { useDesk } from '@/components/desk/store'
 import { Note } from '@/components/ui/Note'
 import { money } from '@/lib/domain/format'
 import type { DerivedRow } from '@/lib/domain/derive'
+import { StageGate } from '@/components/onboard/StageGate'
 
 /**
  * SRC-03 on its own page.
@@ -44,7 +45,7 @@ function verdict(r: DerivedRow) {
   return { best, cheap, perUnit, onThisOrder, share, flips: r.flipsVendor }
 }
 
-export default function Page() {
+function PageBody() {
   const { rows, selected, select } = useDesk()
   const verdicts = rows.map((r) => ({ r, ...verdict(r) }))
   const flipping = verdicts.filter((v) => v.flips)
@@ -191,4 +192,8 @@ export default function Page() {
       </div>
     </>
   )
+}
+
+export default function Page() {
+  return <StageGate><PageBody /></StageGate>
 }

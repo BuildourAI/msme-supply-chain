@@ -6,8 +6,9 @@ import { CountHistory, StockLedger } from '@/components/inventory/Ledger'
 import { useInventory } from '@/components/inventory/store'
 import { Note } from '@/components/ui/Note'
 import { longDate } from '@/lib/domain/format'
+import { StageGate } from '@/components/onboard/StageGate'
 
-export default function Page() {
+function PageBody() {
   const { stockRows, accuracy, today } = useInventory()
   const stale = stockRows.filter((r) => r.stale).length
   return (
@@ -32,4 +33,8 @@ export default function Page() {
       </div>
     </>
   )
+}
+
+export default function Page() {
+  return <StageGate later="Inventory and warehousing"><PageBody /></StageGate>
 }

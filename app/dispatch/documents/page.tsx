@@ -6,8 +6,9 @@ import { DocumentRegister } from '@/components/dispatch/Documents'
 import { useDispatch } from '@/components/dispatch/store'
 import { Note } from '@/components/ui/Note'
 import { longDate } from '@/lib/domain/format'
+import { StageGate } from '@/components/onboard/StageGate'
 
-export default function Page() {
+function PageBody() {
   const { notes, today } = useDispatch()
   return (
     <>
@@ -29,4 +30,8 @@ export default function Page() {
       </div>
     </>
   )
+}
+
+export default function Page() {
+  return <StageGate later="Dispatch and logistics"><PageBody /></StageGate>
 }

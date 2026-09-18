@@ -14,8 +14,13 @@ import type { Workspace } from './types'
 export interface Need {
   /** what this screen would show once it can */
   shows: string
-  /** the step that unblocks it */
-  step: StepId
+  /**
+   * The step that unblocks it. A function of the workspace, not a constant: a
+   * screen can be waiting on materials today and on a stock count tomorrow, and
+   * an empty state that says "you have not added a supplier" above a button
+   * reading "Add a material" is worse than no button at all.
+   */
+  step: (ws: Workspace) => StepId
   /** why it cannot yet — written for the owner, not the developer */
   blocked: (ws: Workspace) => string | null
 }
@@ -37,12 +42,13 @@ const noStock = (ws: Workspace) =>
 export const NEEDS: Record<string, Need> = {
   '/sourcing/desk': {
     shows: 'what to buy today, with the reason it was raised',
-    step: 'materials',
+    step: (ws) => (ws.items.length === 0 ? 'materials'
+      : quotedItems(ws).length === 0 ? 'suppliers' : 'stock'),
     blocked: (ws) => noMaterials(ws) ?? noSuppliers(ws) ?? nothingQuotable(ws) ?? noStock(ws),
   },
   '/sourcing/compare': {
     shows: 'why the cheapest quote is not always the cheapest material',
-    step: 'suppliers',
+    step: (ws) => (ws.items.length === 0 ? 'materials' : 'suppliers'),
     blocked: (ws) => {
       const base = noMaterials(ws) ?? noSuppliers(ws) ?? nothingQuotable(ws)
       if (base) return base
@@ -56,12 +62,12 @@ export const NEEDS: Record<string, Need> = {
   },
   '/sourcing/blocked': {
     shows: 'money sitting in stock you cannot use, by cause and by age',
-    step: 'stock',
+    step: (ws) => (ws.items.length === 0 ? 'materials' : 'stock'),
     blocked: (ws) => noMaterials(ws) ?? noStock(ws),
   },
   '/sourcing/intake': {
     shows: 'what each supplier quoted, searchable by material',
-    step: 'suppliers',
+    step: (ws) => (ws.items.length === 0 ? 'materials' : 'suppliers'),
     blocked: (ws) => noSuppliers(ws),
   },
 }

@@ -3,8 +3,9 @@ import { stageById } from '@/lib/seed/stages'
 import { Card } from '@/components/ui/bits'
 import { GUARDRAILS } from '@/lib/seed/stages'
 import { Note } from '@/components/ui/Note'
+import { StageGate } from '@/components/onboard/StageGate'
 
-export default function Page() {
+function PageBody() {
   return (
     <StagePage stage={stageById('dispatch')}>
       <Card title="What Stage 5 would need first"
@@ -52,4 +53,8 @@ export default function Page() {
       </Card>
     </StagePage>
   )
+}
+
+export default function Page() {
+  return <StageGate later="Dispatch and logistics"><PageBody /></StageGate>
 }

@@ -8,13 +8,14 @@ import { useInbound } from '@/components/inbound/store'
 import { INBOUND_TABS } from '@/components/inbound/InboundTabs'
 import { money, type Tone } from '@/lib/domain/format'
 import { Note } from '@/components/ui/Note'
+import { StageGate } from '@/components/onboard/StageGate'
 
 /**
  * The stage page is the front door to the three systems. It shows the one number
  * each of them exists to produce — a number nobody at this factory could have
  * answered before — and opens onto the screen that produces it.
  */
-export default function Page() {
+function PageBody() {
   const { queue, qcHeld, closedRows, exposure, outOfSync, challanRows, jobworkTotal, unaccountedTotal } = useInbound()
   const overdueQc = queue.filter((r) => r.state === 'overdue').length
   const notTold = outOfSync.filter((r) => r.state === 'not_told').length
@@ -93,4 +94,8 @@ export default function Page() {
       </Card>
     </StagePage>
   )
+}
+
+export default function Page() {
+  return <StageGate later="Inbound and jobwork"><PageBody /></StageGate>
 }

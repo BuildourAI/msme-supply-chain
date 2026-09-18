@@ -8,12 +8,13 @@ import { useInventory } from '@/components/inventory/store'
 import { INVENTORY_TABS } from '@/components/inventory/InventoryTabs'
 import { money, type Tone } from '@/lib/domain/format'
 import { Note } from '@/components/ui/Note'
+import { StageGate } from '@/components/onboard/StageGate'
 
 /**
  * The front door. One number per system — each of them a number this factory
  * could not have produced before — and a link to the screen that produces it.
  */
-export default function Page() {
+function PageBody() {
   const {
     stockRows, staleValue, accuracy, countRows, offcutValue, offcutRows,
     cutRows, netLoss, scrapRows, unrealised, lossRows,
@@ -98,4 +99,8 @@ export default function Page() {
       </Card>
     </StagePage>
   )
+}
+
+export default function Page() {
+  return <StageGate later="Inventory and warehousing"><PageBody /></StageGate>
 }

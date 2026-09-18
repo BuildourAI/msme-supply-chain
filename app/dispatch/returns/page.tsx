@@ -6,8 +6,9 @@ import { ReturnsRegister } from '@/components/dispatch/Returns'
 import { useDispatch } from '@/components/dispatch/store'
 import { Note } from '@/components/ui/Note'
 import { longDate, num } from '@/lib/domain/format'
+import { StageGate } from '@/components/onboard/StageGate'
 
-export default function Page() {
+function PageBody() {
   const { rmaRows, rmaRate, today } = useDispatch()
   const open = rmaRows.filter((r) => r.rma.state !== 'closed').length
   return (
@@ -31,4 +32,8 @@ export default function Page() {
       </div>
     </>
   )
+}
+
+export default function Page() {
+  return <StageGate later="Dispatch and logistics"><PageBody /></StageGate>
 }

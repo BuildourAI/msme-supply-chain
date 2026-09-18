@@ -6,8 +6,9 @@ import { LossLedger, LossSummary, ScrapVsTarget } from '@/components/inventory/W
 import { useInventory } from '@/components/inventory/store'
 import { Note } from '@/components/ui/Note'
 import { lakh, longDate } from '@/lib/domain/format'
+import { StageGate } from '@/components/onboard/StageGate'
 
-export default function Page() {
+function PageBody() {
   const { netLoss, scrapRows, today } = useInventory()
   const over = scrapRows.filter((s) => s.over).length
   return (
@@ -34,4 +35,8 @@ export default function Page() {
       </div>
     </>
   )
+}
+
+export default function Page() {
+  return <StageGate later="Inventory and warehousing"><PageBody /></StageGate>
 }

@@ -8,6 +8,7 @@ import { buildRows, type DerivedRow, type SeedBundle } from '@/lib/domain/derive
 import { DEFAULT_POLICY } from '@/lib/domain/policy'
 import * as S from '@/lib/seed/sourcing'
 import { STATUS_LABEL, STATUS_TONE } from '@/lib/domain/format'
+import { StageGate } from '@/components/onboard/StageGate'
 
 /**
  * The feeds map on its own page.
@@ -51,7 +52,7 @@ function Lane({ r }: { r: DerivedRow }) {
   )
 }
 
-export default function Page() {
+function PageBody() {
   const goods = [...new Set(S.items.flatMap((i) => i.feeds))]
     .map((g) => {
       const feeders = rows.filter((r) => r.item.feeds.includes(g))
@@ -142,4 +143,8 @@ export default function Page() {
       </Card>
     </>
   )
+}
+
+export default function Page() {
+  return <StageGate later="Production material flow"><PageBody /></StageGate>
 }

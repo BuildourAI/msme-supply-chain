@@ -13,6 +13,7 @@ import { lakh, longDate, money, num, qtyText, shortDate, STATUS_LABEL } from '@/
 import { OWNER_POLICY } from '@/lib/domain/policy'
 import { useApp } from '@/state/app-store'
 import { daysBetween } from '@/lib/domain/calc'
+import { StageGate } from '@/components/onboard/StageGate'
 
 const lw = buildLineWatch()
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -330,7 +331,7 @@ function MaterialTile({ d, index = 0 }: { d: DerivedMaterial; index?: number }) 
   )
 }
 
-export default function Page() {
+function PageBody() {
   const [showHealthy, setShowHealthy] = useState(false)
   const t = lw.tiles
   return (
@@ -482,4 +483,8 @@ export default function Page() {
       </div>
     </>
   )
+}
+
+export default function Page() {
+  return <StageGate later="Production material flow"><PageBody /></StageGate>
 }
