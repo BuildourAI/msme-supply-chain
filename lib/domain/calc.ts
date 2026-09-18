@@ -119,21 +119,37 @@ export function trailingLeadTimeDays(
   const lastSix = [...receipts]
     .sort((a, b) => b.receivedOn.localeCompare(a.receivedOn)).slice(0, 6).reverse()
   const spans = lastSix.map((r) => daysBetween(r.orderedOn, r.receivedOn))
-  const mean = spans.length ? round(spans.reduce((a, b) => a + b, 0) / spans.length, 2) : 0
+  const measured = spans.length > 0
+  const mean = measured ? round(spans.reduce((a, b) => a + b, 0) / spans.length, 2) : 0
+  // A company on its first day has received nothing yet, so there is no trailing
+  // average to take. Falling back to zero would read as "arrives the same day"
+  // and quietly collapse every reorder point to the safety stock; the quoted
+  // figure is the only number that exists, so it stands in and is labelled as
+  // quoted. It stops being a quote the day the first receipt is recorded.
+  const value = measured ? mean : (quoted ?? 0)
   return D(
-    mean, 'Vendor lead time',
-    'mean(last 6 actual receipts: received_on − ordered_on)',
+    value, 'Vendor lead time',
+    measured
+      ? 'mean(last 6 actual receipts: received_on \u2212 ordered_on)'
+      : 'no receipts recorded yet \u2014 the vendor\u2019s quoted lead time stands in',
     [
       ...lastSix.map((r, i) => ({
-        name: `receipt ${i + 1}`, value: `${r.orderedOn} → ${r.receivedOn}`,
+        name: `receipt ${i + 1}`, value: `${r.orderedOn} \u2192 ${r.receivedOn}`,
         unit: `${spans[i]} days`,
       })),
-      { name: 'mean', value: mean, unit: 'days' },
+      measured
+        ? { name: 'mean', value: mean, unit: 'days' }
+        : {
+            name: 'quoted lead time', value: quoted ?? 0, unit: 'days',
+            source: 'what the supplier says \u2014 not yet checked against a receipt',
+          },
     ],
     {
       unit: 'days',
-      note: 'Never the vendor\u2019s quoted figure — §5 calls this non-negotiable.',
-      crossCheck: quoted === undefined ? undefined : {
+      note: measured
+        ? 'Never the vendor\u2019s quoted figure \u2014 \u00a75 calls this non-negotiable.'
+        : 'Quoted, not measured. \u00a75 makes the trailing average of the last six receipts authoritative because the quoted figure flatters. This line becomes that average as soon as goods start arriving against it.',
+      crossCheck: quoted === undefined || !measured ? undefined : {
         label: 'Vendor\u2019s quoted lead time',
         expected: `${quoted} days quoted`,
         actual: `${mean} days actual`,
