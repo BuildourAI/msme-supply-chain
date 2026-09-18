@@ -150,6 +150,31 @@ function Dashboard() {
   return <SampleDashboard />
 }
 
+/**
+ * A way in, for somebody who chose to look around first.
+ *
+ * Without it the sample company is a dead end: they declined the sign-in, and
+ * the only route back to it is a menu they have no reason to open. One line,
+ * above the dashboard, and only when there is no company of their own.
+ */
+function SetUpInvitation() {
+  const { hasAccount, signOut } = useWorkspace()
+  if (hasAccount) return null
+  return (
+    <div className="anim-fade-up mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-accent/30 bg-accent-tint px-3.5 py-2.5">
+      <Icon name="boxes" className="size-4 shrink-0 text-accent-ink" />
+      <p className="min-w-0 text-[12.5px] leading-snug text-ink-2">
+        <strong className="text-ink">This is a worked example</strong>, built on sample figures.
+        Set your own company up and every screen runs on your numbers instead.
+      </p>
+      <button type="button" onClick={signOut}
+        className="press ml-auto shrink-0 rounded-md border border-accent-ink bg-accent-ink px-2.5 py-1.5 text-[12.5px] font-medium text-on-accent hover:bg-accent">
+        Set up my company
+      </button>
+    </div>
+  )
+}
+
 function SampleDashboard() {
   /* One switch for the whole page. Closed, it is sixteen figures and their
      pictures on one screen; open, every tile explains itself and the sections
@@ -277,6 +302,7 @@ function SampleDashboard() {
           </button>
         </>} />
 
+      <SetUpInvitation />
       <HeadlineStrip cells={[
         { label: 'Lines needing a decision', d: kpis.linesNeedingDecision, format: 'int', tone: 'critical',
           icon: 'alert', caption: '3 at risk · 1 late on timing' },
