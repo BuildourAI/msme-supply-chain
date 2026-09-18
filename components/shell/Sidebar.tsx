@@ -6,6 +6,8 @@ import { STAGES, type ModuleEntry } from '@/lib/seed/stages'
 import { Icon, Logo, STAGE_ICON, type IconName } from '@/components/ui/icons'
 import { LockDialog, type Locked } from './LockDialog'
 import { Checklist } from '@/components/onboard/Checklist'
+import { DeskNav } from './DeskNav'
+import { stageOf } from '@/lib/workspace/reveal'
 import { useWorkspace } from '@/components/workspace/store'
 
 const PAINKILLERS = 'Painkillers solved'
@@ -53,6 +55,7 @@ const MenuRule = ({ label }: { label: string }) => (
 export function Sidebar({ drawer, onClose }: { drawer: boolean; onClose: () => void }) {
   const { mode } = useWorkspace()
   const pathname = usePathname()
+  const desk = mode === 'mine' && stageOf(pathname) !== null
   const [open, setOpen] = useState<string | null>(null)
   const [lock, setLock] = useState<Locked | null>(null)
 
@@ -77,6 +80,10 @@ export function Sidebar({ drawer, onClose }: { drawer: boolean; onClose: () => v
       )}
 
       <aside className={`${drawer ? 'fixed inset-y-0 left-0 z-50 flex w-[272px] max-w-[85vw] shadow-xl' : 'hidden'} shrink-0 flex-col border-r border-line bg-surface lg:sticky lg:top-0 lg:z-30 lg:flex lg:h-screen lg:w-[228px] lg:shadow-none`}>
+        {/* Inside a stage, in the owner's own company, the rail is the stage's
+            own six rows and nothing else. Everywhere else — the sample company,
+            and the stage picker — it is the full map. */}
+        {desk ? <DeskNav onNavigate={onClose} /> : <>
         <div className="flex items-center gap-2 px-3 py-3">
           <Logo className="size-7 shrink-0 text-accent" />
           <span className="min-w-0">
@@ -161,6 +168,8 @@ export function Sidebar({ drawer, onClose }: { drawer: boolean; onClose: () => v
 
         {/* The promise, where the reference puts its upgrade card. It used to
             be a footer nobody scrolled to; here it is on every screen. */}
+        </>}
+
         <div className="shrink-0 border-t border-line p-2">
           {/* In the owner's own company this slot carries how far through the
               set-up they are, which is the thing worth a permanent place on

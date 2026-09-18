@@ -113,7 +113,7 @@ function TopBar({ onMenu, onActivity }: { onMenu: () => void; onActivity: () => 
 function Chrome({ children }: { children: React.ReactNode }) {
   const [activity, setActivity] = useState(false)
   const [drawer, setDrawer] = useState(false)
-  const { ready, hasAccount, insideApp } = useWorkspace()
+  const { ready, hasAccount, insideApp, mode } = useWorkspace()
   const pathname = usePathname()
 
   /**
@@ -134,6 +134,27 @@ function Chrome({ children }: { children: React.ReactNode }) {
     return (
       <>
         <main className="min-h-screen">{children}</main>
+        <Toast />
+      </>
+    )
+  }
+
+  /**
+   * The stage picker is the navigation. Putting a rail of five stages and
+   * thirty-four modules beside a screen whose whole job is "pick a stage"
+   * offers the choice twice, and the rail offers it worse. The top bar stays,
+   * because whose company this is remains worth knowing.
+   */
+  const picking = ready && mode === 'mine' && pathname === '/'
+  if (picking) {
+    return (
+      <>
+        <div className="flex min-h-screen flex-col">
+          <TopBar onMenu={() => setDrawer(true)} onActivity={() => setActivity(true)} />
+          <main className="min-w-0 flex-1 px-3 py-6 lg:px-4">{children}</main>
+        </div>
+        <ActivityDrawer open={activity} onClose={() => setActivity(false)} />
+        <Inspector />
         <Toast />
       </>
     )

@@ -17,7 +17,7 @@ export type IconName =
   | 'search' | 'bell' | 'chevron' | 'lock' | 'check' | 'arrow-right'
   | 'activity' | 'alert' | 'clock' | 'cash' | 'calendar' | 'menu' | 'help'
   | 'close' | 'scale' | 'doc' | 'arrow-down' | 'info' | 'mail' | 'camera' | 'filter'
-  | 'ruler' | 'eye' | 'hash'
+  | 'ruler' | 'eye' | 'hash' | 'pencil' | 'trash' | 'plus' | 'star'
 
 const PATHS: Record<IconName, React.ReactNode> = {
   home: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5.5 9.5V20h13V9.5" /></>,
@@ -40,6 +40,10 @@ const PATHS: Record<IconName, React.ReactNode> = {
   calendar: <><rect x="3.5" y="5" width="17" height="15.5" rx="2" /><path d="M3.5 10h17M8 2.5V6M16 2.5V6" /></>,
   menu: <path d="M3.5 7h17M3.5 12h17M3.5 17h17" />,
   help: <><circle cx="12" cy="12" r="8.5" /><path d="M9.6 9.5a2.5 2.5 0 1 1 3.3 2.4c-.6.2-.9.8-.9 1.4v.4" /><circle cx="12" cy="16.5" r=".9" fill="currentColor" stroke="none" /></>,
+  pencil: <><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17z" /><path d="m14.5 6.5 3 3" /></>,
+  trash: <><path d="M4 6.5h16" /><path d="M9.5 6.5V4.5h5v2" /><path d="M6.5 6.5 7.5 20h9l1-13.5" /><path d="M10.5 10v6M13.5 10v6" /></>,
+  plus: <path d="M12 5v14M5 12h14" />,
+  star: <path d="m12 3.5 2.6 5.5 5.9.8-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.8l5.9-.8z" />,
   close: <path d="m5.5 5.5 13 13M18.5 5.5l-13 13" />,
   scale: <><path d="M12 3.5v17M5 7.5h14" /><path d="M5 7.5 2.5 14h5zM19 7.5 16.5 14h5z" /><path d="M8 20.5h8" /></>,
   doc: <><path d="M5 20.5V3.5h8l5 5v12z" /><path d="M13 3.5v5h5" /><path d="M8.5 13h7M8.5 16.5h5" /></>,
