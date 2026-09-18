@@ -39,6 +39,17 @@ interface WorkspaceCtx {
   hasAccount: boolean
   /** storage refused to keep it: a private window, a full quota */
   persistent: boolean
+  /**
+   * The visitor is already inside the app, so the root shows the dashboard
+   * rather than the sign-in. True when they asked for the sample company by URL
+   * (`?company=sample`), when they arrived on any screen other than the root,
+   * and once they have chosen to look around. Without it, clicking Overview in
+   * the nav would throw somebody browsing the sample company back out to a
+   * sign-in screen they had already declined.
+   */
+  insideApp: boolean
+  /** they chose to look around rather than set their own company up */
+  browseSample: () => void
   createWorkspace: (input: {
     ownerName: string; contact: string; companyName: string; makes: string; role?: PersonRole
   }) => void
@@ -67,15 +78,20 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false)
   const [persistent, setPersistent] = useState(true)
   const [today, setToday] = useState(SAMPLE_BUNDLE.today)
+  const [insideApp, setInsideApp] = useState(false)
 
   useEffect(() => {
     const s = browserStore()
     setStore(s)
+    const asked = new URLSearchParams(window.location.search).get('company') === 'sample'
+    // Landing anywhere but the root means they followed a link into a screen,
+    // not that they are a first-time visitor deciding whether to sign up.
+    setInsideApp(asked || window.location.pathname !== '/')
     const held = s.load()
     if (held) {
       setWorkspace(held.workspace)
       setSession(held.session)
-      setModeState('mine')
+      if (!asked) setModeState('mine')
     }
     setToday(todayIso())
     setReady(true)
@@ -113,10 +129,19 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     setWorkspace(null)
     setSession(SAMPLE_SESSION)
     setModeState('sample')
+    // Signing out means no longer being inside, so the root asks who this is
+    // again rather than leaving the last company's dashboard on screen.
+    setInsideApp(false)
   }, [store])
+
+  const browseSample = useCallback(() => {
+    setInsideApp(true)
+    setModeState('sample')
+  }, [])
 
   /** The sample is never written to, so switching to it is just a different read. */
   const setMode = useCallback((m: WorkspaceMode) => {
+    setInsideApp(true)
     setModeState(workspace ? m : 'sample')
     setSession(m === 'mine' && workspace ? { actor: workspace.owner.name, role: 'owner' } : SAMPLE_SESSION)
   }, [workspace])
@@ -134,8 +159,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     ready,
     hasAccount: workspace != null,
     persistent,
-    createWorkspace, update, setMode, signOut,
-  }), [mode, workspace, session, bundle, today, ready, persistent, createWorkspace, update, setMode, signOut])
+    insideApp,
+    createWorkspace, update, setMode, signOut, browseSample,
+  }), [mode, workspace, session, bundle, today, ready, persistent, insideApp,
+    createWorkspace, update, setMode, signOut, browseSample])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

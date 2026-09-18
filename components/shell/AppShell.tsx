@@ -1,8 +1,9 @@
 'use client'
 import { useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { AppProvider, useApp } from '@/state/app-store'
 import { WorkspaceProvider, useWorkspace, useWorkspaceKey } from '@/components/workspace/store'
-import { ROLE_LABEL } from '@/lib/workspace/types'
+import { IdentityMenu } from './IdentityMenu'
 import { Inspector } from '@/components/ui/Inspector'
 import { Sheet } from '@/components/ui/Sheet'
 import { Sidebar } from './Sidebar'
@@ -69,11 +70,7 @@ function Toast() {
 
 function TopBar({ onMenu, onActivity }: { onMenu: () => void; onActivity: () => void }) {
   const { audit } = useApp()
-  const { session } = useWorkspace()
-  const [who, role] = session.actor.includes(' · ')
-    ? session.actor.split(' · ')
-    : [session.actor, ROLE_LABEL[session.role]]
-  const initials = who.split(/[\s.]+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase()
+  const { mode } = useWorkspace()
   return (
     <header className="sticky top-0 z-20 flex items-center gap-2 border-b border-line bg-surface px-3 py-2">
       <button type="button" onClick={onMenu} aria-label="Open navigation"
@@ -83,9 +80,11 @@ function TopBar({ onMenu, onActivity }: { onMenu: () => void; onActivity: () => 
 
       <CommandSearch />
 
-      <span className="mono hidden shrink-0 rounded-full border border-line bg-ground px-2.5 py-0.5 text-[10.5px] text-ink-3 xl:inline">
-        sample data · not any client’s real trading data
-      </span>
+      {mode === 'sample' && (
+        <span className="mono hidden shrink-0 rounded-full border border-line bg-ground px-2.5 py-0.5 text-[10.5px] text-ink-3 xl:inline">
+          sample data · not any client’s real trading data
+        </span>
+      )}
 
       <div className="ml-auto flex shrink-0 items-center gap-1">
         {/* The name is sr-only text rather than an aria-label, so that the
@@ -105,16 +104,7 @@ function TopBar({ onMenu, onActivity }: { onMenu: () => void; onActivity: () => 
           )}
         </button>
 
-        <span className="flex items-center gap-2 rounded-md py-1 pl-1 pr-1.5">
-          <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-full bg-accent-tint text-[11px] font-bold text-accent-ink">
-            {initials}
-          </span>
-          <span className="hidden min-w-0 sm:block">
-            <span className="block truncate text-[12px] font-semibold leading-tight">{who}</span>
-            <span className="block truncate text-[10.5px] leading-tight text-ink-3">{role}</span>
-          </span>
-          <Icon name="chevron" className="hidden size-3 rotate-90 text-ink-4 sm:block" />
-        </span>
+        <IdentityMenu />
       </div>
     </header>
   )
@@ -123,6 +113,25 @@ function TopBar({ onMenu, onActivity }: { onMenu: () => void; onActivity: () => 
 function Chrome({ children }: { children: React.ReactNode }) {
   const [activity, setActivity] = useState(false)
   const [drawer, setDrawer] = useState(false)
+  const { ready, hasAccount, insideApp } = useWorkspace()
+  const pathname = usePathname()
+
+  /**
+   * The sign-in stands on its own. Wrapping it in the nav, a command palette
+   * and somebody else's name in the corner offers a stranger five stages of a
+   * system they have not set up yet, and answers "whose data is this?" with the
+   * wrong name. Until there is a company, there is nothing to navigate.
+   */
+  const signingIn = ready && !hasAccount && !insideApp && pathname === '/'
+  if (signingIn) {
+    return (
+      <>
+        <main className="min-h-screen">{children}</main>
+        <Toast />
+      </>
+    )
+  }
+
   return (
     <>
       {/* Rail beside content, and nothing between the content and the edge of

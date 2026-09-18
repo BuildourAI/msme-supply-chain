@@ -18,6 +18,7 @@ import { longDate, money, STATUS_LABEL, STATUS_TONE } from '@/lib/domain/format'
 import type { Derived } from '@/lib/domain/types'
 import { useDesk } from '@/components/desk/store'
 import { useWorkspace } from '@/components/workspace/store'
+import { Login } from '@/components/onboard/Login'
 import { useInventory } from '@/components/inventory/store'
 import { useInbound } from '@/components/inbound/store'
 import { useDispatch } from '@/components/dispatch/store'
@@ -52,7 +53,24 @@ const quotedFor = (vendorId: string, itemId: string) =>
   S.vendorItems.find((v) => v.vendorId === vendorId && v.itemId === itemId)?.quotedLeadTimeDays ?? 0
 const onTime = X.onTimeRate(S.receipts, quotedFor)
 
+/**
+ * The root decides who is looking.
+ *
+ * Somebody with no company set up gets the sign-in, because the question the
+ * review call kept asking — what does this look like fresh, with no data in it —
+ * has to have an answer, and the answer cannot be somebody else's dashboard.
+ * `?company=sample` asks for the worked example explicitly.
+ */
 export default function Page() {
+  const { ready, hasAccount, insideApp } = useWorkspace()
+  // One frame, while storage is read. Rendering the dashboard and then yanking
+  // it away for a sign-in screen is worse than a moment of nothing.
+  if (!ready) return <div className="min-h-[60vh]" aria-hidden />
+  if (!hasAccount && !insideApp) return <Login />
+  return <Dashboard />
+}
+
+function Dashboard() {
   /* One switch for the whole page. Closed, it is sixteen figures and their
      pictures on one screen; open, every tile explains itself and the sections
      get their footnotes back. The default is the quick view, because that is
