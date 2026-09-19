@@ -88,10 +88,38 @@ export function cellsToRows(cells: TextCell[]): string[][] {
 
   const heights = kept.map((c) => c.h).filter((h) => h > 0).sort((a, b) => a - b)
   const median = heights.length > 0 ? heights[Math.floor(heights.length / 2)] : 9
-  const sameLine = Math.max(2, median * 0.5)
-  const sameCell = Math.max(1, median * 0.25)
 
-  const sorted = [...kept].sort((a, b) => (a.y - b.y) || (a.x - b.x))
+  /*
+   * Take the tilt out of the page before anything else looks at it.
+   *
+   * A PDF is square and this comes back as zero. A photograph never is, and a
+   * degree and a half — which is a steady hand — drops the far end of a wide
+   * row by more than a line's height. Grouped without correcting for it, the
+   * description lands on one row and its rate on the next, and every line
+   * silently loses its price. Not hypothetical: it is what a real photograph
+   * did here, and no tolerance fixes it, because the slack that would cover
+   * the tilt also swallows the row below.
+   */
+  const slope = tiltOf(kept, median)
+  const flat = kept.map((c) => ({ ...c, y: c.y - slope * c.x }))
+
+  const sameLine = Math.max(2, median * 0.5)
+  /*
+   * How close two runs have to be to be one cell, in glyph heights.
+   *
+   * Two producers with different habits. A PDF splits a phrase into runs that
+   * all but touch, so almost any threshold joins them. OCR reports one box per
+   * WORD with a real space between — around half a glyph height — and a
+   * threshold tuned for the PDF leaves every word in a column of its own,
+   * which turns a letterhead into a priced line and a description into
+   * whichever of its words happens to be longest.
+   *
+   * 1.2 sits well above a word space and well below a column gap, which in a
+   * real table is several heights wide.
+   */
+  const sameCell = Math.max(1, median * 1.2)
+
+  const sorted = [...flat].sort((a, b) => (a.y - b.y) || (a.x - b.x))
   const lines: TextCell[][] = []
   for (const c of sorted) {
     const last = lines[lines.length - 1]
@@ -102,7 +130,6 @@ export function cellsToRows(cells: TextCell[]): string[][] {
   return lines.map((line) => {
     const byX = line.sort((a, b) => a.x - b.x)
     const out: string[] = []
-    // the right edge and the glyph height of the run each cell currently ends on
     let edge = -Infinity
     let height = median
     let tail = ''
@@ -120,6 +147,41 @@ export function cellsToRows(cells: TextCell[]): string[][] {
     }
     return out
   })
+}
+
+/**
+ * How far the page leans, as a slope.
+ *
+ * Measured from pairs of runs sitting side by side — close enough in y to be
+ * the same line of text, far enough apart in x for the difference between them
+ * to mean anything. The median of those is the tilt; an average would be
+ * dragged about by the one pair that straddles two rows.
+ *
+ * Clamped, and zero when there is too little side-by-side text to judge from.
+ * Correcting hard for noise is worse than not correcting at all.
+ */
+function tiltOf(cells: TextCell[], median: number): number {
+  const byY = [...cells].sort((a, b) => (a.y - b.y) || (a.x - b.x))
+  const slopes: number[] = []
+  for (let i = 1; i < byY.length; i += 1) {
+    const a = byY[i - 1]
+    const b = byY[i]
+    const dx = b.x - a.x
+    /*
+     * Wide pairs only. Two words a few pixels apart vertically and eighty
+     * apart horizontally imply a slope of 0.08 — steeper than any real page —
+     * purely because the divisor is small. Requiring a span of several glyph
+     * heights keeps the estimate out of the hands of adjacent words.
+     */
+    if (dx < median * 4) continue
+    if (Math.abs(b.y - a.y) > median * 1.5) continue
+    slopes.push((b.y - a.y) / dx)
+  }
+  if (slopes.length < 3) return 0
+  slopes.sort((p, q) => p - q)
+  const mid = slopes[Math.floor(slopes.length / 2)]
+  // about four degrees either way; past that it is not a tilt, it is a mistake
+  return Math.max(-0.07, Math.min(0.07, mid))
 }
 
 /* ------------------------------------------------------------- the binding -- */

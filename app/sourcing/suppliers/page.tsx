@@ -106,7 +106,7 @@ function Suppliers() {
           of: (r) => r.type,
         }}
         action={{ label: 'Add supplier', onClick: () => setAdding(true) }}
-        tools={<DeskTools entity="supplier" noun="supplier" title="Suppliers"
+        tools={<DeskTools entity="supplier" noun="supplier" title="Suppliers" upload
           rows={() => kit.toRows(rows)} />}
         empty={{ line: 'Nobody here yet. Add the suppliers you buy from, or bring in a spreadsheet.', cta: 'Add your first supplier' }}>
         {(shown) => (

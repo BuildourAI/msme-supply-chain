@@ -8,3 +8,6 @@ next-env.d.ts
 
 # verification screenshots, not source
 *.png
+
+# built by scripts/ocr-assets.mjs, not by hand
+public/ocr/

@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "prebuild": "node scripts/ocr-assets.mjs",
+    "postinstall": "node scripts/ocr-assets.mjs",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
@@ -15,10 +17,12 @@
     "next": "^15.5.25",
     "pdfjs-dist": "^6.3.289",
     "react": "19.1.1",
-    "react-dom": "19.1.1"
+    "react-dom": "19.1.1",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",
+    "@tesseract.js-data/eng": "^1.0.0",
     "@types/node": "22.20.1",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",

@@ -122,6 +122,61 @@ describe('runs of text back into rows', () => {
     expect(cellsToRows([])).toEqual([])
   })
 
+  it('joins words a reader reports one at a time, which is how OCR reports them', () => {
+    /*
+     * A PDF hands over phrases; OCR hands over words with a real space between
+     * each. A threshold tight enough for the first leaves every word in a
+     * column of its own — which turned a letterhead into a priced line and a
+     * description into whichever of its words was longest, until a photograph
+     * was actually put through it.
+     */
+    const word = (s: string, x: number) => cell(s, x, 100, s.length * 22, 40)
+    expect(cellsToRows([
+      word('CRCA', 100), word('SHEET', 210), word('1.2MM', 350),
+      word('12', 835), word('MT', 990),
+    ])).toEqual([['CRCA SHEET 1.2MM', '12', 'MT']])
+  })
+
+  it('follows a baseline that drifts, because a photographed page is never square', () => {
+    /*
+     * A page held at a degree and a half drifts thirty pixels across a wide
+     * sheet — twice any sensible same-line tolerance. Measured from the row's
+     * first cell, the description lands on one row and its rate on the next,
+     * and every line silently loses its price. This is not hypothetical: it is
+     * what a real photograph did.
+     */
+    /*
+     * Words 15px apart, columns 300px apart, and a baseline that falls about
+     * seven pixels per column — under the same-line tolerance step by step, but
+     * thirty across the row, which is what breaks a rule measured from the
+     * front of the line.
+     */
+    const w = (s: string, x: number, y: number) => cell(s, x, y, s.length * 18, 30)
+    expect(cellsToRows([
+      w('CRCA', 100, 450), w('SHEET', 187, 457), w('12', 700, 468), w('MT', 900, 480),
+      w('INCOLOY', 100, 520), w('1000', 700, 538),
+    ])).toEqual([['CRCA SHEET', '12', 'MT'], ['INCOLOY', '1000']])
+  })
+
+  it('leaves a square page exactly as it found it', () => {
+    /*
+     * The correction has to cost nothing when there is nothing to correct. A
+     * PDF is square, so the estimate must come back at zero rather than at
+     * whatever the last few runs happened to imply.
+     */
+    const w = (s: string, x: number, y: number) => cell(s, x, y, s.length * 18, 30)
+    expect(cellsToRows([
+      w('CRCA', 100, 450), w('SHEET', 187, 450), w('12', 700, 450),
+      w('INCOLOY', 100, 520), w('1000', 700, 520),
+    ])).toEqual([['CRCA SHEET', '12'], ['INCOLOY', '1000']])
+  })
+
+  it('and ignores a lean it has too little evidence for', () => {
+    // two runs on a page is not a tilt, it is two runs
+    const w = (s: string, x: number, y: number) => cell(s, x, y, 40, 10)
+    expect(cellsToRows([w('a', 0, 100), w('b', 400, 140)])).toEqual([['a'], ['b']])
+  })
+
   it('scales its tolerance to the type size, rather than a fixed gap', () => {
     // 5pt apart is one line in 14pt type and two lines in 6pt type. A constant
     // would have to be wrong about one of them.
