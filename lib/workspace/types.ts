@@ -16,6 +16,7 @@
  */
 import type { Policy } from '@/lib/domain/policy'
 import type { Item, StockLot, Uom, Vendor, VendorItem } from '@/lib/domain/types'
+import type { SupplierDoc, VendorAlias } from '@/lib/intake/types'
 
 export type PersonRole = 'owner' | 'manager' | 'stores' | 'buyer'
 
@@ -191,8 +192,25 @@ export interface ImportUndo {
   created: string[]
   /** what the records it overwrote looked like first */
   updated: { id: string; before: Record<string, unknown> }[]
-  /** rates written alongside a supplier or material, by vendorId|itemId */
+  /**
+   * Rates written over an existing pairing, by `vendorId|itemId`.
+   *
+   * Declared when the undo was written and, until now, produced by nothing and
+   * read by nothing — so a rate this build overwrote could not be put back.
+   * Approving a supplier's quotation is almost entirely the act of setting
+   * rates, so this is where the field finally earns its declaration.
+   */
   vendorItemsBefore?: { key: string; before: VendorItem | null }[]
+  /**
+   * Items whose `lastPurchaseRate` was back-filled from a quoted rate. It is a
+   * valuation basis (§13-1), so putting a rate back without putting this back
+   * would leave the stock valued off a figure nobody agreed to.
+   */
+  itemRatesBefore?: { id: string; before: number }[]
+  /** wordings this action taught, so undoing it un-teaches them */
+  aliasesCreated?: { vendorId: string; raw: string }[]
+  /** the document this approval filed, which goes back to waiting */
+  docApproved?: string
   /** side-table entries it wrote, and what was there before */
   sideBefore?: { map: 'vendorType' | 'itemGroup'; id: string; before: string | null }[]
   /** custom cells it wrote: [recordId, fieldId, whatWasThereBefore] */
@@ -247,6 +265,14 @@ export interface Workspace {
   vendorContact: Record<string, VendorContact>
   /** that a request was handed over, and how */
   sendLog: SendEntry[]
+  /**
+   * The documents suppliers have sent, and what became of each. The bytes are
+   * never here — they are far too big for a blob that is pushed whole on a
+   * couple of seconds' delay. Only what was read out of them.
+   */
+  docs: SupplierDoc[]
+  /** each supplier's own wording, resolved for good */
+  aliases: VendorAlias[]
   /** the one import that can still be undone */
   lastImport?: ImportUndo
   /**
@@ -265,8 +291,15 @@ export interface Workspace {
   drafts: Record<string, unknown>
 }
 
-/** Raised whenever `migrate` has to do something a past version cannot undo. */
-export const SCHEMA = 2
+/**
+ * Raised whenever `migrate` has to do something a past version cannot undo.
+ *
+ * 3 records supplier documents and learned wordings. Nothing reads this number
+ * yet — it is written and kept — so what the bump documents is the direction it
+ * cannot go: a build from before 3 reading a workspace saved by this one will
+ * drop both on its next migrate.
+ */
+export const SCHEMA = 3
 
 /** Which company the screens are reading. The sample is never written to. */
 export type WorkspaceMode = 'sample' | 'mine'

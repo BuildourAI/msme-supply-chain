@@ -15,7 +15,7 @@ import { SOURCING_STEPS, progressOf } from '@/lib/workspace/checklist'
 import { emptyWorkspace, highestIssued, issueId, suggestCode } from '@/lib/workspace/defaults'
 import { NEEDS, needFor } from '@/lib/workspace/needs'
 import { parseStored } from '@/lib/workspace/storage'
-import type { Workspace } from '@/lib/workspace/types'
+import { SCHEMA, type Workspace } from '@/lib/workspace/types'
 
 const TODAY = '2026-09-18'
 
@@ -312,6 +312,99 @@ describe('storage', () => {
     expect(parseStored('{"workspace":null}')).toBeNull()
     expect(parseStored('{"workspace":{"id":"x"}}')).toBeNull()
     expect(parseStored(JSON.stringify({ workspace: fresh() }))).toBeNull()
+  })
+
+  /*
+   * A workspace saved before supplier documents existed. This is the shape
+   * sitting in a real browser right now, and the only thing that must happen to
+   * it is nothing: the owner stays signed in, keeps their suppliers, and gains
+   * two empty lists.
+   */
+  const beforeDocuments = () => {
+    const w = { ...fresh() } as unknown as Record<string, unknown>
+    delete w.docs
+    delete w.aliases
+    w.schema = 2
+    return JSON.stringify({ workspace: w, session: { actor: 'R. Mehta', role: 'owner' } })
+  }
+
+  it('still signs in a workspace saved before documents existed', () => {
+    // the guard in `parseStored` decides whether somebody is signed in at all;
+    // tightening it for a new field would sign out every existing owner
+    expect(parseStored(beforeDocuments())).not.toBeNull()
+  })
+
+  it('gives it the two new lists empty, and loses nothing it had', () => {
+    const back = parseStored(beforeDocuments())!
+    expect(back.workspace.docs).toEqual([])
+    expect(back.workspace.aliases).toEqual([])
+    expect(back.workspace.schema).toBe(SCHEMA)
+    expect(back.workspace.company.name).toBe('Patel Heaters')
+    expect(back.workspace.people).toHaveLength(1)
+  })
+
+  it('counts documents towards the id it will issue next', () => {
+    /*
+     * The same rule the other five prefixes follow: the counter only ever goes
+     * up, so deleting the newest document cannot hand its id to the next one.
+     */
+    const w = fresh()
+    const raw = JSON.stringify({
+      workspace: { ...w, docs: [{ id: 'SD-004' }, { id: 'SD-002' }], nextIds: {} },
+      session: { actor: 'R. Mehta', role: 'owner' },
+    })
+    const back = parseStored(raw)!
+    expect(issueId(back.workspace, 'SD')[1]).toBe('SD-005')
+  })
+})
+
+describe('what a workspace is allowed to weigh', () => {
+  /*
+   * The whole workspace is one JSON string in localStorage and one JSONB column
+   * in Postgres, pushed whole a couple of seconds after every change. Documents
+   * are the first thing added to it that a person could produce a lot of, so
+   * the budget is pinned here rather than discovered when somebody's browser
+   * refuses to save.
+   *
+   * What this really guards is the rule that the FILE never goes in. A single
+   * base64'd photograph would blow through this by itself, which is exactly the
+   * mistake it exists to catch.
+   */
+  const heavy = (): Workspace => {
+    const w = fresh()
+    return {
+      ...w,
+      docs: Array.from({ length: 60 }, (_, d) => ({
+        id: `SD-${String(d + 1).padStart(3, '0')}`,
+        vendorId: 'VN-001', vendorName: 'Shah Metals & Alloys',
+        fileName: `SMA-quote-${d}.pdf`, mime: 'application/pdf', bytes: 182_000,
+        channel: 'email' as const, read: 'pdf-text' as const,
+        receivedAt: TODAY, addedAt: TODAY, status: 'approved' as const,
+        lines: Array.from({ length: 20 }, (_, n) => ({
+          id: `SD-${d}/${n}`,
+          raw: 'C.R.C.A. SHEET 1.2MM 1250 WIDE (PRIME)',
+          qty: 12, uom: 'MT', rate: 62800, itemId: 'IT-001',
+          confidence: 0.91, via: 'matched' as const, decision: 'accepted' as const,
+        })),
+      })),
+      aliases: Array.from({ length: 400 }, (_, n) => ({
+        vendorId: 'VN-001', raw: `SUPPLIER WORDING NUMBER ${n}`,
+        itemId: 'IT-001', confirmedBy: 'R. Mehta', confirmedAt: TODAY,
+      })),
+    }
+  }
+
+  it('stays well inside what a browser will keep, at sixty documents', () => {
+    const bytes = JSON.stringify(heavy()).length
+    // localStorage gives about 5 MB; this is 1200 read lines and 400 wordings
+    expect(bytes).toBeLessThan(600_000)
+  })
+
+  it('holds nothing that cannot survive being written down', () => {
+    // a Blob, an ArrayBuffer or a File smuggled onto the workspace would come
+    // back as `{}` here rather than throwing, so compare rather than trusting
+    const ws = heavy()
+    expect(JSON.parse(JSON.stringify(ws))).toEqual(ws)
   })
 })
 

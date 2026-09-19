@@ -180,13 +180,12 @@ export interface SupplierDocLine {
   reviewStatus: 'auto' | 'pending' | 'confirmed' | 'rejected'
 }
 
-export interface ItemAlias {
-  itemId: string
-  vendorName: string
-  rawText: string
-  confirmedBy: string
-  confirmedAt: string
-}
+/*
+ * `ItemAlias` used to sit here — declared, and produced and read by nothing.
+ * The sample company's store types its own alias slice as `typeof seededAliases`
+ * and never referenced it. The owner's equivalent is `VendorAlias` in
+ * `lib/intake/types.ts`, which is keyed by vendor id rather than by name.
+ */
 
 /* ------------------------------------------------------------------ derived */
 

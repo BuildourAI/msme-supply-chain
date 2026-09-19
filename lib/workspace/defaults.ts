@@ -73,7 +73,7 @@ export function issueId(ws: Workspace, prefix: string): [Workspace, string] {
 }
 
 /** Every prefix the workspace issues, so a stored counter can be seeded. */
-export const ID_PREFIXES = ['VN', 'IT', 'RF', 'QT', 'PO', 'CF'] as const
+export const ID_PREFIXES = ['VN', 'IT', 'RF', 'QT', 'PO', 'CF', 'SD'] as const
 
 /**
  * A code suggested from the material's name: first letters of the first two
@@ -128,6 +128,8 @@ export function emptyWorkspace(input: {
     views: { supplier: BLANK_VIEW, material: BLANK_VIEW, rfq: BLANK_VIEW },
     vendorContact: {},
     sendLog: [],
+    docs: [],
+    aliases: [],
     nextIds: {},
     drafts: {},
   }

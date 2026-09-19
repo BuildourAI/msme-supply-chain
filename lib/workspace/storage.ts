@@ -19,6 +19,7 @@ import { SCHEMA } from './types'
 import type {
   FieldDef, PurchaseOrder, Quote, Rfq, Session, TableView, Workspace, WorkspaceMode,
 } from './types'
+import type { SupplierDoc, VendorAlias } from '@/lib/intake/types'
 
 const KEY = 'msme.workspace.v1'
 
@@ -118,6 +119,7 @@ function migrate(raw: Partial<Workspace>): Workspace {
   const rfqs = list<Rfq>(raw.rfqs)
   const quotes = list<Quote>(raw.quotes)
   const orders = list<PurchaseOrder>(raw.orders)
+  const docs = list<SupplierDoc>(raw.docs)
 
   /*
    * The id counter is seeded from what is actually there the first time a blob
@@ -136,6 +138,7 @@ function migrate(raw: Partial<Workspace>): Workspace {
   seed('QT', quotes)
   seed('PO', orders)
   seed('CF', list<FieldDef>(raw.fields))
+  seed('SD', docs)
 
   const view = (v: Partial<TableView> | undefined): TableView => ({
     order: list<string>(v?.order),
@@ -188,6 +191,15 @@ function migrate(raw: Partial<Workspace>): Workspace {
     },
     vendorContact: map(raw.vendorContact),
     sendLog: list(raw.sendLog),
+    /*
+     * Both arrive empty on a workspace saved before supplier documents existed,
+     * and nothing is lost — there was nothing to lose. What this must not do is
+     * appear in `parseStored`'s guard above: that guard decides whether somebody
+     * is signed in at all, and an owner who has never uploaded a document is
+     * still very much signed in.
+     */
+    docs,
+    aliases: list<VendorAlias>(raw.aliases),
     lastImport: raw.lastImport,
     nextIds,
     schema: SCHEMA,
