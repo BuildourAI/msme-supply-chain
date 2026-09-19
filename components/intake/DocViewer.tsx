@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Icon } from '@/components/ui/icons'
 import { StatePill } from '@/components/ui/DataTable'
-import { getFile } from '@/lib/intake/blobs'
+import { getFile, putFile } from '@/lib/intake/blobs'
+import { mirrorDown } from '@/lib/intake/mirror'
 import { renderPage } from '@/lib/intake/pdf'
 import { shortDate } from '@/lib/domain/format'
 import { ConfidenceBar } from './ConfidenceBar'
@@ -43,8 +44,18 @@ export function DocViewer({ doc, items, onClose }: {
     setState('looking'); setUrl(null)
 
     ;(async () => {
-      const blob = await getFile(doc.id)
+      /*
+       * The device first, the account second. A document uploaded here opens
+       * instantly and offline; one uploaded on a phone is fetched back once and
+       * then kept, so the second look is as fast as the first.
+       */
+      let blob = await getFile(doc.id)
       if (!alive) return
+      if (!blob && doc.remotePath) {
+        blob = await mirrorDown(doc.remotePath)
+        if (!alive) return
+        if (blob) void putFile(doc.id, new File([blob], doc.fileName, { type: doc.mime }), doc.addedAt)
+      }
       if (!blob) { setState('elsewhere'); return }
 
       /*

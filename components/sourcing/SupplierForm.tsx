@@ -146,7 +146,9 @@ export function SupplierForm({ open, onClose, editing }: {
           </Field>
           {/*
             * Optional, and only needed when you want to hand them a request.
-            * Both stay on this machine — nothing here is sent anywhere.
+            * Both stay on this device, and go to the owner's own account when
+            * they have one — which is where every other thing they type goes
+            * too. Nothing is sent to the supplier.
             */}
           <Field label="Phone" hint="With the country code, for WhatsApp." htmlFor="sf-phone">
             <TextInput id="sf-phone" value={phone} onChange={setPhone} placeholder="+91 98220 11234" />

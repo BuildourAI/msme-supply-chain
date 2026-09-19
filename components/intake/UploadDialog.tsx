@@ -12,6 +12,8 @@ import { draftLines } from '@/lib/intake/draft'
 import { acceptFiles, readDocument } from '@/lib/intake/read'
 import { readImage } from '@/lib/intake/ocr'
 import { putFile } from '@/lib/intake/blobs'
+import { mirrorUp, pathFor } from '@/lib/intake/mirror'
+import { useAuth } from '@/components/workspace/auth'
 import { AUTO, preselect } from '@/lib/intake/match'
 import { MAX_DOC_LINES, type DocChannel, type DocLine, type DocRead, type SupplierDoc } from '@/lib/intake/types'
 import { ConfidenceBar } from './ConfidenceBar'
@@ -42,6 +44,7 @@ export function UploadDialog({ open, onClose, resume }: {
   resume?: SupplierDoc | null
 }) {
   const { workspace, update, today, session } = useWorkspace()
+  const { account } = useAuth()
   const [docId, setDocId] = useState<string | null>(null)
 
   const [file, setFile] = useState<File | null>(null)
@@ -212,17 +215,34 @@ export function UploadDialog({ open, onClose, resume }: {
       update(() => result.ws)
       setDocId(id)
 
-      /*
-       * The file is kept alongside the write and never awaited by the screen.
-       * An owner whose browser refuses storage still gets their supplier and
-       * their rates — they simply cannot reopen the original afterwards.
-       */
-      if (file) void putFile(id, file, today)
+      if (file) keep(id, file)
       setDone({
         added: result.undo.added,
         rates: result.undo.vendorItemsBefore?.length ?? 0,
       })
     }
+  }
+
+  /**
+   * Keep the file, on the device and — when there is an account — in it.
+   *
+   * Neither is awaited. The document's lines are already in the workspace by
+   * the time this runs, which is what every screen actually reads; the file is
+   * the evidence behind them. A browser refusing storage, or a network that is
+   * not there, costs the owner the ability to reopen the original and nothing
+   * else.
+   */
+  const keep = (id: string, f: File) => {
+    void putFile(id, f, today)
+    if (!account) return
+    const path = pathFor(account.id, ws.id, { ...draftDoc(id), fileName: f.name })
+    void mirrorUp(path, f, f.type).then((sent) => {
+      if (!sent) return
+      update((w) => ({
+        ...w,
+        docs: w.docs.map((d) => (d.id === id ? { ...d, remotePath: path } : d)),
+      }))
+    })
   }
 
   /* --------------------------------------------------------- putting it down -- */
@@ -245,7 +265,7 @@ export function UploadDialog({ open, onClose, resume }: {
           ? issued.docs.map((d) => (d.id === id ? draft : d))
           : [draft, ...issued.docs],
       }))
-      if (file) void putFile(id, file, today)
+      if (file) keep(id, file)
       setDocId(id)
     }
     onClose()
@@ -263,7 +283,7 @@ export function UploadDialog({ open, onClose, resume }: {
         : lines.length === 0 ? 'Open a document, or type the lines in.' : 'Say who it is from.',
       body: (
         <Source
-          file={file} resumed={resume?.fileName ?? null}
+          file={file} resumed={resume?.fileName ?? null} signedIn={Boolean(account)}
           busy={busy} pct={pct} error={error} note={note} lines={lines.length}
           typed={typed} onTyped={setTyped} onUseTyped={useTyped}
           onPick={(f) => void pick(f)}
@@ -327,6 +347,8 @@ function Source(p: {
   file: File | null
   /** the name of a document being picked back up, whose bytes are not in hand */
   resumed: string | null
+  /** whether there is an account for a copy to go into */
+  signedIn: boolean
   busy: string | null
   pct: number
   error: string | null
@@ -392,6 +414,16 @@ function Source(p: {
           <span className="text-[13.5px] font-medium">Drop a quote or price list here, or choose one</span>
           <span className="mt-1 text-[12px] text-ink-3">
             A PDF, a photo of a printed quote, or a spreadsheet
+          </span>
+          {/*
+            * Said where the file is chosen, not in a settings page nobody
+            * opens. Reading happens here; the copy only goes anywhere once
+            * there is an account to put it in, and then only into that account.
+            */}
+          <span className="mt-2 text-[11px] leading-snug text-ink-4">
+            {p.signedIn
+              ? 'Read on this device. A copy is kept on it, and in your account.'
+              : 'Read and kept on this device. Nothing is sent anywhere.'}
           </span>
           <input type="file" className="sr-only" accept={acceptFiles()}
             onChange={(e) => { const f = e.target.files?.[0]; if (f) p.onPick(f) }} />

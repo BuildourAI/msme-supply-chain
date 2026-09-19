@@ -9,7 +9,9 @@ import { UploadDialog } from '@/components/intake/UploadDialog'
 import { DocViewer } from '@/components/intake/DocViewer'
 import { AliasPanel } from '@/components/intake/AliasPanel'
 import { useWorkspace } from '@/components/workspace/store'
-import { dropFile, prune } from '@/lib/intake/blobs'
+import { dropFile, getFile, prune } from '@/lib/intake/blobs'
+import { mirrorRemove, mirrorUp, pathFor } from '@/lib/intake/mirror'
+import { useAuth } from '@/components/workspace/auth'
 import { stillUndoable } from '@/lib/intake/apply'
 import { waitingOn } from '@/lib/intake/draft'
 import { shortDate } from '@/lib/domain/format'
@@ -41,6 +43,7 @@ const CHANNEL: Record<SupplierDoc['channel'], string> = {
 
 function Documents() {
   const { workspace, update } = useWorkspace()
+  const { account } = useAuth()
   const [uploading, setUploading] = useState(false)
   const [resuming, setResuming] = useState<SupplierDoc | null>(null)
   const [viewing, setViewing] = useState<SupplierDoc | null>(null)
@@ -54,6 +57,34 @@ function Documents() {
    */
   const ids = workspace?.docs.map((d) => d.id).join(',') ?? ''
   useEffect(() => { void prune(ids ? ids.split(',') : []) }, [ids])
+
+  /*
+   * Documents uploaded before there was an account, catching up once there is
+   * one. The same local-first, reconcile-on-sign-in shape the workspace itself
+   * follows — and it only ever sends what this device actually holds, so a
+   * second machine does not try to mirror a file it has never seen.
+   */
+  const uid = account?.id
+  const wsId = workspace?.id
+  const behind = workspace?.docs.filter((d) => !d.remotePath).map((d) => d.id).join(',') ?? ''
+  useEffect(() => {
+    if (!uid || !wsId || !behind) return
+    let alive = true
+    void (async () => {
+      for (const id of behind.split(',')) {
+        const doc = workspace?.docs.find((d) => d.id === id)
+        const blob = doc ? await getFile(id) : null
+        if (!alive || !doc || !blob) continue
+        const path = pathFor(uid, wsId, doc)
+        if (await mirrorUp(path, blob, doc.mime) && alive) {
+          update((w) => ({
+            ...w, docs: w.docs.map((d) => (d.id === id ? { ...d, remotePath: path } : d)),
+          }))
+        }
+      }
+    })()
+    return () => { alive = false }
+  }, [uid, wsId, behind]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!workspace) return null
   const ws = workspace
@@ -184,6 +215,7 @@ function Documents() {
         onConfirm={() => {
           if (!deleting) return
           void dropFile(deleting.id)
+          if (deleting.remotePath) void mirrorRemove(deleting.remotePath)
           update((w) => ({ ...w, docs: w.docs.filter((d) => d.id !== deleting.id) }))
         }}
       />
