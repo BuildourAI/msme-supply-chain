@@ -42,6 +42,11 @@ export function ConfirmDelete({ open, onClose, onConfirm, what, impact }: {
             </ul>
           </>
         )}
+        {impact.keeps && (
+          <p className="rounded-md border border-line bg-surface-2 px-2.5 py-2 text-[12.5px] leading-relaxed text-ink-2">
+            {impact.keeps}
+          </p>
+        )}
         <p className="text-[12px] text-ink-3">This cannot be undone.</p>
       </div>
       <footer className="flex items-center gap-2 border-t border-line-soft px-4 py-3">

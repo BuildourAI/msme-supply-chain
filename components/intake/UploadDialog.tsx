@@ -35,8 +35,14 @@ import type { Uom } from '@/lib/domain/types'
  * document the owner already has and suggests what it thinks the lines are. It
  * does not reply to the supplier, and it does not order anything.
  */
-export function UploadDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function UploadDialog({ open, onClose, resume }: {
+  open: boolean
+  onClose: () => void
+  /** a document put down half-reviewed, being picked back up */
+  resume?: SupplierDoc | null
+}) {
   const { workspace, update, today, session } = useWorkspace()
+  const [docId, setDocId] = useState<string | null>(null)
 
   const [file, setFile] = useState<File | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -60,13 +66,31 @@ export function UploadDialog({ open, onClose }: { open: boolean; onClose: () => 
   const [done, setDone] = useState<{ added: number; rates: number } | null>(null)
 
   const reset = () => {
+    setDocId(null)
     setFile(null); setBusy(null); setPct(0); setError(null); setNote(null); setRead('typed')
     setVendorId(''); setVendorName(''); setChannel('email'); setReceivedAt(today)
     setTyped(''); setLines([]); setType(''); setTerms('30')
     setPhone(''); setEmail(''); setCustom({}); setDone(null)
   }
 
-  useEffect(() => { if (open) reset() }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!open) return
+    reset()
+    if (!resume) return
+    /*
+     * Picking a document back up. Everything that was read stays read — the
+     * file is not opened again, because re-reading a photograph would produce
+     * slightly different lines and quietly discard whatever the owner had
+     * already decided about them.
+     */
+    setDocId(resume.id)
+    setVendorId(resume.vendorId ?? '')
+    setVendorName(resume.vendorId ? '' : resume.vendorName)
+    setChannel(resume.channel)
+    setReceivedAt(resume.receivedAt)
+    setRead(resume.read)
+    setLines(resume.lines)
+  }, [open, resume?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open || !workspace) return null
   const ws = workspace
@@ -129,13 +153,23 @@ export function UploadDialog({ open, onClose }: { open: boolean; onClose: () => 
     id,
     vendorId: vendorId || undefined,
     vendorName: forName.trim(),
-    fileName: file?.name ?? 'Typed in',
-    mime: file?.type ?? 'text/plain',
-    bytes: file?.size ?? 0,
+    /*
+     * A document being picked back up has no `File` in hand — the bytes are in
+     * the device's store, not in this component. Falling straight through to
+     * the typed-in defaults renamed every resumed document to "Typed in" and
+     * told the viewer it was plain text, so it stopped being openable.
+     */
+    fileName: file?.name ?? resume?.fileName ?? 'Typed in',
+    mime: file?.type ?? resume?.mime ?? 'text/plain',
+    bytes: file?.size ?? resume?.bytes ?? 0,
     channel,
     read,
     receivedAt,
-    addedAt: today,
+    addedAt: resume?.addedAt ?? today,
+    docNo: resume?.docNo,
+    terms: resume?.terms,
+    validUntil: resume?.validUntil,
+    remotePath: resume?.remotePath,
     lines: lines.map((l, n) => ({ ...l, id: `${id}/${n + 1}` })),
     status: 'draft',
   })
@@ -153,14 +187,17 @@ export function UploadDialog({ open, onClose }: { open: boolean; onClose: () => 
 
   const run = () => {
     /*
-     * The id is issued inside the update, never before it — the same rule every
-     * other writer in this build follows, and the reason a deleted record can
-     * never hand its id to the next one.
+     * Computed against this render's workspace and handed to `update` as a
+     * value, which is what `ImportDialog` does and for a better reason than it
+     * says. An updater that issued the id inside itself and then reported it
+     * back through a closure looked identical and worked most of the time —
+     * React runs an updater eagerly only while its queue is empty, so the id
+     * came back sometimes and came back undefined the rest, and the uploaded
+     * file was saved under it or silently not at all.
      */
-    let saved: { id: string; added: number; rates: number } | undefined
-    update((w0) => {
-      const [w, id] = issueId(w0, 'SD')
-      const result = applyApproval(w, {
+    const [issued, id] = docId ? [ws, docId] : issueId(ws, 'SD')
+    {
+      const result = applyApproval(issued, {
         doc: draftDoc(id),
         vendorId: vendorId || undefined,
         vendorName: forName,
@@ -172,18 +209,46 @@ export function UploadDialog({ open, onClose }: { open: boolean; onClose: () => 
         actor: session.actor,
         today,
       })
-      saved = { id, added: result.undo.added, rates: result.undo.vendorItemsBefore?.length ?? 0 }
-      return result.ws
-    })
+      update(() => result.ws)
+      setDocId(id)
 
-    /*
-     * The file is kept after the write, never before it, and never awaited by
-     * the screen. An owner whose browser refuses storage still gets their
-     * supplier and their rates — they simply cannot reopen the original.
-     */
-    const out = saved as { id: string; added: number; rates: number } | undefined
-    if (out && file) void putFile(out.id, file, today)
-    setDone({ added: out?.added ?? 0, rates: out?.rates ?? 0 })
+      /*
+       * The file is kept alongside the write and never awaited by the screen.
+       * An owner whose browser refuses storage still gets their supplier and
+       * their rates — they simply cannot reopen the original afterwards.
+       */
+      if (file) void putFile(id, file, today)
+      setDone({
+        added: result.undo.added,
+        rates: result.undo.vendorItemsBefore?.length ?? 0,
+      })
+    }
+  }
+
+  /* --------------------------------------------------------- putting it down -- */
+
+  /**
+   * Closing without approving keeps the document.
+   *
+   * Without this the whole screen would be a lie: "Waiting on you" would be a
+   * status nothing could ever be in, and the badge on the rail a number that
+   * could only ever read zero. The sample company's queue survives being walked
+   * away from, and so does this one.
+   */
+  const close = () => {
+    if (!done && lines.length > 0) {
+      const [issued, id] = docId ? [ws, docId] : issueId(ws, 'SD')
+      const draft = draftDoc(id)
+      update(() => ({
+        ...issued,
+        docs: issued.docs.some((d) => d.id === id)
+          ? issued.docs.map((d) => (d.id === id ? draft : d))
+          : [draft, ...issued.docs],
+      }))
+      if (file) void putFile(id, file, today)
+      setDocId(id)
+    }
+    onClose()
   }
 
   /* --------------------------------------------------------------- steps -- */
@@ -198,7 +263,8 @@ export function UploadDialog({ open, onClose }: { open: boolean; onClose: () => 
         : lines.length === 0 ? 'Open a document, or type the lines in.' : 'Say who it is from.',
       body: (
         <Source
-          file={file} busy={busy} pct={pct} error={error} note={note} lines={lines.length}
+          file={file} resumed={resume?.fileName ?? null}
+          busy={busy} pct={pct} error={error} note={note} lines={lines.length}
           typed={typed} onTyped={setTyped} onUseTyped={useTyped}
           onPick={(f) => void pick(f)}
           onClear={reset}
@@ -248,8 +314,8 @@ export function UploadDialog({ open, onClose }: { open: boolean; onClose: () => 
   ]
 
   return (
-    <Wizard open={open} onClose={onClose} title="Upload a supplier document"
-      sub={file?.name} steps={steps}
+    <Wizard open={open} onClose={close} title="Upload a supplier document"
+      sub={file?.name ?? resume?.fileName} steps={steps}
       onDone={done ? onClose : run}
       doneLabel={done ? 'Close' : `Approve ${plan.ratesSet} line${plan.ratesSet === 1 ? '' : 's'}`} />
   )
@@ -259,6 +325,8 @@ export function UploadDialog({ open, onClose }: { open: boolean; onClose: () => 
 
 function Source(p: {
   file: File | null
+  /** the name of a document being picked back up, whose bytes are not in hand */
+  resumed: string | null
   busy: string | null
   pct: number
   error: string | null
@@ -284,12 +352,12 @@ function Source(p: {
 
   return (
     <div className="space-y-4">
-      {p.file && !p.busy ? (
+      {(p.file || p.resumed) && !p.busy ? (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface-2 px-3 py-2.5">
           <Icon name={p.lines > 0 ? 'check' : 'doc'}
             className={`size-4 shrink-0 ${p.lines > 0 ? 'text-good' : 'text-ink-3'}`} />
           <span className="min-w-0 text-[13px]">
-            <strong className="font-semibold">{p.file.name}</strong>
+            <strong className="font-semibold">{p.file?.name ?? p.resumed}</strong>
             {p.lines > 0 && <span className="text-ink-2"> · {p.lines} priced line{p.lines === 1 ? '' : 's'}</span>}
           </span>
           <button type="button" onClick={p.onClear}

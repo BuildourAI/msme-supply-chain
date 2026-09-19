@@ -202,10 +202,13 @@ interface PdfTaskLike {
 }
 interface PdfDocLike {
   numPages: number
-  getPage: (n: number) => Promise<{
-    getTextContent: () => Promise<{ items: unknown[] }>
-    getViewport: (o: { scale: number }) => { height: number }
-  }>
+  getPage: (n: number) => Promise<PdfPageLike>
+}
+interface PdfPageLike {
+  getTextContent: () => Promise<{ items: unknown[] }>
+  getViewport: (o: { scale: number }) => { width: number; height: number }
+  render: (o: { canvasContext: CanvasRenderingContext2D; viewport: unknown; canvas: HTMLCanvasElement })
+  => { promise: Promise<void> }
 }
 
 export type PdfjsLoader = () => Promise<PdfjsLike>
@@ -215,17 +218,26 @@ let cached: Promise<PdfjsLike> | null = null
 /**
  * The browser build, with its worker bundled rather than fetched.
  *
+ * Two deliberate choices here.
+ *
  * `new URL(..., import.meta.url)` is the form the bundler recognises, so the
  * worker ships as part of the app. The default — a script URL on a CDN — would
  * mean a supplier's quote could not be read on a bad connection, behind a
  * corporate proxy, or on a factory floor with no internet, which are three of
  * the places this most needs to work.
+ *
+ * And the `legacy` build rather than the modern one, which is not a hedge. The
+ * modern build calls `Map.prototype.getOrInsertComputed`, a 2025 addition that
+ * the browser on somebody's three-year-old Android does not have — so drawing
+ * a page threw `getOrInsertComputed is not a function` on a Chromium from last
+ * year, and would throw on most phones this is meant for. Legacy is a little
+ * larger and it loads lazily, so what it costs is nothing that matters.
  */
 const browserPdfjs: PdfjsLoader = () => {
   cached ??= (async () => {
-    const mod = await import('pdfjs-dist') as unknown as PdfjsLike
+    const mod = await import('pdfjs-dist/legacy/build/pdf.mjs') as unknown as PdfjsLike
     mod.GlobalWorkerOptions.workerPort = new Worker(
-      new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url),
+      new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url),
       { type: 'module' },
     )
     return mod
@@ -298,3 +310,65 @@ function toCell(raw: unknown, pageHeight: number): TextCell | null {
     h,
   }
 }
+
+/* ----------------------------------------------------------------- drawing -- */
+
+export interface PageImage {
+  blob: Blob
+  pages: number
+}
+
+/**
+ * One page of a PDF, as a picture.
+ *
+ * Two jobs, and they are the same job. Showing the owner the document they
+ * uploaded — for which the browser's own PDF viewer would do, except that it
+ * arrives wrapped in a dark toolbar displaying the blob's internal id where a
+ * filename should be, which is both ugly and a detail nobody should be shown.
+ * And handing a scanned page to the reader of photographs, which needs pixels
+ * rather than a file.
+ *
+ * Scale is capped by total pixels rather than set flat: a two-times render of
+ * an A0 drawing is a hundred megabytes of canvas and a dead tab.
+ */
+export async function renderPage(
+  buf: ArrayBuffer,
+  page = 1,
+  scale = 2,
+  load: PdfjsLoader = browserPdfjs,
+): Promise<PageImage> {
+  const pdfjs = await load()
+  const task = pdfjs.getDocument({
+    data: new Uint8Array(buf),
+    isEvalSupported: false,
+    disableAutoFetch: true,
+  })
+  const doc = await task.promise
+
+  try {
+    const n = Math.min(Math.max(page, 1), doc.numPages)
+    const p = await doc.getPage(n)
+    const base = p.getViewport({ scale: 1 })
+    const capped = Math.min(scale, Math.sqrt(MAX_PIXELS / (base.width * base.height)))
+    const viewport = p.getViewport({ scale: Math.max(0.5, capped) })
+
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.ceil(viewport.width)
+    canvas.height = Math.ceil(viewport.height)
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('This browser cannot draw the page.')
+
+    await p.render({ canvasContext: ctx, viewport, canvas }).promise
+
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, 'image/png')
+    })
+    if (!blob) throw new Error('This browser could not turn the page into a picture.')
+    return { blob, pages: doc.numPages }
+  } finally {
+    await task.destroy()
+  }
+}
+
+/** About sixteen megapixels — generous for a quotation, survivable for a drawing. */
+const MAX_PIXELS = 16_000_000

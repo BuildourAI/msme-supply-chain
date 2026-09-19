@@ -54,6 +54,17 @@ export async function canKeepFiles(): Promise<boolean> {
   return db !== null
 }
 
+/**
+ * One transaction, awaited to the end of it.
+ *
+ * Resolving on the request rather than the transaction is the mistake worth
+ * naming here, because it does not look like one. A `put` reports success the
+ * moment the value is accepted — before the transaction commits — so closing
+ * the database on that signal aborts the write, silently, and the file is
+ * simply not there the next time anybody looks for it. Which is exactly what
+ * happened: every uploaded document opened to "the original is on the device
+ * it came from", on the device it came from.
+ */
 async function run<T>(
   mode: IDBTransactionMode,
   fn: (store: IDBObjectStore) => IDBRequest,
@@ -64,8 +75,11 @@ async function run<T>(
     return await new Promise<T | null>((resolve) => {
       const tx = db.transaction(STORE, mode)
       const req = fn(tx.objectStore(STORE))
-      req.onsuccess = () => resolve(req.result as T)
-      req.onerror = () => resolve(null)
+      let got: T | null = null
+      req.onsuccess = () => { got = req.result as T }
+      req.onerror = () => { got = null }
+      tx.oncomplete = () => resolve(got)
+      tx.onerror = () => resolve(null)
       tx.onabort = () => resolve(null)
     })
   } catch {
@@ -83,8 +97,7 @@ async function run<T>(
  */
 export async function putFile(docId: string, file: File, at: string): Promise<boolean> {
   const held: Held = { blob: file, name: file.name, type: file.type, at }
-  const done = await run<IDBValidKey>('readwrite', (s) => s.put(held, docId))
-  return done !== null
+  return (await run<IDBValidKey>('readwrite', (s) => s.put(held, docId))) !== null
 }
 
 export async function getFile(docId: string): Promise<Blob | null> {

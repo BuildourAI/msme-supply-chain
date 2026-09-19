@@ -4,8 +4,8 @@
  * Today the sidebar builds from `STAGES` and shows forty-one rows, of which one
  * leads anywhere their data can fill. The rest lead to a card explaining what
  * the screen would show. A menu of things you cannot use is the overwhelming
- * part, so in the owner's company the nav is built from here instead: six rows
- * at most, flat, in the shape of the portal this desk is modelled on.
+ * part, so in the owner's company the nav is built from here instead: a
+ * handful of rows, flat, in the shape of the portal this desk is modelled on.
  *
  * The sample company is untouched and keeps every row. It is the worked example
  * that shows where the system goes, and hiding its screens would make it
@@ -41,7 +41,7 @@ export const BUILT: StageId[] = ['sourcing']
  * The sourcing desk's own rows.
  *
  * Everything is present from the first day rather than revealed one at a time.
- * Six rows is already short enough not to overwhelm, and a nav that grows under
+ * Seven rows is still short enough not to overwhelm, and a nav that grows under
  * somebody is a nav they have to keep re-learning — worse than one that is
  * briefly empty. What each screen does when it has nothing is say so, which is
  * a job for the screen rather than the menu.
@@ -49,9 +49,16 @@ export const BUILT: StageId[] = ['sourcing']
 export function sourcingNav(ws: Workspace): NavRow[] {
   const open = ws.orders.filter((o) => o.state !== 'delivered' && o.state !== 'cancelled').length
   const waiting = ws.rfqs.filter((r) => r.state === 'sent' || r.state === 'quoted').length
+  const unfiled = ws.docs.filter((d) => d.status === 'draft').length
   return [
     { label: 'Dashboard', href: '/sourcing/dashboard', icon: 'activity', later: true },
     { label: 'Suppliers', href: '/sourcing/suppliers', icon: 'truck', badge: count(ws.vendors.length) },
+    /*
+     * Straight after Suppliers, because documents are how suppliers arrive. The
+     * badge counts what is waiting on a person rather than how many documents
+     * exist — a number that never goes down is not a badge, it is decoration.
+     */
+    { label: 'Documents', href: '/sourcing/documents', icon: 'doc', badge: count(unfiled) },
     { label: 'Materials', href: '/sourcing/materials', icon: 'boxes', badge: count(ws.items.length) },
     { label: 'Requests', href: '/sourcing/rfqs', icon: 'doc', badge: count(waiting) },
     { label: 'Quotes', href: '/sourcing/quotes', icon: 'scale', badge: count(ws.quotes.length) },

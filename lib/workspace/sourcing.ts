@@ -230,6 +230,15 @@ export interface DeleteImpact {
   losses: string[]
   /** nothing attached — the dialog can be a single confirm */
   clean: boolean
+  /**
+   * What survives, when that is the question somebody is actually asking.
+   *
+   * Deleting a supplier's document is the case this exists for: the fear is
+   * that the rates go with it, and they do not. Saying so before the button is
+   * pressed is cheaper than a sentence afterwards explaining that they are
+   * still there.
+   */
+  keeps?: string
 }
 
 const count = (n: number, one: string, many = `${one}s`) =>
