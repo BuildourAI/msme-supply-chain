@@ -20,6 +20,7 @@ import {
   parseNumber, parseUom,
 } from '@/lib/workspace/records'
 import { addField, setValue } from '@/lib/workspace/fields'
+import { forgetAlias } from '@/lib/intake/alias'
 import { toIsoDate, toYesNo } from './match'
 import type { Item, StockLot, Vendor } from '@/lib/domain/types'
 import type {
@@ -402,6 +403,54 @@ export function undoImport(ws: Workspace): Workspace {
       w = { ...w, vendors: w.vendors.map((v) => (v.id === id ? (before as unknown as Vendor) : v)) }
     } else if (undo.entity === 'material') {
       w = { ...w, items: w.items.map((i) => (i.id === id ? (before as unknown as Item) : i)) }
+    }
+  }
+
+  /*
+   * Rates written over a pairing that already existed. Nothing produced this
+   * before supplier documents did, which is why the field sat declared and
+   * unused since imports were written — an import that overwrote a rate could
+   * not put it back. Approving a quotation is almost entirely the act of
+   * setting rates, so it is the first thing that has to.
+   */
+  for (const { key, before } of (undo.vendorItemsBefore ?? [])) {
+    const [vendorId, itemId] = key.split('|')
+    const without = w.vendorItems.filter((vi) => !(vi.vendorId === vendorId && vi.itemId === itemId))
+    w = { ...w, vendorItems: before ? [...without, before] : without }
+  }
+
+  /*
+   * And the valuation basis with them. §13-1 values stock at last purchase
+   * price, so putting a rate back without putting this back would leave the
+   * material — and every screen that sums stock — carrying a figure from a
+   * quotation nobody accepted.
+   */
+  for (const { id, before } of (undo.itemRatesBefore ?? [])) {
+    w = { ...w, items: w.items.map((i) => (i.id === id ? { ...i, lastPurchaseRate: before } : i)) }
+  }
+
+  /*
+   * Wordings the approval taught. An alias is permanent on purpose, but an
+   * approval that is being taken back never happened, and leaving its lessons
+   * behind would mean the next document from that supplier silently resolved
+   * against a decision the owner has just reversed.
+   */
+  for (const a of (undo.aliasesCreated ?? [])) {
+    w = forgetAlias(w, a.vendorId, a.raw)
+  }
+
+  /* The document goes back to waiting, rather than claiming to be filed. */
+  if (undo.docApproved) {
+    w = {
+      ...w,
+      docs: w.docs.map((d) => (d.id === undo.docApproved
+        ? {
+          ...d,
+          status: 'draft' as const,
+          appliedUndoId: undefined,
+          lines: d.lines.map((l) => ({ ...l, decision: undefined })),
+        }
+        : d)),
     }
   }
 

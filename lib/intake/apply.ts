@@ -1,0 +1,299 @@
+/**
+ * Approving a document, which is the moment it becomes the owner's data.
+ *
+ * Split in two the way `lib/sheet/import.ts` is, and for the same stated
+ * reason: the preview a person approves and the write that follows must come
+ * from one place, or there is a second code path free to decide something the
+ * screen never showed.
+ *
+ * Nothing here contacts anybody. §11 holds — the system reads a document the
+ * owner already has, suggests what it thinks the lines are, and writes only to
+ * their own workspace.
+ */
+import type { Item, Uom, VendorItem } from '@/lib/domain/types'
+import { issueId, suggestCode } from '@/lib/workspace/defaults'
+import {
+  backfillRates, buildItem, buildRate, buildVendor, findVendorByName,
+} from '@/lib/workspace/records'
+import { setValues } from '@/lib/workspace/fields'
+import type { ImportUndo, Workspace } from '@/lib/workspace/types'
+import { learnAlias } from './alias'
+import type { SupplierDoc } from './types'
+
+/**
+ * How long a supplier takes, when the document does not say.
+ *
+ * Quotations frequently give a delivery time in prose the reader cannot parse
+ * ("10-14 days ex-works"), and a zero here would mean "arrives the same day" to
+ * every screen that reads it — which is a worse lie than a conservative guess
+ * the owner can correct on the supplier form.
+ */
+const DEFAULT_LEAD_DAYS = 7
+
+/** Payment terms for a supplier this approval is inventing. */
+const DEFAULT_TERMS_DAYS = 30
+
+export interface ApprovalLine {
+  /** the supplier's wording, which is what an alias gets written against */
+  raw: string
+  /** '' means leave this line out */
+  itemId: string
+  rate: number
+  qty?: number
+  /** bring this wording into the item master — off unless the owner ticked it */
+  creates?: boolean
+  newName?: string
+  newUom?: Uom
+  /** remember this wording for this supplier, next time */
+  learn?: boolean
+}
+
+export interface Approval {
+  doc: SupplierDoc
+  /** an existing supplier… */
+  vendorId?: string
+  /** …or the name of one to create */
+  vendorName: string
+  vendorType?: string
+  contact?: { phone?: string; email?: string }
+  custom?: Record<string, string>
+  termsDays?: number
+  lines: ApprovalLine[]
+  /** who is accepting, for the alias trail */
+  actor: string
+  today: string
+}
+
+/* ------------------------------------------------------------------- plan -- */
+
+export interface ApprovalPlan {
+  vendor: { status: 'new' | 'existing'; name: string }
+  ratesSet: number
+  itemsCreated: number
+  aliasesLearned: number
+  skipped: { raw: string; reason: string }[]
+}
+
+/**
+ * What approving would do, without doing it.
+ *
+ * The screen renders this and the button then calls `applyApproval` on the same
+ * input, so the two cannot disagree.
+ */
+export function planApproval(ws: Workspace, a: Approval): ApprovalPlan {
+  const existing = a.vendorId
+    ? ws.vendors.find((v) => v.id === a.vendorId)
+    : findVendorByName(ws, a.vendorName)
+
+  const skipped: { raw: string; reason: string }[] = []
+  let ratesSet = 0
+  let itemsCreated = 0
+  let aliasesLearned = 0
+
+  for (const l of a.lines) {
+    const makes = l.creates && (l.newName ?? '').trim().length > 1
+    if (!l.itemId && !makes) {
+      skipped.push({ raw: l.raw, reason: 'no material chosen' })
+      continue
+    }
+    if (!(l.rate > 0)) {
+      skipped.push({ raw: l.raw, reason: 'no rate on the line' })
+      continue
+    }
+    if (makes) itemsCreated += 1
+    ratesSet += 1
+    if (l.learn) aliasesLearned += 1
+  }
+
+  return {
+    vendor: { status: existing ? 'existing' : 'new', name: existing?.name ?? a.vendorName.trim() },
+    ratesSet, itemsCreated, aliasesLearned, skipped,
+  }
+}
+
+/* ------------------------------------------------------------------ apply -- */
+
+/**
+ * Write it.
+ *
+ * Called the way `ImportDialog` calls `applyImport` — computed once, then
+ * handed to `update` as a value. A closure that did the work inside the reducer
+ * would run twice under StrictMode and issue every id twice with it.
+ *
+ * The undo it returns goes on `ws.lastImport`, which is what makes the Undo
+ * button already on the Suppliers screen light up for an approved document with
+ * no new UI at all.
+ */
+export function applyApproval(ws: Workspace, a: Approval): { ws: Workspace; undo: ImportUndo } {
+  let w = ws
+  const created: string[] = []
+  const vendorItemsBefore: { key: string; before: VendorItem | null }[] = []
+  const itemRatesBefore: { id: string; before: number }[] = []
+  const aliasesCreated: { vendorId: string; raw: string }[] = []
+  const sideBefore: ImportUndo['sideBefore'] = []
+  const cells: [string, string, string][] = []
+
+  /* -------- the supplier -------- */
+
+  const existing = a.vendorId
+    ? w.vendors.find((v) => v.id === a.vendorId)
+    : findVendorByName(w, a.vendorName)
+
+  let vendorId: string
+  if (existing) {
+    vendorId = existing.id
+  } else {
+    const [next, id] = issueId(w, 'VN')
+    w = {
+      ...next,
+      vendors: [...next.vendors, buildVendor({
+        id, name: a.vendorName, paymentTermsDays: a.termsDays ?? DEFAULT_TERMS_DAYS,
+      })],
+    }
+    vendorId = id
+    created.push(id)
+  }
+
+  if (a.vendorType && !existing) {
+    sideBefore.push({ map: 'vendorType', id: vendorId, before: null })
+    w = { ...w, vendorType: { ...w.vendorType, [vendorId]: a.vendorType } }
+  }
+
+  /*
+   * Contact details only for a supplier this approval invented. `undoImport`
+   * clears contacts for ids it created and no others, so writing a phone number
+   * onto somebody's existing supplier record would not be undoable — a closed
+   * loop rather than an omission.
+   */
+  if (!existing && (a.contact?.phone || a.contact?.email)) {
+    w = { ...w, vendorContact: { ...w.vendorContact, [vendorId]: { ...a.contact } } }
+  }
+
+  if (!existing && a.custom && Object.keys(a.custom).length > 0) {
+    for (const [fieldId, value] of Object.entries(a.custom)) {
+      cells.push([vendorId, fieldId, w.custom[vendorId]?.[fieldId] ?? ''])
+    }
+    w = setValues(w, vendorId, a.custom)
+  }
+
+  /* -------- the lines -------- */
+
+  const rates: VendorItem[] = []
+  const plan = planApproval(ws, a)
+  const skip = new Set(plan.skipped.map((s) => s.raw))
+
+  for (const l of a.lines) {
+    if (skip.has(l.raw)) continue
+
+    let itemId = l.itemId
+    if (l.creates && (l.newName ?? '').trim().length > 1) {
+      const [next, id] = issueId(w, 'IT')
+      /*
+       * Everything this build would otherwise compute is left at zero. A
+       * reorder point invented from a supplier's quotation is a number somebody
+       * would act on, and nobody has measured what this factory uses in a day.
+       * The same reasoning `applyImport` gives for its own created materials.
+       */
+      w = {
+        ...next,
+        items: [...next.items, buildItem(next, {
+          id,
+          name: (l.newName ?? '').trim(),
+          code: suggestCode((l.newName ?? '').trim(), next.items),
+          uom: l.newUom ?? 'nos',
+          moq: 0, daily: 0, cushionDays: 0,
+          lastPurchaseRate: l.rate,
+        })],
+      }
+      itemId = id
+      created.push(id)
+    }
+
+    const previous = w.vendorItems.find((vi) => vi.vendorId === vendorId && vi.itemId === itemId)
+    vendorItemsBefore.push({ key: `${vendorId}|${itemId}`, before: previous ?? null })
+    rates.push(buildRate(
+      { vendorId, itemId, rate: l.rate, leadDays: previous?.quotedLeadTimeDays || DEFAULT_LEAD_DAYS },
+      previous,
+    ))
+
+    if (l.learn && itemId) {
+      w = learnAlias(w, {
+        vendorId, raw: l.raw, itemId, confirmedBy: a.actor, confirmedAt: a.today,
+      })
+      aliasesCreated.push({ vendorId, raw: l.raw })
+    }
+  }
+
+  const before = new Map(w.items.map((i) => [i.id, i.lastPurchaseRate]))
+  const items = backfillRates(w.items, rates)
+  for (const it of items) {
+    const was = before.get(it.id) ?? 0
+    if (was !== it.lastPurchaseRate && !created.includes(it.id)) {
+      itemRatesBefore.push({ id: it.id, before: was })
+    }
+  }
+
+  const keys = new Set(rates.map((r) => `${r.vendorId}|${r.itemId}`))
+  w = {
+    ...w,
+    items,
+    vendorItems: [...w.vendorItems.filter((vi) => !keys.has(`${vi.vendorId}|${vi.itemId}`)), ...rates],
+  }
+
+  /* -------- the document -------- */
+
+  const undo: ImportUndo = {
+    /*
+     * Its own shape, and not the import's `IMP-${today}-${counts}` — two
+     * approvals in one day would collide there, and `doc.appliedUndoId` has to
+     * mean exactly one thing for the Documents screen to say "this can still be
+     * put back" truthfully rather than hopefully.
+     */
+    id: `INT-${a.doc.id}-${a.today}`,
+    entity: 'supplier',
+    at: a.today,
+    source: a.doc.fileName,
+    created,
+    updated: [],
+    vendorItemsBefore,
+    itemRatesBefore,
+    sideBefore,
+    aliasesCreated,
+    docApproved: a.doc.id,
+    cells,
+    fieldsCreated: [],
+    added: created.length,
+    changed: rates.length - vendorItemsBefore.filter((v) => v.before === null).length,
+  }
+
+  const doc: SupplierDoc = {
+    ...a.doc,
+    vendorId,
+    vendorName: existing?.name ?? a.vendorName.trim(),
+    status: 'approved',
+    appliedUndoId: undo.id,
+    lines: a.doc.lines.map((line) => {
+      const decided = a.lines.find((l) => l.raw === line.raw)
+      if (!decided || skip.has(line.raw)) return { ...line, decision: 'rejected' as const }
+      return { ...line, decision: 'accepted' as const, itemId: decided.itemId || line.itemId }
+    }),
+  }
+
+  w = {
+    ...w,
+    docs: w.docs.some((d) => d.id === doc.id)
+      ? w.docs.map((d) => (d.id === doc.id ? doc : d))
+      : [doc, ...w.docs],
+    lastImport: undo,
+  }
+
+  return { ws: w, undo }
+}
+
+/** Whether an approved document's undo is still the one that would be reversed. */
+export const stillUndoable = (ws: Workspace, doc: SupplierDoc): boolean =>
+  Boolean(doc.appliedUndoId && ws.lastImport?.id === doc.appliedUndoId)
+
+/** A material's name, for a line the owner has mapped. */
+export const nameOf = (items: Item[], id?: string): string =>
+  items.find((i) => i.id === id)?.name ?? ''
