@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Icon } from '@/components/ui/icons'
 import { useWorkspace } from '@/components/workspace/store'
+import { useAuth } from '@/components/workspace/auth'
 import { ROLE_LABEL } from '@/lib/workspace/types'
 
 /**
@@ -17,7 +18,8 @@ import { ROLE_LABEL } from '@/lib/workspace/types'
  * anywhere else, or Escape.
  */
 export function IdentityMenu() {
-  const { mode, workspace, session, hasAccount, setMode, signOut } = useWorkspace()
+  const { mode, workspace, session, hasAccount, setMode, signOut, sync } = useWorkspace()
+  const { account, signOut: authSignOut } = useAuth()
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
   const router = useRouter()
@@ -93,9 +95,28 @@ export function IdentityMenu() {
 
           <div className="my-1 border-t border-line-soft" />
 
+          {/*
+            * Where this company's data actually lives. Worth a permanent line
+            * rather than a setting somewhere: "is my work safe" should be
+            * answerable without hunting for it.
+            */}
+          {hasAccount && (
+            <p className="flex items-start gap-2 px-2.5 py-1.5 text-[11px] leading-snug text-ink-3">
+              <Icon name={account ? 'check' : 'lock'}
+                className={`mt-px size-3.5 shrink-0 ${account && sync.state === 'synced' ? 'text-good' : ''}`} />
+              <span>
+                {account
+                  ? (sync.state === 'error'
+                    ? <>On this device. The copy in <strong className="font-medium">{account.email}</strong> is behind.</>
+                    : <>On this device and in <strong className="font-medium">{account.email}</strong>.</>)
+                  : <>On this device only. An account keeps a copy.</>}
+              </span>
+            </p>
+          )}
+
           {hasAccount ? (
             <button type="button" role="menuitem"
-              onClick={() => { signOut(); setOpen(false); router.push('/') }}
+              onClick={() => { void authSignOut(); signOut(); setOpen(false); router.push('/') }}
               className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-ink-2 transition-colors hover:bg-surface-2">
               <Icon name="lock" className="size-3.5 shrink-0" />
               Sign out

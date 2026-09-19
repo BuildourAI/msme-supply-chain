@@ -1,12 +1,30 @@
 'use client'
 import {
-  createContext, useCallback, useContext, useEffect, useMemo, useState,
+  createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
 } from 'react'
 import type { SeedBundle } from '@/lib/domain/derive'
 import { SAMPLE_BUNDLE, bundleFor } from '@/lib/workspace/bundle'
 import { emptyWorkspace } from '@/lib/workspace/defaults'
-import { browserStore, type WorkspaceStore } from '@/lib/workspace/storage'
+import { browserStore, type Stored, type WorkspaceStore } from '@/lib/workspace/storage'
+import { chosen, fetchRemote, pushRemote, resolve } from '@/lib/workspace/remote'
+import { useAuth } from './auth'
 import type { PersonRole, Session, Workspace, WorkspaceMode } from '@/lib/workspace/types'
+
+/**
+ * Where the workspace stands against the copy in the database.
+ *
+ * `off` is the ordinary case and not a failure: nobody has signed in, so the
+ * data lives on this device and nowhere else, exactly as it always has.
+ */
+export type SyncState = 'off' | 'loading' | 'saving' | 'synced' | 'error'
+
+export interface Sync {
+  state: SyncState
+  /** when a copy was set aside on sign-in, the sentence saying which */
+  note: string | null
+  /** what went wrong, in words worth showing */
+  error: string | null
+}
 
 /**
  * Which company the screens are reading.
@@ -39,6 +57,12 @@ interface WorkspaceCtx {
   hasAccount: boolean
   /** storage refused to keep it: a private window, a full quota */
   persistent: boolean
+  /** how the browser copy stands against the database's */
+  sync: Sync
+  /** push the current workspace up now rather than on the usual delay */
+  syncNow: () => void
+  /** stop showing the sentence about a copy that was set aside */
+  clearSyncNote: () => void
   /**
    * The visitor is already inside the app, so the root shows the dashboard
    * rather than the sign-in. True when they asked for the sample company by URL
@@ -79,6 +103,16 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [persistent, setPersistent] = useState(true)
   const [today, setToday] = useState(SAMPLE_BUNDLE.today)
   const [insideApp, setInsideApp] = useState(false)
+  const [sync, setSync] = useState<Sync>({ state: 'off', note: null, error: null })
+
+  const { account } = useAuth()
+  /*
+   * The latest workspace, readable from a timer without making the timer
+   * depend on it. A debounced push that closed over `workspace` would either
+   * send a stale copy or be torn down and rebuilt on every keystroke.
+   */
+  const latest = useRef<Workspace | null>(null)
+  const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     const s = browserStore()
@@ -97,10 +131,47 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     setReady(true)
   }, [])
 
+  latest.current = workspace
+
+  /**
+   * Send the workspace up.
+   *
+   * Only ever called for a signed-in account, and deliberately quiet about
+   * failure beyond setting the state: the browser copy is already written by
+   * the time this runs, so a dropped connection costs nothing but freshness.
+   */
+  const push = useCallback(async (ws: Workspace, userId: string) => {
+    setSync((s0) => ({ ...s0, state: 'saving', error: null }))
+    try {
+      await pushRemote(userId, ws)
+      setSync((s0) => ({ ...s0, state: 'synced', error: null }))
+    } catch (e) {
+      setSync((s0) => ({
+        ...s0,
+        state: 'error',
+        error: `${(e as Error).message} — your work is saved on this device.`,
+      }))
+    }
+  }, [])
+
+  /**
+   * Push after a pause rather than on every change.
+   *
+   * Typing a supplier's name is a dozen renders; a round trip for each would be
+   * a dozen wasted writes and a visibly busy indicator. Two seconds of quiet is
+   * the signal that somebody has finished a thought.
+   */
+  const schedulePush = useCallback((ws: Workspace) => {
+    if (!account) return
+    if (pushTimer.current) clearTimeout(pushTimer.current)
+    pushTimer.current = setTimeout(() => { void push(ws, account.id) }, 2000)
+  }, [account, push])
+
   const persist = useCallback((ws: Workspace, sess: Session, m: WorkspaceMode) => {
     if (!store) return
     setPersistent(store.save({ workspace: ws, session: sess, mode: m }))
-  }, [store])
+    schedulePush(ws)
+  }, [store, schedulePush])
 
   const createWorkspace = useCallback<WorkspaceCtx['createWorkspace']>((input) => {
     const ws = emptyWorkspace({
@@ -123,10 +194,81 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setPersistent(store.save({
           workspace: next, session: { actor: next.owner.name, role: 'owner' }, mode: 'mine',
         }))
+        schedulePush(next)
       }
       return next
     })
-  }, [store])
+  }, [store, schedulePush])
+
+  /**
+   * Signing in joins the two copies together.
+   *
+   * Runs once per account change, never on an ordinary render. Which copy wins
+   * is decided by `resolve` in `remote.ts` — a pure function, so the one rule
+   * here that can lose somebody's work is readable and tested rather than
+   * tangled up in this effect.
+   */
+  useEffect(() => {
+    if (!store || !ready) return
+    if (!account) {
+      // signed out, or never signed in: the device copy is all there is
+      setSync({ state: 'off', note: null, error: null })
+      return
+    }
+
+    let alive = true
+    setSync({ state: 'loading', note: null, error: null })
+
+    ;(async () => {
+      try {
+        const local = store.load()
+        const remote = await fetchRemote()
+        if (!alive) return
+
+        const decision = resolve(local, remote)
+        const take = chosen(decision, local, remote)
+
+        if (decision.take === 'remote' && take) {
+          // adopt the account's copy, and write it down here so a reload
+          // without a connection still shows what was just seen
+          const sess: Session = { actor: take.owner.name, role: 'owner' }
+          setWorkspace(take)
+          setSession(sess)
+          setModeState('mine')
+          setPersistent(store.save({ workspace: take, session: sess, mode: 'mine' }))
+        }
+
+        if (decision.take !== 'neither' && decision.push && take) {
+          await pushRemote(account.id, take)
+        }
+        if (!alive) return
+
+        setSync({
+          state: 'synced',
+          note: decision.take === 'neither' ? null : decision.note,
+          error: null,
+        })
+      } catch (e) {
+        if (!alive) return
+        setSync({
+          state: 'error',
+          note: null,
+          error: `${(e as Error).message} — working from this device's copy.`,
+        })
+      }
+    })()
+
+    return () => { alive = false }
+  }, [account, store, ready])
+
+  const syncNow = useCallback(() => {
+    const ws = latest.current
+    if (!account || !ws) return
+    if (pushTimer.current) clearTimeout(pushTimer.current)
+    void push(ws, account.id)
+  }, [account, push])
+
+  const clearSyncNote = useCallback(() => setSync((s0) => ({ ...s0, note: null })), [])
 
   const signOut = useCallback(() => {
     store?.clear()
@@ -169,9 +311,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     ready,
     hasAccount: workspace != null,
     persistent,
+    sync, syncNow, clearSyncNote,
     insideApp,
     createWorkspace, update, setMode, signOut, browseSample,
   }), [mode, workspace, session, bundle, today, ready, persistent, insideApp,
+    sync, syncNow, clearSyncNote,
     createWorkspace, update, setMode, signOut, browseSample])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

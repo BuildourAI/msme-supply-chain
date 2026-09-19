@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/bits'
 import { Chips, Field, TextInput } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/icons'
 import { useWorkspace } from '@/components/workspace/store'
+import { useAuth } from '@/components/workspace/auth'
+import { AccountPanel } from './AccountPanel'
 import { ROLE_LABEL, type PersonRole } from '@/lib/workspace/types'
 
 /**
@@ -24,6 +26,7 @@ const ROLES: PersonRole[] = ['owner', 'manager', 'stores', 'buyer']
 
 export function Login() {
   const { createWorkspace, hasAccount, workspace, setMode, signOut, browseSample } = useWorkspace()
+  const { account } = useAuth()
   const [name, setName] = useState('')
   const [contact, setContact] = useState('')
   const [company, setCompany] = useState('')
@@ -109,14 +112,33 @@ export function Login() {
             Look at the sample company first
           </button>
         </div>
+
+        <div className="mt-4 border-t border-line-soft pt-4">
+          <AccountPanel />
+        </div>
       </div>
 
+      {/*
+        * This line used to promise that nothing was ever uploaded. That stopped
+        * being true the moment an account could exist, and a privacy promise
+        * that quietly goes stale is worse than none — so it now says which of
+        * the two situations you are actually in.
+        */}
       <p className="mt-4 flex items-start gap-1.5 text-[11.5px] leading-relaxed text-ink-3">
         <Icon name="lock" className="mt-px size-3.5 shrink-0" />
-        <span>
-          Your data stays in this browser, on this device. Nothing is uploaded and nobody else can see
-          it — including us. Clearing your browser data clears your workspace with it.
-        </span>
+        {account ? (
+          <span>
+            Your data is on this device and in your own database, readable only by this account —
+            not by other people using this app, and not by us. Sign out of the account and it stays
+            on the device alone.
+          </span>
+        ) : (
+          <span>
+            Your data stays in this browser, on this device. Nothing is uploaded and nobody else can
+            see it — including us. Clearing your browser data clears your workspace with it, which
+            is what an account above prevents.
+          </span>
+        )}
       </p>
     </div>
   )

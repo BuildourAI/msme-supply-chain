@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { AppProvider, useApp } from '@/state/app-store'
 import { WorkspaceProvider, useWorkspace, useWorkspaceKey } from '@/components/workspace/store'
+import { AuthProvider } from '@/components/workspace/auth'
 import { IdentityMenu } from './IdentityMenu'
 import { Inspector } from '@/components/ui/Inspector'
 import { Sheet } from '@/components/ui/Sheet'
@@ -207,11 +208,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // "from then on" has to mean from then on, not until the next click on the nav.
   // The workspace sits outside them all, because which company is open decides
   // what they read and whose name the audit trail records.
+  // Auth sits outside the workspace because the workspace reads it: signing in
+  // is what decides whether there is a database copy to reconcile against.
   return (
-    <WorkspaceProvider>
-      <AppProvider>
-        <Stores>{children}</Stores>
-      </AppProvider>
-    </WorkspaceProvider>
+    <AuthProvider>
+      <WorkspaceProvider>
+        <AppProvider>
+          <Stores>{children}</Stores>
+        </AppProvider>
+      </WorkspaceProvider>
+    </AuthProvider>
   )
 }

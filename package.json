@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
     "jspdf": "^4.2.1",
     "next": "^15.5.25",
     "react": "19.1.1",

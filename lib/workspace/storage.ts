@@ -31,6 +31,13 @@ export interface Stored {
    * back to their own data mid-browse reads as the app losing their place.
    */
   mode?: WorkspaceMode
+  /**
+   * When this browser last wrote. Compared against the database's own
+   * `updated_at` to settle which copy is newer when somebody signs in on a
+   * second device — see `resolve` in `remote.ts`. Absent on anything saved
+   * before syncing existed, which that function treats as the older copy.
+   */
+  savedAt?: string
 }
 
 export interface WorkspaceStore {
@@ -44,7 +51,7 @@ const memoryStore = (): WorkspaceStore => {
   let held: Stored | null = null
   return {
     load: () => held,
-    save: (s) => { held = s; return true },
+    save: (s) => { held = { ...s, savedAt: new Date().toISOString() }; return true },
     clear: () => { held = null },
   }
 }
@@ -201,7 +208,8 @@ export function browserStore(): WorkspaceStore {
     },
     save: (s) => {
       try {
-        ls.setItem(KEY, JSON.stringify(s))
+        // stamped here rather than by the caller, so every write carries one
+        ls.setItem(KEY, JSON.stringify({ ...s, savedAt: new Date().toISOString() }))
         return true
       } catch {
         return false
