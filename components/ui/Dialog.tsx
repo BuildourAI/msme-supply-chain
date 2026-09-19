@@ -15,15 +15,44 @@ export function Dialog({ open, onClose, title, sub, children, wide }: {
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
 
+  /*
+   * Held in a ref so that a caller passing a fresh arrow function on every
+   * render — which is most of them — cannot retrigger the effects below.
+   */
+  const close = useRef(onClose)
+  close.current = onClose
+
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close.current() }
     document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open])
+
+  /*
+   * Focus the first field, once, when the dialog opens.
+   *
+   * `[open]` and nothing else, which is what this always meant. It used to
+   * depend on `onClose` as well, and a dialog whose owner re-renders while you
+   * type — the upload wizard, because its close handler lives inside itself —
+   * re-ran this on every keystroke. Twenty milliseconds later focus jumped out
+   * of whatever you were typing in, and since the first focusable thing was the
+   * ✕ in the header, the first SPACE in a supplier's name pressed it and shut
+   * the whole dialog mid-word.
+   *
+   * The order matters too: a field before the close button, or opening a dialog
+   * parks the caret on "cancel". A hidden file input is skipped — it is the
+   * drop zone's, and focusing it reaches nothing a person can see.
+   */
+  useEffect(() => {
+    if (!open) return
     const t = window.setTimeout(() => {
-      ref.current?.querySelector<HTMLElement>('[data-autofocus], button, input, textarea')?.focus()
+      ref.current?.querySelector<HTMLElement>(
+        '[data-autofocus], input:not([type="file"]), select, textarea, button',
+      )?.focus()
     }, 20)
-    return () => { document.removeEventListener('keydown', onKey); window.clearTimeout(t) }
-  }, [open, onClose])
+    return () => window.clearTimeout(t)
+  }, [open])
 
   if (!open || !mounted) return null
   return createPortal(

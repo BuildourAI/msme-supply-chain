@@ -51,6 +51,16 @@ export interface DocLine {
   via: DocVia
   /** what the owner decided, once they have. Absent means still in the queue. */
   decision?: 'accepted' | 'rejected'
+  /**
+   * The material on this line was chosen by a person, not suggested.
+   *
+   * The distinction earns its field when the supplier is changed and every line
+   * is matched again: a suggestion should be recomputed against the new
+   * supplier, and a choice somebody made by hand should not be quietly undone.
+   * Without it the two are indistinguishable, and keeping both meant a wording
+   * learned from one supplier survived being reassigned to another.
+   */
+  picked?: boolean
   /** add this wording to the item master on approval — off unless ticked */
   creates?: boolean
   /** the name to create it under, when it is */

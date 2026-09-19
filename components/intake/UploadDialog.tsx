@@ -9,6 +9,7 @@ import { issueId } from '@/lib/workspace/defaults'
 import { findVendorByName, parseUom, UOM_VALUES } from '@/lib/workspace/records'
 import { applyApproval, planApproval, type ApprovalLine } from '@/lib/intake/apply'
 import { draftLines } from '@/lib/intake/draft'
+import { readHeader, readVendor } from '@/lib/intake/vendor'
 import { acceptFiles, readDocument } from '@/lib/intake/read'
 import { readImage } from '@/lib/intake/ocr'
 import { putFile } from '@/lib/intake/blobs'
@@ -53,12 +54,23 @@ export function UploadDialog({ open, onClose, resume }: {
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [read, setRead] = useState<DocRead>('typed')
+  const [header, setHeader] = useState<{ docNo?: string; validUntil?: string }>({})
 
   const [vendorId, setVendorId] = useState('')
   const [vendorName, setVendorName] = useState('')
   const [channel, setChannel] = useState<DocChannel>('email')
   const [receivedAt, setReceivedAt] = useState(today)
   const [typed, setTyped] = useState('')
+
+  /*
+   * The parsed rows are kept, not thrown away after the first draft. Matching
+   * depends on which supplier it is — their learned wordings resolve outright —
+   * so choosing or changing the supplier has to be able to run it again. Before
+   * this it could not, and a document read before anybody was chosen never got
+   * the benefit of a single wording the owner had taught.
+   */
+  const [rows, setRows] = useState<string[][]>([])
+  const [found, setFound] = useState<{ name: string; known: boolean } | null>(null)
 
   const [lines, setLines] = useState<DocLine[]>([])
   const [type, setType] = useState('')
@@ -72,7 +84,7 @@ export function UploadDialog({ open, onClose, resume }: {
     setDocId(null)
     setFile(null); setBusy(null); setPct(0); setError(null); setNote(null); setRead('typed')
     setVendorId(''); setVendorName(''); setChannel('email'); setReceivedAt(today)
-    setTyped(''); setLines([]); setType(''); setTerms('30')
+    setTyped(''); setRows([]); setFound(null); setLines([]); setType(''); setTerms('30')
     setPhone(''); setEmail(''); setCustom({}); setDone(null)
   }
 
@@ -103,13 +115,54 @@ export function UploadDialog({ open, onClose, resume }: {
   const known = vendorId ? ws.vendors.find((v) => v.id === vendorId) : undefined
   const forName = known?.name ?? vendorName
 
-  const ingest = async (rows: string[][], how: DocRead, source: string) => {
-    const drafted = draftLines(ws, vendorId || undefined, rows, 'SD-new')
-    setLines(drafted)
+  const ingest = (read: string[][], how: DocRead, source: string) => {
+    setRows(read)
     setRead(how)
+
+    /*
+     * Who it is from, before the lines are matched rather than after. Their
+     * learned wordings only apply once the supplier is known, so reading the
+     * letterhead first is what makes the very first document from a supplier
+     * benefit from everything the owner taught on the last one.
+     */
+    const who = readVendor(read, ws.vendors, ws.company.name)
+    const forId = who?.vendorId ?? (vendorId || undefined)
+    if (who) {
+      setFound({ name: who.name, known: Boolean(who.vendorId) })
+      if (who.vendorId) { setVendorId(who.vendorId); setVendorName('') }
+      else if (!vendorId) setVendorName(who.name)
+    }
+
+    const head = readHeader(read)
+    if (head.date) setReceivedAt(head.date)
+    setHeader(head)
+
+    const drafted = draftLines(ws, forId, read, 'SD-new')
+    setLines(drafted)
     if (drafted.length === 0) {
       setError(`Nothing priced was found in ${source}. Check it is the right file, or type the lines in.`)
     }
+  }
+
+  /**
+   * Run the matching again for a different supplier.
+   *
+   * Anything the owner has already settled on a line is theirs and survives —
+   * re-reading the file must not quietly undo a decision somebody made.
+   */
+  const reMatch = (forId: string | undefined) => {
+    if (rows.length === 0) return
+    const fresh = draftLines(ws, forId, rows, 'SD-new')
+    setLines((prev) => fresh.map((l) => {
+      const was = prev.find((x) => x.raw === l.raw)
+      // only what a person actually did: a line they decided, a material they
+      // ticked to create, or one they chose themselves. A suggestion the
+      // matcher made for the previous supplier is not a decision, and keeping
+      // it let a wording learned from one supplier survive being handed to
+      // another — confidently wrong, which is the whole thing to avoid.
+      const theirs = was && (was.decision || was.creates || was.picked)
+      return theirs ? { ...l, ...was, id: l.id } : l
+    }))
   }
 
   const pick = async (f: File) => {
@@ -118,7 +171,7 @@ export function UploadDialog({ open, onClose, resume }: {
     try {
       const out = await readDocument(f, readImage, setPct)
       setNote(out.note ?? null)
-      await ingest(out.rows, out.read, f.name)
+      ingest(out.rows, out.read, f.name)
     } catch (e) {
       setError((e as Error).message)
       setLines([])
@@ -129,8 +182,7 @@ export function UploadDialog({ open, onClose, resume }: {
 
   const useTyped = () => {
     setError(null)
-    const rows = typed.split(/\r?\n/).map((r) => r.split('\t').map((c) => c.trim()))
-    void ingest(rows, 'typed', 'what you typed')
+    ingest(typed.split(/\r?\n/).map((r) => r.split('\t').map((c) => c.trim())), 'typed', 'what you typed')
   }
 
   /* ------------------------------------------------------------ the lines -- */
@@ -169,9 +221,9 @@ export function UploadDialog({ open, onClose, resume }: {
     read,
     receivedAt,
     addedAt: resume?.addedAt ?? today,
-    docNo: resume?.docNo,
+    docNo: header.docNo ?? resume?.docNo,
     terms: resume?.terms,
-    validUntil: resume?.validUntil,
+    validUntil: header.validUntil ?? resume?.validUntil,
     remotePath: resume?.remotePath,
     lines: lines.map((l, n) => ({ ...l, id: `${id}/${n + 1}` })),
     status: 'draft',
@@ -290,7 +342,12 @@ export function UploadDialog({ open, onClose, resume }: {
           onClear={reset}
           vendorId={vendorId} vendorName={vendorName}
           vendors={ws.vendors.map((v) => ({ value: v.id, label: v.name }))}
-          onVendor={(id) => { setVendorId(id); if (id) setVendorName('') }}
+          found={found}
+          onVendor={(id) => {
+            setVendorId(id)
+            if (id) setVendorName('')
+            reMatch(id || undefined)
+          }}
           onVendorName={setVendorName}
           channel={channel} onChannel={setChannel}
           receivedAt={receivedAt} onReceivedAt={setReceivedAt}
@@ -359,6 +416,8 @@ function Source(p: {
   onUseTyped: () => void
   onPick: (f: File) => void
   onClear: () => void
+  /** who the document says it is from, if it said */
+  found: { name: string; known: boolean } | null
   vendorId: string
   vendorName: string
   vendors: { value: string; label: string }[]
@@ -428,6 +487,20 @@ function Source(p: {
           <input type="file" className="sr-only" accept={acceptFiles()}
             onChange={(e) => { const f = e.target.files?.[0]; if (f) p.onPick(f) }} />
         </label>
+      )}
+
+      {/*
+        * Said, not silently filled in. A box that populates itself without
+        * explanation reads as the system having decided something on your
+        * behalf; the same fact with a sentence beside it reads as help.
+        */}
+      {p.found && !p.busy && (
+        <p className="rounded-lg border border-line bg-surface-2 px-3 py-2.5 text-[12.5px] leading-snug text-ink-2">
+          Read from the document: <strong className="text-ink">{p.found.name}</strong>
+          {p.found.known
+            ? ' — already one of your suppliers.'
+            : ', which is not on your list yet.'}
+        </p>
       )}
 
       {p.error && (
@@ -557,7 +630,7 @@ function Lines({ lines, onLine, items, hasItems }: {
                   <Field label="Material">
                     <Select
                       value={preselect(l.confidence) ? (l.itemId ?? '') : (l.itemId && l.via === 'alias' ? l.itemId : '')}
-                      onChange={(v) => onLine(l.id, { itemId: v || undefined })}
+                      onChange={(v) => onLine(l.id, { itemId: v || undefined, picked: true })}
                       placeholder={l.itemId && !preselect(l.confidence)
                         ? `Closest: ${items.find((i) => i.value === l.itemId)?.label ?? ''}`
                         : 'Pick one'}

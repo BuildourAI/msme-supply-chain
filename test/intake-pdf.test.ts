@@ -19,6 +19,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { cellsToRows, readPdf, type TextCell } from '@/lib/intake/pdf'
+import { readHeader, readVendor } from '@/lib/intake/vendor'
 
 /**
  * pdf.js's Node build, which the browser never loads.
@@ -78,6 +79,24 @@ describe('a quotation that arrived as a PDF', () => {
     const flat = rows.map((r) => r.join(' ')).join('\n')
     expect(flat).toMatch(/SMA\/Q\/2026\/1184/)
     expect(flat).toMatch(/Valid until: 15\/10\/2026/)
+  })
+
+  it('knows who sent it, off the real page rather than a transcription of it', async () => {
+    /*
+     * `test/intake-vendor.test.ts` pins the rules against rows written by hand,
+     * which is right for the rules and proves nothing about the file. This is
+     * the join: the reader's own output, through the same functions.
+     */
+    const { rows } = await readPdf(fixture(), nodePdfjs)
+
+    expect(readVendor(rows, [], 'Patel Heaters')).toEqual({ name: 'SHAH METALS & ALLOYS' })
+    expect(readVendor(rows, [
+      { id: 'VN-007', name: 'Shah Metals & Alloys', paymentTermsDays: 30 },
+    ], 'Patel Heaters')?.vendorId).toBe('VN-007')
+
+    expect(readHeader(rows)).toEqual({
+      docNo: 'SMA/Q/2026/1184', date: '2026-09-12', validUntil: '2026-10-15',
+    })
   })
 })
 
