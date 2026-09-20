@@ -10,7 +10,7 @@ import { ConfirmDelete } from '@/components/sourcing/ConfirmDelete'
 import { DeskOnly } from '@/components/sourcing/DeskOnly'
 import { useWorkspace } from '@/components/workspace/store'
 import {
-  acceptQuote, nextNo, orderFromQuote, quoteGroups, removeQuote, type QuoteRow,
+  acceptQuote, expired, nextNo, orderFromQuote, quoteGroups, removeQuote, type QuoteRow,
 } from '@/lib/workspace/sourcing'
 import { issueId } from '@/lib/workspace/defaults'
 import { money, num, shortDate } from '@/lib/domain/format'
@@ -104,6 +104,20 @@ function Quotes() {
       align: 'right',
       cell: (r) => shortDate(r.quote.on),
       text: (r) => r.quote.on,
+    },
+    valid: {
+      align: 'right',
+      cell: (r) => {
+        if (!r.quote.validUntil) return <span className="text-ink-4">no date</span>
+        const gone = expired(r.quote.validUntil, today)
+        return (
+          <span className={gone ? 'font-medium text-critical' : ''}
+            title={gone ? 'Their price has run out — ask again before ordering on it' : undefined}>
+            {shortDate(r.quote.validUntil)}
+          </span>
+        )
+      },
+      text: (r) => r.quote.validUntil ?? '',
     },
     rfq: {
       cell: (r) => (r.rfq ? <span className="mono text-[11.5px]">{r.rfq.no}</span> : <span className="text-ink-4">—</span>),
@@ -208,7 +222,16 @@ function Quotes() {
                                   </span>
                                 )}
                               </span>
-                              <StatePill label={LABEL[r.quote.state]} tone={TONE[r.quote.state]} />
+                              <span className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+                                {/*
+                                  * An expired price is worth saying out loud
+                                  * rather than leaving in a column somebody
+                                  * has to look for.
+                                  */}
+                                {expired(r.quote.validUntil, today)
+                                  && <StatePill label="Expired" tone="critical" />}
+                                <StatePill label={LABEL[r.quote.state]} tone={TONE[r.quote.state]} />
+                              </span>
                             </div>
 
                             <dl className="mt-2.5 grid grid-cols-3 gap-1.5">

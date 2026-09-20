@@ -90,6 +90,16 @@ export interface Quote {
   leadDays: number
   /** their own reference, if they gave one */
   ref?: string
+  /**
+   * The day their price stops being their price.
+   *
+   * Almost every quotation says so and this build threw it away. A rate that
+   * expired in March is still ranking suppliers in September with nothing
+   * said, which is the quiet kind of wrong figure this build exists to avoid.
+   * Optional, because a price settled on the phone carries no validity and
+   * inventing one would be worse than having none.
+   */
+  validUntil?: string
   state: QuoteState
   on: string
 }
@@ -106,6 +116,44 @@ export interface PurchaseOrder {
   state: OrderState
   /** the quote it came from, when it came from one */
   quoteId?: string
+}
+
+/**
+ * Goods arriving, which is what turns remembered into measured.
+ *
+ * §5 makes lead time the trailing average of the last six actual receipts and
+ * calls that non-negotiable, precisely because the quoted figure flatters. The
+ * owner's workspace passed an empty receipt list to every derivation, so their
+ * lead times and rejection rates could only ever be what somebody typed. This
+ * is the record that changes it.
+ *
+ * `accepted` and `rejected` are kept separately rather than derived from each
+ * other, because a delivery can be short: 100 ordered, 96 arrived, 4 of those
+ * rejected. Three figures, three different things to know.
+ */
+export interface GoodsReceipt {
+  id: string
+  /** the order line it came against */
+  orderId: string
+  vendorId: string
+  itemId: string
+  /** what turned up */
+  qty: number
+  /** how much of it you could use */
+  accepted: number
+  /** and how much you could not */
+  rejected: number
+  /** why, in the owner's words */
+  note?: string
+  /**
+   * Copied off the order rather than looked up.
+   *
+   * A receipt has to be able to say how long it took on its own — the order it
+   * came against can be edited, and a lead time that changes because somebody
+   * corrected a date last month is not a measurement.
+   */
+  orderedOn: string
+  receivedOn: string
 }
 
 /* --------------------------------------------- fields the owner invents -- */
@@ -290,6 +338,8 @@ export interface Workspace {
   rfqs: Rfq[]
   quotes: Quote[]
   orders: PurchaseOrder[]
+  /** and what actually turned up, which is the only thing that measures anybody */
+  receipts: GoodsReceipt[]
   /** the columns the owner invented, and what each record holds in them */
   fields: FieldDef[]
   /**
@@ -332,12 +382,14 @@ export interface Workspace {
 /**
  * Raised whenever `migrate` has to do something a past version cannot undo.
  *
- * 3 records supplier documents and learned wordings. Nothing reads this number
- * yet — it is written and kept — so what the bump documents is the direction it
- * cannot go: a build from before 3 reading a workspace saved by this one will
- * drop both on its next migrate.
+ * 3 records supplier documents and learned wordings. 4 records goods arriving,
+ * which is what moves a lead time and a rejection rate off what somebody typed.
+ * Nothing reads this number yet — it is written and kept — so what the bump
+ * documents is the direction it cannot go: a build from before 4 reading a
+ * workspace saved by this one drops its receipts on the next migrate, and with
+ * them every figure that was measured rather than claimed.
  */
-export const SCHEMA = 3
+export const SCHEMA = 4
 
 /** Which company the screens are reading. The sample is never written to. */
 export type WorkspaceMode = 'sample' | 'mine'

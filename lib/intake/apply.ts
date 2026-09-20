@@ -281,6 +281,8 @@ export function applyApproval(ws: Workspace, a: Approval): { ws: Workspace; undo
         moq: 0,
         leadDays: DEFAULT_LEAD_DAYS,
         ref: a.doc.docNo,
+        // what the letterhead said this price is good until, if it said
+        validUntil: a.doc.validUntil,
         state: 'received' as const,
         on: a.doc.receivedAt || a.today,
       }],

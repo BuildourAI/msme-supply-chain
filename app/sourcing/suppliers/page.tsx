@@ -62,7 +62,13 @@ function Suppliers() {
       align: 'right',
       cell: (r) => (r.leadDays === null
         ? <span className="text-ink-4">—</span>
-        : `${r.leadDays}d`),
+        // measured beats quoted the moment there is a receipt, and says so
+        : <span title={r.leadMeasured
+          ? 'Measured from what has actually arrived'
+          : 'What they quote — nothing has been recorded arriving yet'}>
+          {r.leadDays}d
+          {r.leadMeasured && <span className="ml-1 text-[10px] text-good">measured</span>}
+        </span>),
       text: (r) => (r.leadDays === null ? '' : String(r.leadDays)),
     },
     terms: {

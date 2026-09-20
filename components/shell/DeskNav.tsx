@@ -14,13 +14,13 @@ import { sourcingNav, stageOf, STAGE_TILES } from '@/lib/workspace/reveal'
  * front of somebody on their first morning.
  */
 export function DeskNav({ onNavigate }: { onNavigate?: () => void }) {
-  const { workspace } = useWorkspace()
+  const { workspace, today } = useWorkspace()
   const pathname = usePathname()
   if (!workspace) return null
 
   const stage = stageOf(pathname) ?? 'sourcing'
   const tile = STAGE_TILES.find((s) => s.id === stage)!
-  const rows = sourcingNav(workspace)
+  const rows = sourcingNav(workspace, today)
 
   return (
     <>

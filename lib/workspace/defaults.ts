@@ -120,6 +120,7 @@ export function emptyWorkspace(input: {
     rfqs: [],
     quotes: [],
     orders: [],
+    receipts: [],
     policy: { ...STARTER_POLICY },
     vendorType: {},
     itemGroup: {},

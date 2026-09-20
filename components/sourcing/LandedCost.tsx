@@ -4,7 +4,9 @@ import { ListPage } from '@/components/ui/ListPage'
 import { DataTable, StatePill, type Column } from '@/components/ui/DataTable'
 import { useWorkspace } from '@/components/workspace/store'
 import { rankByLanded, unsetComponents, type Ranked } from '@/lib/workspace/landed'
-import { money, num } from '@/lib/domain/format'
+import { rejectionBasis } from '@/lib/workspace/receipts'
+import { expired } from '@/lib/workspace/sourcing'
+import { money, num, shortDate } from '@/lib/domain/format'
 import type { Item, Vendor } from '@/lib/domain/types'
 
 /*
@@ -36,7 +38,7 @@ type Row = Ranked & { vendor: Vendor }
  * says which, and says it before the table rather than under it.
  */
 export function LandedCost() {
-  const { workspace } = useWorkspace()
+  const { workspace, today } = useWorkspace()
   const [pick, setPick] = useState('')
 
   const priced = useMemo(
@@ -67,6 +69,7 @@ export function LandedCost() {
   const cheap = rows.find((r) => r.cheapestQuoted)
   const gap = flips && cheap ? cheap.b.landed - rows[0].b.landed : 0
   const missing = item ? unsetComponents(ws, item.id) : []
+  const stale = rows.filter((r) => expired(r.vi.quoteValidUntil, today))
   const flat = rows.length > 1 && rows.every((r) => r.b.landed === r.vi.rate)
 
   const termsOf = (r: Row) => ws.vendors.find((v) => v.id === r.vi.vendorId)?.paymentTermsDays ?? 0
@@ -92,7 +95,40 @@ export function LandedCost() {
         </span>
       ),
     },
-    { key: 'rej', head: 'Rejects', align: 'right', cell: (r) => <Add n={r.b.rejection} /> },
+    {
+      key: 'rej', head: 'Rejects', align: 'right',
+      cell: (r) => {
+        /*
+         * The one component that can be measured rather than remembered. §5
+         * derives it from a supplier's actual rejection history, and until
+         * goods were recorded arriving there was no history to derive it from
+         * — so this says which of the two it is looking at rather than
+         * printing both the same way.
+         */
+        const b = rejectionBasis(ws, r.vi.vendorId, r.vi.itemId)
+        return (
+          <span title={b.measured
+            ? `Measured from ${b.receipts} receipt${b.receipts === 1 ? '' : 's'}`
+            : 'As you entered it — nothing has been recorded arriving yet'}>
+            <Add n={r.b.rejection} />
+            {b.measured && <span className="ml-1 text-[10px] text-good">measured</span>}
+          </span>
+        )
+      },
+    },
+    {
+      key: 'valid', head: 'Good until', align: 'right',
+      cell: (r) => {
+        if (!r.vi.quoteValidUntil) return <span className="text-ink-4">no date</span>
+        const gone = expired(r.vi.quoteValidUntil, today)
+        return (
+          <span className={gone ? 'font-medium text-critical' : 'text-ink-2'}
+            title={gone ? 'This price has run out — the ranking below is on a stale figure' : undefined}>
+            {shortDate(r.vi.quoteValidUntil)}
+          </span>
+        )
+      },
+    },
     {
       key: 'landed', head: 'Lands at', align: 'right',
       cell: (r) => (
@@ -109,6 +145,7 @@ export function LandedCost() {
           {r.cheapestQuoted && !r.cheapestLanded && <StatePill label="Cheapest quoted" tone="warn" />}
           {r.cheapestQuoted && r.cheapestLanded && rows.length > 1
             && <StatePill label="Cheapest quoted" tone="good" />}
+          {expired(r.vi.quoteValidUntil, today) && <StatePill label="Expired" tone="critical" />}
         </span>
       ),
     },
@@ -134,6 +171,19 @@ export function LandedCost() {
           {item && <Verdict
             item={item} rows={rows} flips={flips} gap={gap} flat={flat} missing={missing}
             cheapName={cheap?.vendor.name ?? ''} bestName={rows[0]?.vendor.name ?? ''} />}
+          {/*
+            * Said before the table rather than under it, next to the other
+            * thing this screen refuses to be quiet about. A ranking on a price
+            * that ran out in March is a ranking, and it is not an answer.
+            */}
+          {stale.length > 0 && (
+            <Line tone="warn">
+              <strong className="text-ink">
+                {stale.length === 1 ? "One of these prices has run out" : `${stale.length} of these prices have run out`}
+              </strong>{' '}
+              — {stale.map((r) => r.vendor.name).join(', ')}. Ask them again before ordering on it.
+            </Line>
+          )}
           <DataTable columns={columns} rows={shown} keyOf={(r) => r.vi.vendorId} />
         </>
       )}

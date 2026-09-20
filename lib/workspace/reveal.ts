@@ -12,6 +12,7 @@
  * useless for that.
  */
 import type { IconName } from '@/components/ui/icons'
+import { staleRates } from './sourcing'
 import type { Workspace } from './types'
 
 export interface NavRow {
@@ -46,7 +47,7 @@ export const BUILT: StageId[] = ['sourcing']
  * briefly empty. What each screen does when it has nothing is say so, which is
  * a job for the screen rather than the menu.
  */
-export function sourcingNav(ws: Workspace): NavRow[] {
+export function sourcingNav(ws: Workspace, today = ''): NavRow[] {
   const open = ws.orders.filter((o) => o.state !== 'delivered' && o.state !== 'cancelled').length
   const waiting = ws.rfqs.filter((r) => r.state === 'sent' || r.state === 'quoted').length
   const unfiled = ws.docs.filter((d) => d.status === 'draft').length
@@ -68,7 +69,18 @@ export function sourcingNav(ws: Workspace): NavRow[] {
      * material — a number that goes down when somebody acts on it, rather than
      * one that only ever climbs.
      */
-    { label: 'Landed cost', href: '/sourcing/compare', icon: 'cash', badge: count(flipping(ws)) },
+    /*
+     * The badge counts two things worth acting on: a material where the
+     * cheapest quote is not the cheapest material, and a rate still ranking
+     * suppliers on a price that has run out. Both go down when somebody does
+     * something about them, which is the only kind of badge worth having.
+     */
+    {
+      label: 'Landed cost',
+      href: '/sourcing/compare',
+      icon: 'cash',
+      badge: count(flipping(ws) + (today ? staleRates(ws, today) : 0)),
+    },
     { label: 'Purchase orders', href: '/sourcing/orders', icon: 'cart', badge: count(open) },
   ]
 }

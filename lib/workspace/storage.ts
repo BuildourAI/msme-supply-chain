@@ -17,7 +17,8 @@ import type { Item, Vendor } from '@/lib/domain/types'
 import { highestIssued } from './defaults'
 import { SCHEMA } from './types'
 import type {
-  FieldDef, PurchaseOrder, Quote, Rfq, SendEntry, Session, TableView, Workspace, WorkspaceMode,
+  FieldDef, GoodsReceipt, PurchaseOrder, Quote, Rfq, SendEntry, Session, TableView, Workspace,
+  WorkspaceMode,
 } from './types'
 import type { SupplierDoc, VendorAlias } from '@/lib/intake/types'
 
@@ -120,6 +121,7 @@ function migrate(raw: Partial<Workspace>): Workspace {
   const quotes = list<Quote>(raw.quotes)
   const orders = list<PurchaseOrder>(raw.orders)
   const docs = list<SupplierDoc>(raw.docs)
+  const receipts = list<GoodsReceipt>(raw.receipts)
 
   /*
    * The id counter is seeded from what is actually there the first time a blob
@@ -139,6 +141,7 @@ function migrate(raw: Partial<Workspace>): Workspace {
   seed('PO', orders)
   seed('CF', list<FieldDef>(raw.fields))
   seed('SD', docs)
+  seed('GR', receipts)
 
   const view = (v: Partial<TableView> | undefined): TableView => ({
     order: list<string>(v?.order),
@@ -183,6 +186,12 @@ function migrate(raw: Partial<Workspace>): Workspace {
     rfqs,
     quotes,
     orders,
+    /*
+     * Empty on a workspace saved before goods could be recorded arriving, and
+     * nothing is lost — there was nothing to lose. What it means going forward
+     * is that lead times and rejection rates stop being what somebody typed.
+     */
+    receipts,
     fields: list(raw.fields),
     custom: map(raw.custom),
     views: {

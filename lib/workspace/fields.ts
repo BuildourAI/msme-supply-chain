@@ -84,6 +84,7 @@ export const BUILTIN: Record<SheetEntity, BuiltinColumn[]> = {
     { key: 'lead', label: 'Takes', kind: 'number', aliases: ['lead time', 'lead days', 'delivery days', 'days'] },
     { key: 'ref', label: 'Their reference', kind: 'text', aliases: ['reference', 'quotation no', 'quote no', 'quotation number'] },
     { key: 'on', label: 'Quoted on', kind: 'date', aliases: ['date', 'quoted on', 'quotation date'] },
+    { key: 'valid', label: 'Valid until', kind: 'date', aliases: ['valid until', 'valid upto', 'validity', 'expires'] },
     { key: 'rfq', label: 'Against', derived: true },
   ],
   /*
@@ -100,6 +101,12 @@ export const BUILTIN: Record<SheetEntity, BuiltinColumn[]> = {
     { key: 'qty', label: 'Qty', kind: 'number', aliases: ['quantity', 'qty', 'how much'] },
     { key: 'rate', label: 'Rate', kind: 'number', aliases: ['unit price', 'agreed rate', 'price', 'rate per unit'] },
     { key: 'total', label: 'Total', derived: true },
+    /*
+     * What has actually turned up against the line. Derived, because it is the
+     * sum of the receipts and a sheet must not be allowed to claim a delivery
+     * that was never recorded.
+     */
+    { key: 'received', label: 'Received', derived: true },
     { key: 'ordered', label: 'Ordered', kind: 'date', aliases: ['ordered on', 'order date', 'po date'] },
     { key: 'expected', label: 'Expected', kind: 'date', aliases: ['expected on', 'due', 'delivery date', 'promised'] },
   ],

@@ -8,6 +8,7 @@ import { issueId } from '@/lib/workspace/defaults'
 import { backfillRates, buildRate, buildVendor, unclaimableGstPctOf } from '@/lib/workspace/records'
 import { setValues } from '@/lib/workspace/fields'
 import { repriceTerms } from '@/lib/workspace/landed'
+import { rejectionBasis } from '@/lib/workspace/receipts'
 import { CustomFields } from '@/components/sheet/CustomFields'
 import type { Workspace } from '@/lib/workspace/types'
 import type { Vendor, VendorItem } from '@/lib/domain/types'
@@ -274,8 +275,21 @@ export function SupplierForm({ open, onClose, editing }: {
                       <NumberInput value={l.gstPct} onChange={(v) => setLine(i, { gstPct: v })}
                         unit="%" placeholder="0" />
                     </Field>
+                    {/*
+                      * The one figure here that stops being a recollection.
+                      * Once goods have been recorded arriving, this is the
+                      * measured rate and the hint says so — typing over it is
+                      * allowed and the next receipt measures it again.
+                      */}
                     <Field label="Usually rejected"
-                      hint="What you have seen, until receipts measure it.">
+                      hint={(() => {
+                        const b = editing && l.itemId
+                          ? rejectionBasis(ws, editing.id, l.itemId)
+                          : { measured: false, receipts: 0 }
+                        return b.measured
+                          ? `Measured from ${b.receipts} receipt${b.receipts === 1 ? '' : 's'}.`
+                          : 'What you have seen, until receipts measure it.'
+                      })()}>
                       <NumberInput value={l.rejectPct} onChange={(v) => setLine(i, { rejectPct: v })}
                         unit="%" placeholder="0" />
                     </Field>

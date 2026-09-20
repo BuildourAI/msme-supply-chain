@@ -386,6 +386,7 @@ export function applyImport(
         moq: parseNumber(values.moq ?? '') ?? 0,
         leadDays: parseNumber(values.lead ?? '') ?? 0,
         ref: values.ref || undefined,
+        validUntil: toIsoDate(values.valid ?? '') || undefined,
         /*
          * Always received, however the sheet describes it. Accepting is what
          * writes the rate and turns the rivals down, and a spreadsheet cell

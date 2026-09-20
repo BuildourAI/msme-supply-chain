@@ -31,6 +31,7 @@ export function QuoteForm({ open, onClose, editing, forRfqId }: {
   const [moq, setMoq] = useState('')
   const [leadDays, setLeadDays] = useState('')
   const [ref, setRef] = useState('')
+  const [valid, setValid] = useState('')
   const [rfqId, setRfqId] = useState('')
   const [tried, setTried] = useState(false)
 
@@ -41,12 +42,13 @@ export function QuoteForm({ open, onClose, editing, forRfqId }: {
       setVendorId(editing.vendorId); setItemId(editing.itemId)
       setPrice(String(editing.unitPrice)); setMoq(String(editing.moq))
       setLeadDays(String(editing.leadDays)); setRef(editing.ref ?? '')
+      setValid(editing.validUntil ?? '')
       setRfqId(editing.rfqId ?? '')
     } else {
       const rfq = forRfqId ? workspace.rfqs.find((r) => r.id === forRfqId) : undefined
       setVendorId(rfq?.vendorIds[0] ?? workspace.vendors[0]?.id ?? '')
       setItemId(rfq?.itemId ?? workspace.items[0]?.id ?? '')
-      setPrice(''); setMoq(''); setLeadDays(''); setRef('')
+      setPrice(''); setMoq(''); setLeadDays(''); setRef(''); setValid('')
       setRfqId(forRfqId ?? '')
     }
   }, [open, editing, forRfqId]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -98,6 +100,7 @@ export function QuoteForm({ open, onClose, editing, forRfqId }: {
         moq: moqN,
         leadDays: leadN,
         ref: ref.trim() || undefined,
+        validUntil: valid.length === 10 ? valid : undefined,
         state: editing?.state ?? 'received',
         on: editing?.on ?? today,
       }
@@ -150,9 +153,20 @@ export function QuoteForm({ open, onClose, editing, forRfqId }: {
           */}
         <QuoteStanding itemId={itemId} vendorId={vendorId} price={priceN} />
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Their reference" hint="Optional — the number on their quotation.">
             <TextInput value={ref} onChange={setRef} placeholder="QTR-2026-003" />
+          </Field>
+          {/*
+            * Almost every quotation says one and this build threw it away, so
+            * a price agreed in March went on ranking suppliers in September
+            * with nothing said. Optional: a price settled on the phone carries
+            * no validity, and inventing one would be worse than having none.
+            */}
+          <Field label="Good until" hint="Optional — what their quotation says." htmlFor="qf-valid">
+            <input id="qf-valid" type="date" value={valid}
+              onChange={(e) => setValid(e.target.value)}
+              className="num w-full rounded-md border border-line bg-surface px-2.5 py-2 text-[13px] outline-none focus:border-accent" />
           </Field>
           <Field label="Against a request?" hint="Optional. Linking it lets you compare like with like.">
             <Select value={rfqId} onChange={setRfqId} placeholder="No request"

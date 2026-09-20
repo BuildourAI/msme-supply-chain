@@ -41,12 +41,20 @@ export function quotedItems(ws: Workspace): Item[] {
 /**
  * The owner's company as a bundle.
  *
- * `receipts` is empty and stays empty until this build records goods actually
- * arriving. That is not a gap to paper over: §5 makes lead time the trailing
- * average of the last six real receipts precisely because the quoted figure
- * flatters. With no receipts the quoted figure is all there is, so
- * `trailingLeadTimeDays` falls back to it and labels it as quoted — the number
- * says what it is, and improves itself the day the first receipt lands.
+ * `receipts` was empty for as long as nothing recorded goods arriving, and the
+ * comment here said so at length: §5 makes lead time the trailing average of
+ * the last six real receipts precisely because the quoted figure flatters, and
+ * with none the quoted figure stood in and was labelled as quoted.
+ *
+ * It no longer stands in. Every receipt the owner records is passed through,
+ * and `trailingLeadTimeDays` takes the last six of them — so the lead time on
+ * an owner's screen is the same kind of number as the sample company's, and it
+ * says which it is. A material nobody has received yet still falls back to the
+ * quoted figure, which is the honest answer for it.
+ *
+ * Only the four fields the domain `Receipt` has are passed. A goods receipt
+ * carries quantities and a note as well; those are the owner's record of what
+ * happened, and the derivation has no business seeing them.
  */
 export function bundleFor(ws: Workspace, today: string): SeedBundle {
   return {
@@ -56,6 +64,12 @@ export function bundleFor(ws: Workspace, today: string): SeedBundle {
     vendorItems: ws.vendorItems,
     stockLots: ws.stockLots,
     poLines: [],
-    receipts: [],
+    receipts: (ws.receipts ?? []).map((r) => ({
+      id: r.id,
+      vendorId: r.vendorId,
+      itemId: r.itemId,
+      orderedOn: r.orderedOn,
+      receivedOn: r.receivedOn,
+    })),
   }
 }

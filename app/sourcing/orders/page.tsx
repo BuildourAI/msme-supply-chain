@@ -6,10 +6,12 @@ import { DeskTools } from '@/components/sheet/DeskTools'
 import { buildColumns, type DrawnColumn } from '@/components/sheet/columns'
 import { OrderForm } from '@/components/sourcing/OrderForm'
 import { PoDocument, PoSentPill } from '@/components/sourcing/PoDocument'
+import { ReceiveForm } from '@/components/sourcing/ReceiveForm'
 import { ConfirmDelete } from '@/components/sourcing/ConfirmDelete'
 import { DeskOnly } from '@/components/sourcing/DeskOnly'
 import { useWorkspace } from '@/components/workspace/store'
 import { orderRows, removeOrder, type OrderRow } from '@/lib/workspace/sourcing'
+import { outstandingOn, receivedAgainst } from '@/lib/workspace/receipts'
 import { money, num, shortDate } from '@/lib/domain/format'
 import type { OrderState, PurchaseOrder } from '@/lib/workspace/types'
 
@@ -39,6 +41,7 @@ function Orders() {
   const [adding, setAdding] = useState(false)
   const [deleting, setDeleting] = useState<PurchaseOrder | null>(null)
   const [papering, setPapering] = useState<string | null>(null)
+  const [receiving, setReceiving] = useState<PurchaseOrder | null>(null)
 
   if (!workspace) return null
   const ws = workspace
@@ -87,6 +90,26 @@ function Orders() {
       align: 'right',
       cell: (r) => <span className="font-medium">{money(r.total)}</span>,
       text: (r) => String(r.total),
+    },
+    /*
+     * What has actually turned up, which is the column a paper order book
+     * cannot keep. Blank until something has, rather than a confident 0 —
+     * "nothing has arrived" and "nothing was ordered" look the same as a zero.
+     */
+    received: {
+      align: 'right',
+      cell: (r) => {
+        const got = receivedAgainst(ws, r.order.id)
+        if (got === 0) return <span className="text-ink-4">—</span>
+        const left = outstandingOn(ws, r.order)
+        return (
+          <span title={left > 0 ? `${num(left, 3)} still to come` : 'All of it'}
+            className={left > 0 ? 'text-warn' : ''}>
+            {num(got, 3)}{r.item ? ` ${r.item.uom}` : ''}
+          </span>
+        )
+      },
+      text: (r) => String(receivedAgainst(ws, r.order.id)),
     },
     ordered: {
       align: 'right',
@@ -137,6 +160,11 @@ function Orders() {
             <DataTable
               columns={kit.columns} rows={shown} keyOf={(r) => r.order.id}
               extra={{
+                icon: 'tray',
+                label: (r) => `Record what arrived against ${r.order.no}`,
+                onClick: (r) => setReceiving(r.order),
+              }}
+              extra2={{
                 icon: 'doc',
                 label: (r) => `Make the ${r.order.no} document`,
                 onClick: (r) => setPapering(r.order.no),
@@ -159,6 +187,9 @@ function Orders() {
       </ListPage>
 
       <PoDocument open={papering !== null} no={papering} onClose={() => setPapering(null)} />
+
+      <ReceiveForm open={receiving !== null} order={receiving}
+        onClose={() => setReceiving(null)} />
 
       <OrderForm open={adding || editing !== null} editing={editing}
         onClose={() => { setAdding(false); setEditing(null) }} />

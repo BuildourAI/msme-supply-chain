@@ -47,20 +47,31 @@ export interface SupplierRow {
   type: string
   /** how many materials they quote a standing rate for */
   supplies: number
-  /** the quickest they say they can deliver, across those materials */
+  /**
+   * The quickest they deliver, across those materials.
+   *
+   * Measured where goods have been recorded arriving, and what they say about
+   * themselves everywhere else. It used to be the quoted figure always, which
+   * was the only figure that existed; §5 calls the trailing average of the
+   * last six receipts non-negotiable, so the moment there is one it wins.
+   */
   leadDays: number | null
+  /** whether that figure came from receipts or from the supplier */
+  leadMeasured: boolean
   openOrders: number
 }
 
 export function supplierRows(ws: Workspace): SupplierRow[] {
   return ws.vendors.map((vendor) => {
     const mine = ws.vendorItems.filter((vi) => vi.vendorId === vendor.id)
-    const leads = mine.map((vi) => vi.quotedLeadTimeDays).filter((n) => n > 0)
+    const leads = mine.map((vi) => vi.trailingLeadTimeDays || vi.quotedLeadTimeDays)
+      .filter((n) => n > 0)
     return {
       vendor,
       type: ws.vendorType[vendor.id] ?? '',
       supplies: mine.length,
       leadDays: leads.length ? Math.min(...leads) : null,
+      leadMeasured: (ws.receipts ?? []).some((r) => r.vendorId === vendor.id),
       openOrders: ws.orders.filter(
         (o) => o.vendorId === vendor.id && o.state !== 'delivered' && o.state !== 'cancelled',
       ).length,
@@ -302,6 +313,8 @@ export function removeVendor(ws: Workspace, vendorId: string): Workspace {
     vendorItems: ws.vendorItems.filter((vi) => vi.vendorId !== vendorId),
     quotes: ws.quotes.filter((q) => q.vendorId !== vendorId),
     orders: ws.orders.filter((o) => o.vendorId !== vendorId),
+    // and what arrived from them, which measures a supplier who is no longer one
+    receipts: (ws.receipts ?? []).filter((r) => r.vendorId !== vendorId),
     rfqs: ws.rfqs.map((r) => ({ ...r, vendorIds: r.vendorIds.filter((id) => id !== vendorId) })),
     vendorType: Object.fromEntries(
       Object.entries(ws.vendorType).filter(([id]) => id !== vendorId),
@@ -318,6 +331,7 @@ export function removeItem(ws: Workspace, itemId: string): Workspace {
     rfqs: ws.rfqs.filter((r) => r.itemId !== itemId),
     quotes: ws.quotes.filter((q) => q.itemId !== itemId),
     orders: ws.orders.filter((o) => o.itemId !== itemId),
+    receipts: (ws.receipts ?? []).filter((r) => r.itemId !== itemId),
     itemGroup: Object.fromEntries(
       Object.entries(ws.itemGroup).filter(([id]) => id !== itemId),
     ),
@@ -347,7 +361,16 @@ export function removeQuote(ws: Workspace, quoteId: string): Workspace {
 }
 
 export function removeOrder(ws: Workspace, orderId: string): Workspace {
-  return pruneCustom({ ...ws, orders: ws.orders.filter((o) => o.id !== orderId) })
+  return pruneCustom({
+    ...ws,
+    orders: ws.orders.filter((o) => o.id !== orderId),
+    /*
+     * The receipts against it go too. A receipt is a measurement of a delivery
+     * on an order, and one whose order has been deleted measures nothing — it
+     * would go on shortening a supplier's lead time from a line nobody can see.
+     */
+    receipts: (ws.receipts ?? []).filter((r) => r.orderId !== orderId),
+  })
 }
 
 /**
@@ -408,13 +431,36 @@ export function acceptQuote(ws: Workspace, quoteId: string): Workspace {
 /**
  * How long an accepted price holds.
  *
- * Read off the document the quote came from when there is one, because that is
- * where a supplier states it. Nothing is invented when the document did not
- * say: a validity somebody would act on has to come from the supplier.
+ * The quote's own date first, because that is what the supplier wrote against
+ * this price; the document it came in on second, for a quote recorded before
+ * quotes carried a validity. Nothing is invented when neither says: a validity
+ * somebody would act on has to come from the supplier.
  */
 function validUntilOf(ws: Workspace, quote: Quote): string | undefined {
+  if (quote.validUntil) return quote.validUntil
   const doc = ws.docs.find(
     (d) => d.vendorId === quote.vendorId && d.validUntil && d.status === 'approved',
   )
   return doc?.validUntil
 }
+
+/* ------------------------------------------------------------ going stale -- */
+
+/**
+ * Whether a price has stopped being a price.
+ *
+ * Dates only, and a string comparison, because ISO dates sort. A quote with no
+ * validity never expires — which is not the same as saying it is fresh, and
+ * the screens say "no date" rather than "valid".
+ */
+export const expired = (validUntil: string | undefined, today: string): boolean =>
+  Boolean(validUntil) && validUntil! < today
+
+/**
+ * How many of an owner's rates are ranking suppliers on an expired price.
+ *
+ * Counted for the rail badge, so the number goes down when somebody acts on
+ * it rather than only ever climbing.
+ */
+export const staleRates = (ws: Workspace, today: string): number =>
+  ws.vendorItems.filter((vi) => expired(vi.quoteValidUntil, today)).length

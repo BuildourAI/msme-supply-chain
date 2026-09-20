@@ -24,7 +24,7 @@ export interface Column<T> {
 }
 
 export function DataTable<T>({
-  columns, rows, keyOf, onEdit, onDelete, editLabel, deleteLabel, extra,
+  columns, rows, keyOf, onEdit, onDelete, editLabel, deleteLabel, extra, extra2,
 }: {
   columns: Column<T>[]
   rows: T[]
@@ -40,8 +40,10 @@ export function DataTable<T>({
    * the whole point of this table is that it is not one.
    */
   extra?: { icon: IconName; label: (row: T) => string; onClick: (row: T) => void }
+  /** a second one, for a list with two things worth doing to a row */
+  extra2?: { icon: IconName; label: (row: T) => string; onClick: (row: T) => void }
 }) {
-  const acts = Boolean(onEdit || onDelete || extra)
+  const acts = Boolean(onEdit || onDelete || extra || extra2)
   return (
     <div className="scroll-x relative overflow-x-auto rounded-xl border border-line bg-surface">
       <table className="w-full border-collapse text-[13px]">
@@ -70,14 +72,14 @@ export function DataTable<T>({
               {acts && (
                 <td className="whitespace-nowrap px-4 py-3 text-right">
                   <span className="inline-flex items-center gap-1">
-                    {extra && (
-                      <button type="button" onClick={() => extra.onClick(row)}
-                        title={extra.label(row)}
+                    {[extra, extra2].filter(Boolean).map((e) => (
+                      <button key={e!.icon} type="button" onClick={() => e!.onClick(row)}
+                        title={e!.label(row)}
                         className="press rounded-md p-1.5 text-ink-3 transition-colors hover:bg-surface-3 hover:text-ink">
-                        <Icon name={extra.icon} className="size-4" />
-                        <span className="sr-only">{extra.label(row)}</span>
+                        <Icon name={e!.icon} className="size-4" />
+                        <span className="sr-only">{e!.label(row)}</span>
                       </button>
-                    )}
+                    ))}
                     {onEdit && (
                       <button type="button" onClick={() => onEdit(row)}
                         title={editLabel?.(row) ?? 'Edit'}
