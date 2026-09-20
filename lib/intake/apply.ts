@@ -14,7 +14,7 @@ import type { Item, Uom } from '@/lib/domain/types'
 import { issueId, suggestCode } from '@/lib/workspace/defaults'
 import { buildItem, buildVendor, findVendorByName } from '@/lib/workspace/records'
 import { addField, fieldsFor, setValue, setValues } from '@/lib/workspace/fields'
-import type { FieldKind, ImportUndo, Workspace } from '@/lib/workspace/types'
+import type { FieldKind, ImportUndo, QuoteLine, Workspace } from '@/lib/workspace/types'
 import { learnAlias } from './alias'
 import type { SupplierDoc } from './types'
 
@@ -78,15 +78,16 @@ export interface Approval {
 export interface ApprovalPlan {
   vendor: { status: 'new' | 'existing'; name: string }
   /**
-   * Lines that will become quotes.
+   * Priced lines that will land on the quotation.
    *
-   * It counted rates until the sourcing desk grew a quotes list. What a
-   * supplier sends is a quotation, and approving it records what they said —
-   * accepting one of those quotes is the separate act that makes it a rate you
-   * are comparing suppliers on. Two suppliers' quotations for the same material
-   * now sit side by side before anything is committed to.
+   * It counted rates until the sourcing desk grew a quotes list, then quotes
+   * until a quotation became one record. What a supplier sends is one
+   * quotation with however many prices on it, and approving it records what
+   * they said — accepting a price is the separate act that makes it a rate you
+   * are comparing suppliers on. Two suppliers' quotations for the same
+   * material now sit side by side before anything is committed to.
    */
-  quotesMade: number
+  pricesMade: number
   itemsCreated: number
   aliasesLearned: number
   /** columns that would be created, which is never more than was offered */
@@ -116,7 +117,7 @@ export function planApproval(ws: Workspace, a: Approval): ApprovalPlan {
     : findVendorByName(ws, a.vendorName)
 
   const skipped: { raw: string; reason: string }[] = []
-  let quotesMade = 0
+  let pricesMade = 0
   let itemsCreated = 0
   let aliasesLearned = 0
   const onto = new Map<string, number>()
@@ -132,7 +133,7 @@ export function planApproval(ws: Workspace, a: Approval): ApprovalPlan {
       continue
     }
     if (makes) itemsCreated += 1
-    quotesMade += 1
+    pricesMade += 1
     if (l.learn) aliasesLearned += 1
     // a line about to create a material cannot collide with anything yet
     if (!makes && l.itemId) onto.set(l.itemId, (onto.get(l.itemId) ?? 0) + 1)
@@ -151,7 +152,7 @@ export function planApproval(ws: Workspace, a: Approval): ApprovalPlan {
 
   return {
     vendor: { status: existing ? 'existing' : 'new', name: existing?.name ?? a.vendorName.trim() },
-    quotesMade, itemsCreated, aliasesLearned, columnsAdded, skipped, doubled,
+    pricesMade, itemsCreated, aliasesLearned, columnsAdded, skipped, doubled,
   }
 }
 
@@ -241,6 +242,16 @@ export function applyApproval(ws: Workspace, a: Approval): { ws: Workspace; undo
 
   /* -------- the lines -------- */
 
+  /*
+   * One quotation, whatever it prices. Its id is issued before the loop
+   * because every line is named after it — `QT-001/1` — and the owner's own
+   * columns hang off a LINE: an HSN code belongs to a material, not to the
+   * piece of paper six of them arrived on.
+   */
+  const [numbered, quoteId] = issueId(w, 'QT')
+  w = numbered
+  const lines: QuoteLine[] = []
+
   const plan = planApproval(ws, a)
   const skip = new Set(plan.skipped.map((s) => s.raw))
 
@@ -274,47 +285,35 @@ export function applyApproval(ws: Workspace, a: Approval): { ws: Workspace; undo
     }
 
     /*
-     * A quote, not a rate.
+     * A line on the quotation, not a rate.
      *
      * This used to write straight into `vendorItems`, which said that a
      * document arriving in the inbox had settled what a material costs. It had
-     * not: they quoted, and the owner decides. Accepting one of these — on the
-     * Quotes screen, one press — is what writes the rate, and until then two
+     * not: they quoted, and the owner decides. Accepting a line — on the Quotes
+     * screen, one press — is what writes the rate, and until then two
      * suppliers' quotations for the same material sit side by side.
      *
      * The quantity the document quoted for is deliberately not carried onto the
-     * quote as a minimum order. `Quote.moq` is the floor a supplier will sell
-     * at, and a line reading "12 MT" is usually what somebody asked about. It
-     * is not lost either way — the document keeps its own lines.
+     * line as a minimum order. `QuoteLine.moq` is the floor a supplier will
+     * sell at, and a line reading "12 MT" is usually what somebody asked about.
+     * It is not lost either way — the document keeps its own lines.
      */
-    const [next, id] = issueId(w, 'QT')
-    w = {
-      ...next,
-      quotes: [...next.quotes, {
-        id,
-        // what it was read off, so the six lines of one quotation stay one
-        // quotation on the screen that shows them
-        docId: a.doc.id,
-        vendorId,
-        itemId,
-        unitPrice: l.rate,
-        moq: 0,
-        leadDays: DEFAULT_LEAD_DAYS,
-        ref: a.doc.docNo,
-        // what the letterhead said this price is good until, if it said
-        validUntil: a.doc.validUntil,
-        state: 'received' as const,
-        on: a.doc.receivedAt || a.today,
-      }],
-    }
-    created.push(id)
+    const lineId = `${quoteId}/${lines.length + 1}`
+    lines.push({
+      id: lineId,
+      itemId,
+      unitPrice: l.rate,
+      moq: 0,
+      leadDays: DEFAULT_LEAD_DAYS,
+      state: 'received' as const,
+    })
 
     /* and whatever the document's own columns said on this line */
     for (const [label, value] of Object.entries(l.extras ?? {})) {
       const fieldId = fieldByLabel.get(label.trim().toLowerCase())
       if (!fieldId || value.trim() === '') continue
-      cells.push([id, fieldId, ''])
-      w = setValue(w, id, fieldId, value.trim())
+      cells.push([lineId, fieldId, ''])
+      w = setValue(w, lineId, fieldId, value.trim())
     }
 
     if (l.learn && itemId) {
@@ -323,6 +322,26 @@ export function applyApproval(ws: Workspace, a: Approval): { ws: Workspace; undo
       })
       aliasesCreated.push({ vendorId, raw: l.raw })
     }
+  }
+
+  /*
+   * And the quotation itself, once, carrying what the letterhead said about
+   * the whole of it: their reference, the date on it, how long it holds.
+   */
+  if (lines.length > 0) {
+    w = {
+      ...w,
+      quotes: [...w.quotes, {
+        id: quoteId,
+        docId: a.doc.id,
+        vendorId,
+        ref: a.doc.docNo,
+        validUntil: a.doc.validUntil,
+        on: a.doc.receivedAt || a.today,
+        lines,
+      }],
+    }
+    created.push(quoteId)
   }
 
   /* -------- the document -------- */

@@ -349,17 +349,22 @@ describe('bringing in quotes', () => {
     const { ws } = bring(withMasters())
     expect(ws.quotes).toHaveLength(1)
     const q = ws.quotes[0]
-    expect(q.unitPrice).toBe(61400)
-    expect(q.moq).toBe(12)
-    expect(q.leadDays).toBe(7)
     expect(q.ref).toBe('QTR-88')
     // day-first, the way it is written in India
     expect(q.on).toBe('2026-09-15')
+    expect(q.lines).toHaveLength(1)
+    expect(q.lines[0].unitPrice).toBe(61400)
+    expect(q.lines[0].moq).toBe(12)
+    expect(q.lines[0].leadDays).toBe(7)
   })
 
-  it('and a column the build never heard of, against that quote', () => {
+  it('and a column the build never heard of, against that line', () => {
+    /*
+     * Off the LINE, not the quotation. An HSN code belongs to a material; the
+     * piece of paper six of them arrived on has no HSN code.
+     */
     const { ws } = bring(withMasters())
-    expect(valueOf(ws, ws.quotes[0].id, ws.fields[0].id)).toBe('7209')
+    expect(valueOf(ws, ws.quotes[0].lines[0].id, ws.fields[0].id)).toBe('7209')
     expect(ws.fields[0].entity).toBe('quote')
   })
 
@@ -391,13 +396,28 @@ describe('bringing in quotes', () => {
      * why `state` carries no kind and cannot be mapped at all.
      */
     const { ws } = bring(withMasters())
-    expect(ws.quotes[0].state).toBe('received')
+    expect(ws.quotes[0].lines[0].state).toBe('received')
     expect(BUILTIN.quote.find((b) => b.key === 'state')?.kind).toBeUndefined()
   })
 
-  it('adds the same supplier twice rather than calling the second an edit', () => {
-    // two quotes a week apart are two quotes, not a correction of the first
+  it('gathers the rows of one quotation into one record', () => {
+    /*
+     * A sheet of quotes is usually somebody typing up the quotations they
+     * received, and the rows of one of them repeat its reference. Both rows
+     * here say QTR-88, so they are two lines of QTR-88 — not two quotations
+     * that happen to agree about the letterhead.
+     */
     const { ws } = bring(withMasters(), [...QBODY, ...QBODY])
+    expect(ws.quotes).toHaveLength(1)
+    expect(ws.quotes[0].lines).toHaveLength(2)
+    expect(ws.quotes[0].lines.map((l) => l.id)).toEqual(['QT-001/1', 'QT-001/2'])
+  })
+
+  it('and keeps apart rows with nothing to group on', () => {
+    // no reference on either, so there is nothing saying they are one page —
+    // and two quotes a week apart are two quotes, not a correction of the first
+    const noRef = QBODY[0].map((cell, i) => (i === 5 ? '' : cell))
+    const { ws } = bring(withMasters(), [noRef, noRef])
     expect(ws.quotes).toHaveLength(2)
     expect(ws.quotes[0].id).not.toBe(ws.quotes[1].id)
   })
@@ -497,8 +517,11 @@ describe('the columns a quote and an order ship with', () => {
     const withRef: Workspace = {
       ...ws,
       quotes: [{
-        id: 'QT-001', vendorId: 'VN-001', itemId: 'IT-001', unitPrice: 1, moq: 0,
-        leadDays: 1, ref: 'QTR-88', state: 'received', on: TODAY,
+        id: 'QT-001', vendorId: 'VN-001', ref: 'QTR-88', on: TODAY,
+        lines: [{
+          id: 'QT-001/1', itemId: 'IT-001', unitPrice: 1, moq: 0, leadDays: 1,
+          state: 'received',
+        }],
       }],
     }
     expect(hiddenOf(withRef)).toBe(false)
@@ -513,8 +536,11 @@ describe('the columns a quote and an order ship with', () => {
     let ws: Workspace = {
       ...blank(),
       quotes: [{
-        id: 'QT-001', vendorId: 'VN-001', itemId: 'IT-001', unitPrice: 1, moq: 0,
-        leadDays: 1, state: 'received', on: TODAY,
+        id: 'QT-001', vendorId: 'VN-001', on: TODAY,
+        lines: [{
+          id: 'QT-001/1', itemId: 'IT-001', unitPrice: 1, moq: 0, leadDays: 1,
+          state: 'received',
+        }],
       }],
     }
     const made = addField(ws, { entity: 'quote', label: 'HSN code', kind: 'text' })

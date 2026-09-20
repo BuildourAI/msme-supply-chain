@@ -135,6 +135,12 @@ const HIDDEN_UNTIL_USED: Record<string, (ws: Workspace) => boolean> = {
   email: (ws) => Object.values(ws.vendorContact ?? {}).some((c) => Boolean(c?.email)),
   // most quotes arrive on WhatsApp with no reference number on them at all
   ref: (ws) => (ws.quotes ?? []).some((q) => Boolean(q.ref)),
+  /*
+   * And most quotations name no minimum order. A six-line quotation showing
+   * "Smallest order —" six times is the same clutter as an empty phone
+   * column, on the screen where there is least room for it.
+   */
+  moq: (ws) => (ws.quotes ?? []).some((q) => q.lines.some((l) => l.moq > 0)),
 }
 
 /* -------------------------------------------------------------- reading -- */
@@ -375,7 +381,15 @@ export function pruneCustom(ws: Workspace): Workspace {
     ...ws.vendors.map((v) => v.id),
     ...ws.items.map((i) => i.id),
     ...ws.rfqs.map((r) => r.id),
+    /*
+     * A quotation's LINES, not the quotation. The owner's own columns hang off
+     * a material — an HSN code belongs to the sheet steel, not to the piece of
+     * paper six materials arrived on — so a line id is what `custom` is keyed
+     * by. The quotation id is kept too, so a value written against one before
+     * quotations had lines is not thrown away by a prune.
+     */
     ...ws.quotes.map((q) => q.id),
+    ...ws.quotes.flatMap((q) => q.lines.map((l) => l.id)),
     ...ws.orders.map((o) => o.id),
   ])
   const custom: Record<string, Record<string, string>> = {}

@@ -78,34 +78,56 @@ export interface Rfq {
   note?: string
 }
 
-export interface Quote {
+/**
+ * One material on a quotation: what they would charge, and how fast.
+ *
+ * Its own state, because taking a price is a decision per material. A
+ * quotation pricing six things is rarely six things you want from them — you
+ * take the two they are cheapest on and leave the rest, and accepting the
+ * whole page would write four rates you did not agree to.
+ */
+export interface QuoteLine {
+  /** quotation-scoped, the way a document's lines are — `QT-001/1` */
   id: string
-  /** absent when the price arrived without a request behind it */
-  rfqId?: string
-  /**
-   * The document this price was read off, when it was read off one.
-   *
-   * A quotation quoting six materials is six quotes, because a quote is one
-   * supplier's price for one material — that is what the comparison ranks and
-   * what accepting one turns into a rate. But they arrived together on one
-   * piece of paper, and a screen that cannot say so turns one upload into six
-   * unrelated cards.
-   *
-   * The document id rather than `ref`: a supplier's own quotation number is
-   * optional, is free text, and two of them can collide. This is exact, and it
-   * is what lets the original be opened from the group it produced.
-   */
-  docId?: string
-  vendorId: string
   itemId: string
   unitPrice: number
   /** smallest quantity they will sell at this price */
   moq: number
   leadDays: number
+  state: QuoteState
+}
+
+/**
+ * A quotation: one supplier, one date, and the prices on it.
+ *
+ * It was one record per material, which is what the comparison ranks and what
+ * accepting turns into a rate — so a quotation pricing six materials became
+ * six records. Correct underneath and wrong as a thing to hold: a quotation is
+ * one piece of paper with one number, one date and one validity, and six
+ * records meant six deletes, six edits of the same validity, and a screen that
+ * said "6 quotes" after one upload.
+ *
+ * So the header is the paper and the lines are the prices. Nothing downstream
+ * lost anything: the comparison reads rates, not quotes, and a rate is still
+ * written one material at a time — by accepting one line.
+ */
+export interface Quote {
+  id: string
+  /** absent when the price arrived without a request behind it */
+  rfqId?: string
+  /**
+   * The document this was read off, when it was read off one.
+   *
+   * What it buys now is the link back — "the original" on the card. It used to
+   * do the grouping as well, when six records had to be gathered up again;
+   * the quotation being one record makes that unnecessary.
+   */
+  docId?: string
+  vendorId: string
   /** their own reference, if they gave one */
   ref?: string
   /**
-   * The day their price stops being their price.
+   * The day their prices stop being their prices.
    *
    * Almost every quotation says so and this build threw it away. A rate that
    * expired in March is still ranking suppliers in September with nothing
@@ -114,8 +136,21 @@ export interface Quote {
    * inventing one would be worse than having none.
    */
   validUntil?: string
-  state: QuoteState
   on: string
+  lines: QuoteLine[]
+}
+
+/**
+ * Where a quotation has got to, from the lines on it.
+ *
+ * Derived rather than stored, because it is not a separate fact: a quotation
+ * somebody has taken something off is answered, one they turned down entirely
+ * is closed, and anything else is still open.
+ */
+export function quoteState(q: Quote): QuoteState {
+  if (q.lines.some((l) => l.state === 'accepted')) return 'accepted'
+  if (q.lines.length > 0 && q.lines.every((l) => l.state === 'rejected')) return 'rejected'
+  return 'received'
 }
 
 export interface PurchaseOrder {
@@ -398,12 +433,15 @@ export interface Workspace {
  *
  * 3 records supplier documents and learned wordings. 4 records goods arriving,
  * which is what moves a lead time and a rejection rate off what somebody typed.
+ * 5 makes a quotation one record with lines on it rather than one record per
+ * material, and `migrate` gathers the old flat ones back up by the document
+ * they came off.
+ *
  * Nothing reads this number yet — it is written and kept — so what the bump
- * documents is the direction it cannot go: a build from before 4 reading a
- * workspace saved by this one drops its receipts on the next migrate, and with
- * them every figure that was measured rather than claimed.
+ * documents is the direction it cannot go: a build from before 5 reading a
+ * workspace saved by this one finds quotes it cannot parse at all.
  */
-export const SCHEMA = 4
+export const SCHEMA = 5
 
 /** Which company the screens are reading. The sample is never written to. */
 export type WorkspaceMode = 'sample' | 'mine'

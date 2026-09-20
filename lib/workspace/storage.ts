@@ -17,8 +17,8 @@ import type { Item, Vendor } from '@/lib/domain/types'
 import { highestIssued } from './defaults'
 import { SCHEMA } from './types'
 import type {
-  FieldDef, GoodsReceipt, PurchaseOrder, Quote, Rfq, SendEntry, Session, TableView, Workspace,
-  WorkspaceMode,
+  FieldDef, GoodsReceipt, PurchaseOrder, Quote, QuoteLine, QuoteState, Rfq, SendEntry, Session,
+  TableView, Workspace, WorkspaceMode,
 } from './types'
 import type { SupplierDoc, VendorAlias } from '@/lib/intake/types'
 
@@ -91,6 +91,110 @@ export function parseStored(raw: string | null): Stored | null {
 }
 
 /**
+ * A quote as it was saved before a quotation became one record.
+ *
+ * One material per row: `itemId`, `unitPrice`, `moq`, `leadDays` and a `state`
+ * sat on the quote itself. An uploaded quotation pricing six materials wrote
+ * six of these.
+ */
+type LooseQuote = Quote & {
+  itemId?: string
+  unitPrice?: number
+  moq?: number
+  leadDays?: number
+  state?: QuoteState
+}
+
+/**
+ * Six records back into the one quotation they always were.
+ *
+ * Grouped by the document they were read off, which is exact; failing that by
+ * supplier, reference and date, which is what a quotation IS when somebody
+ * typed it in. Anything with neither keeps a quotation of its own, because two
+ * prices from one supplier on one day with nothing tying them together are as
+ * likely to be two conversations as one piece of paper.
+ *
+ * Line ids are `QT-001/1` and so on, and `remapCells` below moves the owner's
+ * own column values onto them — an HSN code was keyed to the old quote and
+ * belongs to the material, which is now a line.
+ */
+function gatherQuotes(loose: LooseQuote[]): Quote[] {
+  const out: Quote[] = []
+  const at = new Map<string, Quote>()
+
+  for (const q of loose) {
+    // already in the new shape: nothing to gather
+    if (Array.isArray(q.lines)) { out.push(q); continue }
+
+    const key = q.docId
+      ? `doc:${q.docId}`
+      : q.ref ? `ref:${q.vendorId}|${q.ref}|${q.on}` : `one:${q.id}`
+
+    const line: QuoteLine = {
+      id: '',
+      itemId: q.itemId ?? '',
+      unitPrice: q.unitPrice ?? 0,
+      moq: q.moq ?? 0,
+      leadDays: q.leadDays ?? 0,
+      state: q.state ?? 'received',
+    }
+
+    const held = at.get(key)
+    if (held) {
+      line.id = `${held.id}/${held.lines.length + 1}`
+      held.lines.push(line)
+      continue
+    }
+
+    const made: Quote = {
+      id: q.id,
+      rfqId: q.rfqId,
+      docId: q.docId,
+      vendorId: q.vendorId,
+      ref: q.ref,
+      validUntil: q.validUntil,
+      on: q.on,
+      lines: [],
+    }
+    line.id = `${made.id}/1`
+    made.lines.push(line)
+    at.set(key, made)
+    out.push(made)
+  }
+  return out
+}
+
+/**
+ * Where the old quote ids went, so their custom values can follow.
+ *
+ * A column the owner invented — an HSN code, a pack size — was keyed by quote
+ * id and belongs to the material, which is a line now. Without this the values
+ * survive against ids nothing points at and `pruneCustom` quietly drops them.
+ */
+function remapCells(
+  loose: LooseQuote[], gathered: Quote[], custom: Record<string, Record<string, string>>,
+): Record<string, Record<string, string>> {
+  if (loose.every((q) => Array.isArray(q.lines))) return custom
+
+  const lineFor = new Map<string, string>()
+  const used = new Map<string, number>()
+  for (const q of loose) {
+    if (Array.isArray(q.lines)) continue
+    const onto = gathered.find((g) => g.id === q.id
+      || (g.docId && g.docId === q.docId)
+      || (g.ref && g.ref === q.ref && g.vendorId === q.vendorId && g.on === q.on))
+    if (!onto) continue
+    const n = (used.get(onto.id) ?? 0) + 1
+    used.set(onto.id, n)
+    lineFor.set(q.id, `${onto.id}/${n}`)
+  }
+
+  const next: Record<string, Record<string, string>> = {}
+  for (const [id, row] of Object.entries(custom)) next[lineFor.get(id) ?? id] = row
+  return next
+}
+
+/**
  * A workspace saved before a field existed is not a broken workspace.
  *
  * Somebody who set their company up last week and comes back after an update
@@ -118,7 +222,8 @@ function migrate(raw: Partial<Workspace>): Workspace {
   const items = list<Item>(raw.items)
   const vendors = list<Vendor>(raw.vendors)
   const rfqs = list<Rfq>(raw.rfqs)
-  const quotes = list<Quote>(raw.quotes)
+  const wereQuotes = list<LooseQuote>(raw.quotes)
+  const quotes = gatherQuotes(wereQuotes)
   const orders = list<PurchaseOrder>(raw.orders)
   const docs = list<SupplierDoc>(raw.docs)
   const receipts = list<GoodsReceipt>(raw.receipts)
@@ -193,7 +298,7 @@ function migrate(raw: Partial<Workspace>): Workspace {
      */
     receipts,
     fields: list(raw.fields),
-    custom: map(raw.custom),
+    custom: remapCells(wereQuotes, quotes, map(raw.custom)),
     views: {
       supplier: view(views.supplier),
       material: view(views.material),

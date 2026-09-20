@@ -11,6 +11,7 @@ import { applyApproval, planApproval, type ApprovalLine } from '@/lib/intake/app
 import { draftLines } from '@/lib/intake/draft'
 import { readHeader, readVendor, type DocHeader } from '@/lib/intake/vendor'
 import { guessKind } from '@/lib/sheet/match'
+import { tidyName } from '@/lib/intake/name'
 import { acceptFiles, readDocument } from '@/lib/intake/read'
 import { readImage } from '@/lib/intake/ocr'
 import { putFile } from '@/lib/intake/blobs'
@@ -236,7 +237,7 @@ export function UploadDialog({ open, onClose, resume }: {
       Object.entries(l.extras ?? {}).filter(([label]) => keptLabels.has(label)),
     ),
     creates: l.creates,
-    newName: l.newName ?? l.raw,
+    newName: l.newName ?? tidyName(l.raw),
     newUom: l.newUom ?? parseUom(l.uom ?? '') ?? 'nos',
     // a wording worth remembering is one a person settled, or one that was
     // already certain. A guess the owner has not looked at teaches nothing.
@@ -399,7 +400,7 @@ export function UploadDialog({ open, onClose, resume }: {
       label: 'Lines',
       title: `What ${forName.trim() || 'they'} quoted`,
       why: 'Every line, with what it was matched to and how sure that is. Nothing is written until the last step.',
-      invalid: plan.quotesMade > 0 ? null : 'Give at least one line a material, or add it as a new one.',
+      invalid: plan.pricesMade > 0 ? null : 'Give at least one line a material, or add it as a new one.',
       body: (
         <Lines
           lines={lines} onLine={setLine}
@@ -437,7 +438,7 @@ export function UploadDialog({ open, onClose, resume }: {
     <Wizard open={open} onClose={close} title="Upload a supplier document"
       sub={file?.name ?? resume?.fileName} steps={steps}
       onDone={done ? onClose : run}
-      doneLabel={done ? 'Close' : `Approve ${plan.quotesMade} line${plan.quotesMade === 1 ? '' : 's'}`} />
+      doneLabel={done ? 'Close' : `Approve ${plan.pricesMade} line${plan.pricesMade === 1 ? '' : 's'}`} />
   )
 }
 
@@ -691,7 +692,7 @@ function Lines({ lines, onLine, items, hasItems }: {
                     <input type="checkbox" checked={Boolean(l.creates)}
                       onChange={(e) => onLine(l.id, {
                         creates: e.target.checked,
-                        newName: l.newName ?? l.raw,
+                        newName: l.newName ?? tidyName(l.raw),
                         newUom: l.newUom ?? parseUom(l.uom ?? '') ?? 'nos',
                       })}
                       className="size-3.5 accent-[var(--accent-ink)]" />
@@ -699,7 +700,14 @@ function Lines({ lines, onLine, items, hasItems }: {
                   </label>
                   {l.creates && (
                     <div className="mt-2 grid gap-2 sm:grid-cols-[2fr_1fr]">
-                      <Field label="Call it">
+                      {/*
+                        * Proposed, not copied. The supplier's exact string is
+                        * still what the alias records, so matching is
+                        * unaffected; this is what the material gets CALLED,
+                        * and the item master is your vocabulary rather than
+                        * theirs.
+                        */}
+                      <Field label="Call it" hint="Their wording, tidied. Change it to yours.">
                         <TextInput value={l.newName ?? ''} label="Name for the new material"
                           onChange={(v) => onLine(l.id, { newName: v })} />
                       </Field>
@@ -756,7 +764,8 @@ function Check(p: {
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
         <Count n={p.plan.vendor.status === 'new' ? 1 : 0} one="new supplier" many="new suppliers" />
-        <Count n={p.plan.quotesMade} one="quote" many="quotes" />
+        <Count n={1} one="quotation" many="quotations" />
+        <Count n={p.plan.pricesMade} one="price on it" many="prices on it" />
         <Count n={p.plan.itemsCreated} one="new material" many="new materials" />
         <Count n={p.plan.aliasesLearned} one="wording learned" many="wordings learned" />
         <Count n={p.plan.columnsAdded} one="new column" many="new columns" />
@@ -874,8 +883,9 @@ function Finished({ added, rates, plan }: {
     <div className="space-y-3">
       <p className="flex items-center gap-2 text-[13.5px] font-semibold">
         <Icon name="check" className="size-4 text-good" />
-        {plan.vendor.name} is in your suppliers table, with {plan.quotesMade}{' '}
-        quote{plan.quotesMade === 1 ? '' : 's'} on the Quotes screen.
+        {plan.vendor.name} is in your suppliers table, and their quotation is on the
+        Quotes screen — one quote, with {plan.pricesMade}{' '}
+        price{plan.pricesMade === 1 ? '' : 's'} on it.
       </p>
       <p className="text-[12.5px] leading-relaxed text-ink-2">
         {/*
@@ -884,8 +894,8 @@ function Finished({ added, rates, plan }: {
           * accepting a quote is the separate press that makes it a rate you
           * compare suppliers on, and until then nothing has been committed to.
           */}
-        Nothing is priced yet. <strong className="text-ink">Accept</strong> a quote when you
-        agree to it, and that price becomes their rate.{' '}
+        Nothing is priced yet. <strong className="text-ink">Accept</strong> a price when you
+        agree to it — one at a time, or the whole page — and it becomes their rate.{' '}
         {plan.aliasesLearned > 0 && <>
           {plan.aliasesLearned} of their wording{plan.aliasesLearned === 1 ? '' : 's'} {plan.aliasesLearned === 1 ? 'is' : 'are'} remembered,
           so the next document from them needs less of your time.{' '}

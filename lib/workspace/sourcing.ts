@@ -17,8 +17,8 @@ import type { Item, Vendor } from '@/lib/domain/types'
 import { pruneCustom } from './fields'
 import { repriceTerms } from './landed'
 import { backfillRates, buildRate } from './records'
-import type { SupplierDoc } from '@/lib/intake/types'
-import type { PurchaseOrder, Quote, Rfq, RfqState, Workspace } from './types'
+import { quoteState } from './types'
+import type { PurchaseOrder, Quote, QuoteLine, Rfq, RfqState, Workspace } from './types'
 
 /* ------------------------------------------------------------- numbering -- */
 
@@ -121,78 +121,74 @@ export function rfqRows(ws: Workspace): RfqRow[] {
 export interface QuoteRow {
   quote: Quote
   vendor: Vendor | undefined
+  rfq: Rfq | undefined
+  /** the materials on it, joined, in the order they were quoted */
+  lines: QuoteLineRow[]
+}
+
+/**
+ * One priced line, with everything a screen needs to draw it.
+ *
+ * Separate from `QuoteRow` because the owner's own columns hang off a LINE —
+ * an HSN code or a pack size belongs to a material, not to the piece of paper
+ * six of them arrived on. `buildColumns` is given `line.id` for that reason.
+ */
+export interface QuoteLineRow {
+  quote: Quote
+  line: QuoteLine
+  vendor: Vendor | undefined
   item: Item | undefined
   rfq: Rfq | undefined
 }
 
 export function quoteRows(ws: Workspace): QuoteRow[] {
   return [...ws.quotes]
-    .sort((a, b) => b.on.localeCompare(a.on))
-    .map((quote) => ({
-      quote,
-      vendor: vendorOf(ws, quote.vendorId),
-      item: itemOf(ws, quote.itemId),
-      rfq: quote.rfqId ? byId(ws.rfqs, quote.rfqId) : undefined,
-    }))
+    .sort((a, b) => b.on.localeCompare(a.on) || b.id.localeCompare(a.id))
+    .map((quote) => {
+      const vendor = vendorOf(ws, quote.vendorId)
+      const rfq = quote.rfqId ? byId(ws.rfqs, quote.rfqId) : undefined
+      return {
+        quote,
+        vendor,
+        rfq,
+        lines: quote.lines.map((line) => ({
+          quote, line, vendor, rfq, item: itemOf(ws, line.itemId),
+        })),
+      }
+    })
 }
 
+/** Every line on every quotation, flat — what the list counts and searches. */
+export const quoteLineRows = (ws: Workspace): QuoteLineRow[] =>
+  quoteRows(ws).flatMap((r) => r.lines)
+
+/** A quotation's lines that name one material — what an RFQ group compares. */
+export const linesFor = (ws: Workspace, itemId: string): QuoteLineRow[] =>
+  quoteLineRows(ws).filter((r) => r.line.itemId === itemId)
+
 /**
- * Quotes grouped by where they came from, which is how the reference shows
- * them — the comparison is the point, and a flat list of prices against
- * different materials compares nothing.
+ * Quotes grouped by the request they answer.
  *
- * Three kinds of group, in the order they are worth seeing:
+ * The comparison is the point: several suppliers' prices for one material,
+ * side by side. Quotations with no request behind them are a group of their
+ * own rather than hidden — that is how most of them arrive.
  *
- * A request, and the prices that came back against it. Those are for one
- * material from several suppliers, which is the comparison this screen exists
- * for.
- *
- * A document. A quotation quoting six materials is six quotes, and they
- * arrived on one piece of paper — so they sit in one box headed by the
- * supplier and the quotation number, with the original a click away. They used
- * to fall into the loose bucket with everything else, which turned one upload
- * into six unrelated cards and is what this grouping exists to stop.
- *
- * And everything else: a price somebody wrote down off a phone call, which is
- * how most of them arrive and is not a failure to be hidden.
+ * This used to gather a document's quotes back into one box, because one
+ * uploaded quotation became six records and the screen had to put them back
+ * together. A quotation is one record now, so there is nothing to gather.
  */
 export interface QuoteGroup {
   rfq: Rfq | null
-  /** set when these quotes were all read off one supplier document */
-  doc?: SupplierDoc
   rows: QuoteRow[]
 }
 
 export function quoteGroups(ws: Workspace): QuoteGroup[] {
   const rows = quoteRows(ws)
-
-  const byRfq: QuoteGroup[] = ws.rfqs
+  const groups: QuoteGroup[] = ws.rfqs
     .map((rfq) => ({ rfq, rows: rows.filter((r) => r.quote.rfqId === rfq.id) }))
     .filter((g) => g.rows.length > 0)
-
   const loose = rows.filter((r) => !r.quote.rfqId)
-
-  /*
-   * By document, newest first, so a quotation that came in this morning is at
-   * the top. A quote whose document has since been deleted keeps its `docId`
-   * and finds no document here, so it falls through to the loose bucket rather
-   * than forming a group with no heading.
-   */
-  const byDoc: QuoteGroup[] = []
-  const filed = new Set<string>()
-  for (const doc of [...(ws.docs ?? [])].sort((a, b) => b.addedAt.localeCompare(a.addedAt))) {
-    const mine = loose.filter((r) => r.quote.docId === doc.id)
-    if (mine.length === 0) continue
-    byDoc.push({ rfq: null, doc, rows: mine })
-    for (const r of mine) filed.add(r.quote.id)
-  }
-
-  const rest = loose.filter((r) => !filed.has(r.quote.id))
-  return [
-    ...byRfq,
-    ...byDoc,
-    ...(rest.length ? [{ rfq: null, rows: rest }] : []),
-  ]
+  return loose.length ? [...groups, { rfq: null, rows: loose }] : groups
 }
 
 export interface OrderRow {
@@ -225,7 +221,9 @@ export function orderRows(ws: Workspace): OrderRow[] {
 export function rfqStateFrom(rfq: Rfq, quotes: Quote[]): RfqState {
   if (rfq.state === 'draft' || rfq.state === 'closed') return rfq.state
   const mine = quotes.filter((q) => q.rfqId === rfq.id)
-  if (mine.some((q) => q.state === 'accepted')) return 'awarded'
+  // awarded the moment ONE line is taken — a request is for one material, so
+  // a quotation answering it has one line that matters
+  if (mine.some((q) => q.lines.some((l) => l.state === 'accepted'))) return 'awarded'
   if (mine.length > 0) return 'quoted'
   return 'sent'
 }
@@ -244,20 +242,22 @@ export function syncRfqStates(ws: Workspace): Workspace {
  * from the start that the system suggests and drafts, and that a person places
  * the order. Accepting a price is not the same act as committing the money.
  */
-export function orderFromQuote(ws: Workspace, quote: Quote, today: string): Omit<PurchaseOrder, 'id'> {
+export function orderFromQuote(
+  ws: Workspace, quote: Quote, line: QuoteLine, today: string,
+): Omit<PurchaseOrder, 'id'> {
   // What you asked for, if you asked. A quote's minimum order is the floor a
   // supplier will sell at, not a quantity anybody wanted, and most quotes carry
   // no minimum at all — taking it blindly drafts an order for nothing.
   const asked = quote.rfqId ? ws.rfqs.find((r) => r.id === quote.rfqId)?.qty : undefined
-  const qty = asked && asked > 0 ? Math.max(asked, quote.moq) : quote.moq
+  const qty = asked && asked > 0 ? Math.max(asked, line.moq) : line.moq
   return {
     no: nextNo('PO', ws.orders),
     vendorId: quote.vendorId,
-    itemId: quote.itemId,
+    itemId: line.itemId,
     qty: qty > 0 ? qty : 0,
-    unitPrice: quote.unitPrice,
+    unitPrice: line.unitPrice,
     orderedOn: today,
-    expectedOn: addDays(today, quote.leadDays || 0),
+    expectedOn: addDays(today, line.leadDays || 0),
     state: 'draft',
     quoteId: quote.id,
   }
@@ -315,13 +315,15 @@ export function itemImpact(ws: Workspace, itemId: string): DeleteImpact {
   const rates = ws.vendorItems.filter((vi) => vi.itemId === itemId).length
   const lots = ws.stockLots.filter((l) => l.itemId === itemId).length
   const rfqs = ws.rfqs.filter((r) => r.itemId === itemId).length
-  const quotes = ws.quotes.filter((q) => q.itemId === itemId).length
+  const quotes = ws.quotes.reduce(
+    (n, q) => n + q.lines.filter((l) => l.itemId === itemId).length, 0,
+  )
   const orders = ws.orders.filter((o) => o.itemId === itemId).length
   const losses = [
     rates && `${count(rates, 'supplier rate')}`,
     lots && `${count(lots, 'stock count')}`,
     rfqs && count(rfqs, 'request'),
-    quotes && count(quotes, 'quote'),
+    quotes && count(quotes, 'quoted price'),
     orders && count(orders, 'purchase order'),
   ].filter(Boolean) as string[]
   return { losses, clean: losses.length === 0 }
@@ -369,7 +371,14 @@ export function removeItem(ws: Workspace, itemId: string): Workspace {
     vendorItems: ws.vendorItems.filter((vi) => vi.itemId !== itemId),
     stockLots: ws.stockLots.filter((l) => l.itemId !== itemId),
     rfqs: ws.rfqs.filter((r) => r.itemId !== itemId),
-    quotes: ws.quotes.filter((q) => q.itemId !== itemId),
+    /*
+     * The lines that named it, not the quotations they were on. A quotation
+     * pricing six materials should not disappear because one of them was
+     * deleted — but one that priced nothing else has nothing left to be.
+     */
+    quotes: ws.quotes
+      .map((q) => ({ ...q, lines: q.lines.filter((l) => l.itemId !== itemId) }))
+      .filter((q) => q.lines.length > 0),
     orders: ws.orders.filter((o) => o.itemId !== itemId),
     receipts: (ws.receipts ?? []).filter((r) => r.itemId !== itemId),
     itemGroup: Object.fromEntries(
@@ -414,54 +423,91 @@ export function removeOrder(ws: Workspace, orderId: string): Workspace {
 }
 
 /**
- * Accepting one quote rejects the others on the same request. A request has one
- * winner; leaving three marked accepted would make the screen a lie.
+ * Taking one price off a quotation.
+ *
+ * Per line, because that is what a price is. A quotation pricing six materials
+ * is rarely six things you want from them: you take the two they are cheapest
+ * on and leave the rest, and accepting the whole page would write four rates
+ * nobody agreed to. `acceptAll` is there for the case where you did mean all
+ * of them.
+ *
+ * Taking one rejects the others quoted for the SAME material against the same
+ * request. A request has one winner; leaving three marked accepted would make
+ * the screen a lie.
  */
-export function acceptQuote(ws: Workspace, quoteId: string): Workspace {
-  const target = ws.quotes.find((q) => q.id === quoteId)
-  if (!target) return ws
+export function acceptLine(ws: Workspace, quoteId: string, lineId: string): Workspace {
+  const quote = ws.quotes.find((q) => q.id === quoteId)
+  const line = quote?.lines.find((l) => l.id === lineId)
+  if (!quote || !line) return ws
 
   const marked = syncRfqStates({
     ...ws,
     quotes: ws.quotes.map((q) => {
-      if (q.id === quoteId) return { ...q, state: 'accepted' as const }
-      if (target.rfqId && q.rfqId === target.rfqId && q.state === 'accepted') {
-        return { ...q, state: 'rejected' as const }
+      if (q.id === quoteId) {
+        return { ...q, lines: q.lines.map((l) => (l.id === lineId ? { ...l, state: 'accepted' as const } : l)) }
       }
-      return q
+      if (!quote.rfqId || q.rfqId !== quote.rfqId) return q
+      return {
+        ...q,
+        lines: q.lines.map((l) => (l.itemId === line.itemId && l.state === 'accepted'
+          ? { ...l, state: 'rejected' as const } : l)),
+      }
     }),
   })
 
-  /*
-   * And this is where a price becomes a rate.
-   *
-   * Accepting used to flip a state and nothing else, which meant a quotation
-   * somebody had agreed to never reached the supplier's rate, the landed-cost
-   * comparison, or the figure the order form suggests. The quote was a note in
-   * a different notebook.
-   *
-   * What it deliberately does NOT write is the quote's minimum order onto the
-   * material. That is the supplier's figure about what they will sell, not the
-   * owner's about what they order, and `Item.moq` is read as the latter.
-   */
-  const previous = marked.vendorItems.find(
-    (vi) => vi.vendorId === target.vendorId && vi.itemId === target.itemId,
+  return writeRate(marked, quote, line)
+}
+
+/** Every line on one quotation, taken in one press. */
+export function acceptAll(ws: Workspace, quoteId: string): Workspace {
+  const quote = ws.quotes.find((q) => q.id === quoteId)
+  if (!quote) return ws
+  return quote.lines
+    .filter((l) => l.state !== 'accepted')
+    .reduce((w, l) => acceptLine(w, quoteId, l.id), ws)
+}
+
+/** Turning a price down, which is a decision worth recording as one. */
+export function rejectLine(ws: Workspace, quoteId: string, lineId: string): Workspace {
+  return syncRfqStates({
+    ...ws,
+    quotes: ws.quotes.map((q) => (q.id === quoteId
+      ? { ...q, lines: q.lines.map((l) => (l.id === lineId ? { ...l, state: 'rejected' as const } : l)) }
+      : q)),
+  })
+}
+
+/**
+ * And this is where a price becomes a rate.
+ *
+ * Accepting used to flip a state and nothing else, which meant a quotation
+ * somebody had agreed to never reached the supplier's rate, the landed-cost
+ * comparison, or the figure the order form suggests. The quote was a note in
+ * a different notebook.
+ *
+ * What it deliberately does NOT write is the quote's minimum order onto the
+ * material. That is the supplier's figure about what they will sell, not the
+ * owner's about what they order, and `Item.moq` is read as the latter.
+ */
+function writeRate(ws: Workspace, quote: Quote, line: QuoteLine): Workspace {
+  const previous = ws.vendorItems.find(
+    (vi) => vi.vendorId === quote.vendorId && vi.itemId === line.itemId,
   )
   const rate = buildRate({
-    vendorId: target.vendorId,
-    itemId: target.itemId,
-    rate: target.unitPrice,
-    leadDays: target.leadDays > 0 ? target.leadDays : previous?.quotedLeadTimeDays ?? 0,
-    validUntil: validUntilOf(marked, target),
+    vendorId: quote.vendorId,
+    itemId: line.itemId,
+    rate: line.unitPrice,
+    leadDays: line.leadDays > 0 ? line.leadDays : previous?.quotedLeadTimeDays ?? 0,
+    validUntil: validUntilOf(ws, quote),
   }, previous)
 
   return repriceTerms({
-    ...marked,
+    ...ws,
     // §13-1 — a material never bought is valued at the first rate agreed for it
-    items: backfillRates(marked.items, [rate]),
+    items: backfillRates(ws.items, [rate]),
     vendorItems: [
-      ...marked.vendorItems.filter(
-        (vi) => !(vi.vendorId === target.vendorId && vi.itemId === target.itemId),
+      ...ws.vendorItems.filter(
+        (vi) => !(vi.vendorId === quote.vendorId && vi.itemId === line.itemId),
       ),
       rate,
     ],

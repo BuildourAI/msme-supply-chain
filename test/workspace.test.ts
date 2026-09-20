@@ -343,6 +343,96 @@ describe('storage', () => {
     expect(back.workspace.people).toHaveLength(1)
   })
 
+  /*
+   * The six the owner is looking at, gathered back into the one quotation they
+   * always were.
+   *
+   * A quote used to be one supplier's price for one material, so an uploaded
+   * PDF pricing six of them wrote six records and the Quotes screen said
+   * "6 quotes" about one piece of paper. Nobody should have to re-upload
+   * anything to get the count they expected.
+   */
+  const looseQuotes = (quotes: unknown[], custom: unknown = {}) => JSON.stringify({
+    workspace: { ...fresh(), quotes, custom, schema: 4 },
+    session: { actor: 'R. Mehta', role: 'owner' },
+  })
+
+  const old = (over: Record<string, unknown>) => ({
+    id: 'QT-001', vendorId: 'VN-001', itemId: 'IT-001', unitPrice: 100, moq: 0,
+    leadDays: 7, state: 'received', on: '2026-09-12', ...over,
+  })
+
+  it('gathers quotes read off one document back into one quotation', () => {
+    const back = parseStored(looseQuotes([
+      old({ id: 'QT-001', docId: 'SD-001', itemId: 'IT-001', unitPrice: 62800 }),
+      old({ id: 'QT-002', docId: 'SD-001', itemId: 'IT-002', unitPrice: 46 }),
+      old({ id: 'QT-003', docId: 'SD-001', itemId: 'IT-003', unitPrice: 164 }),
+    ]))!
+    expect(back.workspace.quotes).toHaveLength(1)
+    expect(back.workspace.quotes[0].docId).toBe('SD-001')
+    expect(back.workspace.quotes[0].lines.map((l) => l.itemId))
+      .toEqual(['IT-001', 'IT-002', 'IT-003'])
+    expect(back.workspace.quotes[0].lines.map((l) => l.id))
+      .toEqual(['QT-001/1', 'QT-001/2', 'QT-001/3'])
+  })
+
+  it('and ones typed in, by supplier, reference and date', () => {
+    const back = parseStored(looseQuotes([
+      old({ id: 'QT-001', ref: 'QTR-88', itemId: 'IT-001' }),
+      old({ id: 'QT-002', ref: 'QTR-88', itemId: 'IT-002' }),
+    ]))!
+    expect(back.workspace.quotes).toHaveLength(1)
+    expect(back.workspace.quotes[0].lines).toHaveLength(2)
+  })
+
+  it('but leaves apart two prices with nothing tying them together', () => {
+    // two prices from one supplier on one day are as likely to be two
+    // conversations as one piece of paper, and guessing wrong merges records
+    const back = parseStored(looseQuotes([
+      old({ id: 'QT-001', itemId: 'IT-001' }),
+      old({ id: 'QT-002', itemId: 'IT-002' }),
+    ]))!
+    expect(back.workspace.quotes).toHaveLength(2)
+  })
+
+  it('carries each line\'s state and figures across untouched', () => {
+    const back = parseStored(looseQuotes([
+      old({ id: 'QT-001', docId: 'SD-001', unitPrice: 62800, moq: 12, leadDays: 9, state: 'accepted' }),
+      old({ id: 'QT-002', docId: 'SD-001', unitPrice: 46, state: 'rejected' }),
+    ]))!
+    expect(back.workspace.quotes[0].lines[0])
+      .toMatchObject({ unitPrice: 62800, moq: 12, leadDays: 9, state: 'accepted' })
+    expect(back.workspace.quotes[0].lines[1].state).toBe('rejected')
+  })
+
+  it('and moves a column the owner invented onto the line it describes', () => {
+    /*
+     * An HSN code was keyed to the old quote and belongs to the material,
+     * which is a line now. Left where it was it points at nothing, and the
+     * next tidy-up drops it.
+     */
+    const back = parseStored(looseQuotes(
+      [
+        old({ id: 'QT-001', docId: 'SD-001', itemId: 'IT-001' }),
+        old({ id: 'QT-002', docId: 'SD-001', itemId: 'IT-002' }),
+      ],
+      { 'QT-001': { 'CF-001': '7209' }, 'QT-002': { 'CF-001': '7419' } },
+    ))!
+    expect(back.workspace.custom['QT-001/1']).toEqual({ 'CF-001': '7209' })
+    expect(back.workspace.custom['QT-001/2']).toEqual({ 'CF-001': '7419' })
+    expect(back.workspace.custom['QT-002']).toBeUndefined()
+  })
+
+  it('and leaves a workspace already in the new shape exactly as it is', () => {
+    const shaped = [{
+      id: 'QT-007', vendorId: 'VN-001', on: '2026-09-12',
+      lines: [{ id: 'QT-007/1', itemId: 'IT-001', unitPrice: 100, moq: 0, leadDays: 7, state: 'received' }],
+    }]
+    const back = parseStored(looseQuotes(shaped, { 'QT-007/1': { 'CF-001': '7209' } }))!
+    expect(back.workspace.quotes).toEqual(shaped)
+    expect(back.workspace.custom['QT-007/1']).toEqual({ 'CF-001': '7209' })
+  })
+
   it('counts documents towards the id it will issue next', () => {
     /*
      * The same rule the other five prefixes follow: the counter only ever goes

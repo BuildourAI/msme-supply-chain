@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest'
 import { applyApproval, planApproval, stillUndoable, type Approval } from '@/lib/intake/apply'
 import { resolveAlias } from '@/lib/intake/alias'
 import { undoImport } from '@/lib/sheet/import'
-import { acceptQuote } from '@/lib/workspace/sourcing'
+import { acceptAll } from '@/lib/workspace/sourcing'
 import { emptyWorkspace } from '@/lib/workspace/defaults'
 import { valueOf } from '@/lib/workspace/fields'
 import type { Workspace } from '@/lib/workspace/types'
@@ -87,9 +87,10 @@ describe('a document from a supplier nobody has entered yet', () => {
      */
     const { ws } = applyApproval(withMaterial(), approval())
     expect(ws.quotes).toHaveLength(1)
-    expect(ws.quotes[0]).toMatchObject({
-      vendorId: 'VN-001', itemId: 'IT-001', unitPrice: 62800, state: 'received',
-    })
+    expect(ws.quotes[0]).toMatchObject({ vendorId: 'VN-001' })
+    expect(ws.quotes[0].lines).toMatchObject([
+      { itemId: 'IT-001', unitPrice: 62800, state: 'received' },
+    ])
     expect(ws.vendorItems).toEqual([])
   })
 
@@ -104,7 +105,7 @@ describe('a document from a supplier nobody has entered yet', () => {
     const { ws } = applyApproval(withMaterial(), approval())
     expect(ws.items[0].lastPurchaseRate).toBe(0)
 
-    const taken = acceptQuote(ws, ws.quotes[0].id)
+    const taken = acceptAll(ws, ws.quotes[0].id)
     expect(taken.items[0].lastPurchaseRate).toBe(62800)
   })
 })
@@ -143,7 +144,7 @@ describe('a document from somebody already on the list', () => {
      * second would throw away the only figures on the record that were earned.
      */
     const { ws } = applyApproval({ ...known(), vendorItems: [previous()] }, approval())
-    const taken = acceptQuote(ws, ws.quotes[0].id)
+    const taken = acceptAll(ws, ws.quotes[0].id)
 
     expect(taken.vendorItems[0].rate).toBe(62800)
     expect(taken.vendorItems[0].trailingLeadTimeDays).toBe(27)
@@ -174,7 +175,7 @@ describe('a line naming something this factory does not have', () => {
     expect(ws.items[0].name).toBe('CRCA sheet 1.2 mm')
     // not priced either — a quotation is a claim, and taking it is a separate act
     expect(ws.items[0].lastPurchaseRate).toBe(0)
-    expect(acceptQuote(ws, ws.quotes[0].id).items[0].lastPurchaseRate).toBe(62800)
+    expect(acceptAll(ws, ws.quotes[0].id).items[0].lastPurchaseRate).toBe(62800)
   })
 
   it('and arrives with nothing invented about how fast it is used', () => {
@@ -233,7 +234,7 @@ describe('the preview and the write', () => {
     const { ws } = applyApproval(withMaterial(), a)
 
     expect(plan.vendor.status).toBe('new')
-    expect(plan.quotesMade).toBe(ws.quotes.length)
+    expect(plan.pricesMade).toBe(ws.quotes[0].lines.length)
     expect(plan.itemsCreated).toBe(0)
     expect(plan.aliasesLearned).toBe(ws.aliases.length)
   })
@@ -417,7 +418,7 @@ describe('a document with columns this build has never heard of', () => {
     const { ws } = applyApproval(withMaterial(), withColumns())
     expect(ws.fields).toHaveLength(1)
     expect(ws.fields[0]).toMatchObject({ entity: 'quote', label: 'HSN code', kind: 'text' })
-    expect(valueOf(ws, ws.quotes[0].id, ws.fields[0].id)).toBe('7209')
+    expect(valueOf(ws, ws.quotes[0].lines[0].id, ws.fields[0].id)).toBe('7209')
   })
 
   it('reuses a column of that name rather than making a second one', () => {
@@ -452,19 +453,23 @@ describe('a document with columns this build has never heard of', () => {
   })
 })
 
-/* ============================ one quotation, several lines, one box on screen */
+/* ================================== one quotation, several lines, one record */
 
 /**
- * Why a six-line quotation is six quotes.
+ * Why a six-line quotation is one quote.
  *
- * A quote is one supplier's price for one material — that is what the landed
- * cost comparison ranks and what accepting one turns into a rate. So a
- * quotation quoting six materials is six records, and it should be: they are
- * six different prices for six different things.
+ * A quotation is a piece of paper: one supplier, one date, one reference, and
+ * however many prices they wrote on it. It used to become six records, which
+ * made the Quotes screen say "6 quotes" about one PDF and repeat the
+ * letterhead six times.
  *
- * What they must not lose is that they arrived together. `docId` is the link
- * back, and it is the document id rather than the supplier's quotation number
- * because that number is optional, is free text, and two of them can collide.
+ * The prices are still six separate things — six lines, accepted one at a
+ * time, each writing its own rate — because a quotation pricing six materials
+ * is rarely six things you want from them.
+ *
+ * `docId` is the link back to the file, and it is the document id rather than
+ * the supplier's quotation number because that number is optional, is free
+ * text, and two of them can collide.
  */
 describe('a quotation with several lines on it', () => {
   const threeLines = (): Approval => approval({
@@ -492,41 +497,47 @@ describe('a quotation with several lines on it', () => {
     nextIds: { IT: 3 },
   })
 
-  it('is one quote per material, because that is what a quote is', () => {
+  it('is one quotation, with a line per material', () => {
     const { ws } = applyApproval(threeMaterials(), threeLines())
-    expect(ws.quotes).toHaveLength(3)
-    expect(ws.quotes.map((q) => q.itemId)).toEqual(['IT-001', 'IT-002', 'IT-003'])
-    expect(ws.quotes.map((q) => q.unitPrice)).toEqual([62800, 46, 164])
+    expect(ws.quotes).toHaveLength(1)
+    expect(ws.quotes[0].lines.map((l) => l.itemId)).toEqual(['IT-001', 'IT-002', 'IT-003'])
+    expect(ws.quotes[0].lines.map((l) => l.unitPrice)).toEqual([62800, 46, 164])
   })
 
-  it('and every one of them remembers the document it came off', () => {
+  it('whose lines are numbered off it, so a column can hang off one', () => {
     const { ws } = applyApproval(threeMaterials(), threeLines())
-    expect(new Set(ws.quotes.map((q) => q.docId))).toEqual(new Set(['SD-001']))
+    const id = ws.quotes[0].id
+    expect(ws.quotes[0].lines.map((l) => l.id)).toEqual([`${id}/1`, `${id}/2`, `${id}/3`])
+  })
+
+  it('and it remembers the document it came off', () => {
+    const { ws } = applyApproval(threeMaterials(), threeLines())
+    expect(ws.quotes[0].docId).toBe('SD-001')
   })
 
   it('which is the id, not the supplier\'s quotation number', () => {
-    // a document whose number could not be read still groups
+    // a document whose number could not be read still points back at the file
     const a = threeLines()
     const { ws } = applyApproval(threeMaterials(), {
       ...a,
       doc: { ...a.doc, docNo: undefined },
     })
-    expect(ws.quotes.every((q) => q.docId === 'SD-001')).toBe(true)
-    expect(ws.quotes.every((q) => q.ref === undefined)).toBe(true)
+    expect(ws.quotes[0].docId).toBe('SD-001')
+    expect(ws.quotes[0].ref).toBeUndefined()
   })
 
   it('says so before writing when two lines point at one material', () => {
     /*
-     * Not refused — occasionally it is what somebody means. But it makes two
-     * quotes from one supplier for one material, which the comparison then
-     * ranks against each other as if they were two suppliers.
+     * Not refused — occasionally it is what somebody means. But it puts two
+     * lines for one material on one quotation, and accepting the second
+     * quietly overwrites the rate the first just wrote.
      */
     const a = threeLines()
     a.lines[1] = { ...a.lines[1], itemId: 'IT-001' }
     const plan = planApproval(threeMaterials(), a)
 
     expect(plan.doubled).toEqual(['CRCA sheet 1.2 mm'])
-    expect(plan.quotesMade).toBe(3)
+    expect(plan.pricesMade).toBe(3)
   })
 
   it('and has nothing to say when every line goes somewhere different', () => {

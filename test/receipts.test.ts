@@ -20,7 +20,7 @@ import { buildRows } from '@/lib/domain/derive'
 import { bundleFor } from '@/lib/workspace/bundle'
 import { emptyWorkspace } from '@/lib/workspace/defaults'
 import { buildRate, buildVendor } from '@/lib/workspace/records'
-import { acceptQuote, expired, removeOrder, removeVendor, staleRates } from '@/lib/workspace/sourcing'
+import { acceptAll, expired, removeOrder, removeVendor, staleRates } from '@/lib/workspace/sourcing'
 import type { PurchaseOrder, Workspace } from '@/lib/workspace/types'
 import type { Item } from '@/lib/domain/types'
 
@@ -278,11 +278,14 @@ describe('a quote that has run out', () => {
     const ws: Workspace = {
       ...base(),
       quotes: [{
-        id: 'QT-001', vendorId: 'VN-001', itemId: 'IT-001', unitPrice: 60000,
-        moq: 0, leadDays: 9, validUntil: '2026-10-15', state: 'received', on: '2026-09-12',
+        id: 'QT-001', vendorId: 'VN-001', validUntil: '2026-10-15', on: '2026-09-12',
+        lines: [{
+          id: 'QT-001/1', itemId: 'IT-001', unitPrice: 60000, moq: 0, leadDays: 9,
+          state: 'received',
+        }],
       }],
     }
-    const after = acceptQuote(ws, 'QT-001')
+    const after = acceptAll(ws, 'QT-001')
     expect(after.vendorItems[0].quoteValidUntil).toBe('2026-10-15')
     expect(staleRates(after, TODAY)).toBe(0)
   })
@@ -291,22 +294,28 @@ describe('a quote that has run out', () => {
     const ws: Workspace = {
       ...base(),
       quotes: [{
-        id: 'QT-001', vendorId: 'VN-001', itemId: 'IT-001', unitPrice: 60000,
-        moq: 0, leadDays: 9, validUntil: '2026-08-31', state: 'received', on: '2026-08-01',
+        id: 'QT-001', vendorId: 'VN-001', validUntil: '2026-08-31', on: '2026-08-01',
+        lines: [{
+          id: 'QT-001/1', itemId: 'IT-001', unitPrice: 60000, moq: 0, leadDays: 9,
+          state: 'received',
+        }],
       }],
     }
-    expect(staleRates(acceptQuote(ws, 'QT-001'), TODAY)).toBe(1)
+    expect(staleRates(acceptAll(ws, 'QT-001'), TODAY)).toBe(1)
   })
 
   it('never invents one when neither the quote nor the document said', () => {
     const ws: Workspace = {
       ...base(),
       quotes: [{
-        id: 'QT-001', vendorId: 'VN-001', itemId: 'IT-001', unitPrice: 60000,
-        moq: 0, leadDays: 9, state: 'received', on: '2026-09-12',
+        id: 'QT-001', vendorId: 'VN-001', on: '2026-09-12',
+        lines: [{
+          id: 'QT-001/1', itemId: 'IT-001', unitPrice: 60000, moq: 0, leadDays: 9,
+          state: 'received',
+        }],
       }],
     }
-    expect(acceptQuote(ws, 'QT-001').vendorItems[0].quoteValidUntil).toBe('')
-    expect(staleRates(acceptQuote(ws, 'QT-001'), TODAY)).toBe(0)
+    expect(acceptAll(ws, 'QT-001').vendorItems[0].quoteValidUntil).toBe('')
+    expect(staleRates(acceptAll(ws, 'QT-001'), TODAY)).toBe(0)
   })
 })

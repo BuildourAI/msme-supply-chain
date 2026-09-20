@@ -25,8 +25,8 @@ import { forgetAlias } from '@/lib/intake/alias'
 import { toIsoDate, toYesNo } from './match'
 import type { Item, StockLot, Vendor } from '@/lib/domain/types'
 import type {
-  FieldDef, FieldKind, ImportUndo, OrderState, PurchaseOrder, Quote, Rfq, SheetEntity, TableView,
-  Workspace,
+  FieldDef, FieldKind, ImportUndo, OrderState, PurchaseOrder, QuoteLine, Rfq, SheetEntity,
+  TableView, Workspace,
 } from '@/lib/workspace/types'
 
 /**
@@ -375,18 +375,48 @@ export function applyImport(
       recordId = id
     } else if (entity === 'quote') {
       // both ends were resolved by planImport, which refused the row otherwise
-      const [next, id] = issueId(w, 'QT')
-      w = next
-      created.push(id)
-      const quote: Quote = {
-        id,
-        vendorId: plan.links!.vendorId,
+      const vendorId = plan.links!.vendorId
+      const ref = values.ref || undefined
+      const on = toIsoDate(values.on ?? '') ?? today
+
+      /*
+       * Rows that are the same quotation become one.
+       *
+       * A spreadsheet of quotes is usually somebody typing up the quotations
+       * they received, and the rows of one of them share a supplier and a
+       * reference. Grouping on that is what stops a six-line quotation
+       * arriving as six of them — the same thing an uploaded PDF does. With
+       * no reference there is nothing to group on, so each row is its own
+       * quotation, which is what a row with no reference actually is.
+       */
+      const onto = ref
+        ? w.quotes.find((q) => q.vendorId === vendorId && q.ref === ref && created.includes(q.id))
+        : undefined
+
+      let id = onto?.id ?? ''
+      if (!id) {
+        const [next, made] = issueId(w, 'QT')
+        w = next
+        id = made
+        created.push(id)
+        w = {
+          ...w,
+          quotes: [...w.quotes, {
+            id, vendorId, ref, on,
+            validUntil: toIsoDate(values.valid ?? '') || undefined,
+            lines: [],
+          }],
+        }
+      }
+
+      const held = w.quotes.find((q) => q.id === id)!
+      const lineId = `${id}/${held.lines.length + 1}`
+      const line: QuoteLine = {
+        id: lineId,
         itemId: plan.links!.itemId,
         unitPrice: parseNumber(values.price ?? '') ?? 0,
         moq: parseNumber(values.moq ?? '') ?? 0,
         leadDays: parseNumber(values.lead ?? '') ?? 0,
-        ref: values.ref || undefined,
-        validUntil: toIsoDate(values.valid ?? '') || undefined,
         /*
          * Always received, however the sheet describes it. Accepting is what
          * writes the rate and turns the rivals down, and a spreadsheet cell
@@ -394,10 +424,13 @@ export function applyImport(
          * is not offered as a column to map.
          */
         state: 'received',
-        on: toIsoDate(values.on ?? '') ?? today,
       }
-      w = { ...w, quotes: [...w.quotes, quote] }
-      recordId = id
+      w = {
+        ...w,
+        quotes: w.quotes.map((q) => (q.id === id ? { ...q, lines: [...q.lines, line] } : q)),
+      }
+      // the owner's own columns hang off the line, not off the quotation
+      recordId = lineId
     } else if (entity === 'order') {
       const [next, id] = issueId(w, 'PO')
       w = next
@@ -510,8 +543,11 @@ export function undoImport(ws: Workspace): Workspace {
      * off — an import into those lists creates the records themselves, so the
      * undo has to remove them by their own id as well as by a vanished parent.
      */
-    quotes: w.quotes.filter((q) => !gone.has(q.id)
-      && !gone.has(q.vendorId) && !gone.has(q.itemId) && !(q.rfqId && gone.has(q.rfqId))),
+    quotes: w.quotes
+      .filter((q) => !gone.has(q.id) && !gone.has(q.vendorId) && !(q.rfqId && gone.has(q.rfqId)))
+      // a material the import invented takes the lines that priced it
+      .map((q) => ({ ...q, lines: q.lines.filter((l) => !gone.has(l.itemId)) }))
+      .filter((q) => q.lines.length > 0),
     orders: w.orders.filter((o) => !gone.has(o.id)
       && !gone.has(o.vendorId) && !gone.has(o.itemId)),
   }
