@@ -169,6 +169,51 @@ describe('pricing the terms across a material', () => {
 
 /* ========================================================= naming what is unset */
 
+/* ================================================ what a rewrite keeps hold of */
+
+/**
+ * The rule `buildRate` states and now actually follows: an omitted figure
+ * keeps what was there, and only an explicit value changes it.
+ *
+ * `isPreferred` was the exception. Accepting a quote does not ask about
+ * preferred — agreeing to a price is not a statement about who you usually
+ * buy from — so a rate rebuilt that way cleared the mark. It decides which
+ * supplier a material is currently ON, which is the baseline the whole
+ * landed-cost flip is measured against, so the comparison quietly moved.
+ */
+describe('the supplier somebody marked as their usual one', () => {
+  const marked = () => buildRate(
+    { vendorId: 'VN-001', itemId: 'IT-001', rate: 1000, leadDays: 7, preferred: true },
+  )
+
+  it('is marked when the owner says so', () => {
+    expect(marked().isPreferred).toBe(true)
+  })
+
+  it('and stays marked when a rate is rewritten without being asked about it', () => {
+    const again = buildRate(
+      { vendorId: 'VN-001', itemId: 'IT-001', rate: 980, leadDays: 9 },
+      marked(),
+    )
+    expect(again.isPreferred).toBe(true)
+    expect(again.rate).toBe(980)
+  })
+
+  it('but is un-marked when the owner unticks the box', () => {
+    // `false` is a decision; leaving it out is not
+    const off = buildRate(
+      { vendorId: 'VN-001', itemId: 'IT-001', rate: 1000, leadDays: 7, preferred: false },
+      marked(),
+    )
+    expect(off.isPreferred).toBeUndefined()
+  })
+
+  it('and a rate nobody has said anything about carries no mark', () => {
+    expect(buildRate({ vendorId: 'VN-002', itemId: 'IT-001', rate: 900, leadDays: 5 }).isPreferred)
+      .toBeUndefined()
+  })
+})
+
 describe('what nobody has told it', () => {
   it('names every component with nothing behind it', () => {
     expect(unsetComponents(two(0), 'IT-001')).toEqual([

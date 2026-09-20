@@ -136,6 +136,13 @@ export interface RateInput {
   itemId: string
   rate: number
   leadDays: number
+  /**
+   * Whether this is the supplier the factory usually buys that material from.
+   *
+   * Three states, not two: `true` marks them, `false` un-marks them, and
+   * leaving it out says nothing — which is what accepting a quote does, since
+   * agreeing to a price is not a statement about who you usually buy from.
+   */
   preferred?: boolean
   /**
    * The three things a quoted rate does not mention, as the owner says them.
@@ -198,7 +205,16 @@ export function buildRate(input: RateInput, previous?: VendorItem): VendorItem {
     quotedLeadTimeDays: input.leadDays,
     trailingLeadTimeDays: previous?.trailingLeadTimeDays ?? input.leadDays,
     quoteValidUntil: input.validUntil ?? before.quoteValidUntil,
-    isPreferred: input.preferred || undefined,
+    /*
+     * Omitted leaves it alone; `false` clears it. The rule above, applied to
+     * the one field that was not following it — accepting a quote does not
+     * ask about preferred, so `|| undefined` un-marked the supplier somebody
+     * had called their usual one. That flag decides which supplier a material
+     * is currently ON (`derive.ts`), which is the baseline the whole
+     * landed-cost flip is measured against, so losing it silently moved the
+     * comparison.
+     */
+    isPreferred: (input.preferred ?? previous?.isPreferred) || undefined,
   } as VendorItem
 }
 

@@ -327,6 +327,19 @@ describe('accepting a quote', () => {
     const ws = acceptLine(base(), 'QT-001', 'QT-001/1')
     expect(ws.orders).toEqual([])
   })
+
+  it('and does not un-mark the supplier somebody called their usual one', () => {
+    /*
+     * Accepting rebuilds the rate, and the rebuild used to drop `isPreferred`
+     * because this route never passes it. That flag is what `derive.ts` reads
+     * to decide which supplier a material is currently ON — the baseline the
+     * landed-cost flip is measured against — so taking a price from your usual
+     * supplier moved the comparison as a side effect.
+     */
+    const ws = base()
+    ws.vendorItems = [rate({ isPreferred: true })]
+    expect(acceptLine(ws, 'QT-001', 'QT-001/1').vendorItems[0].isPreferred).toBe(true)
+  })
 })
 
 /* ================================= a quotation is one record, with lines on it */
