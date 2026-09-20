@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { BestLanded } from '@/components/sourcing/BestLanded'
 import { Dialog } from '@/components/ui/Dialog'
 import { Chips, Field, NumberInput, Select } from '@/components/ui/Field'
 import { useWorkspace } from '@/components/workspace/store'
@@ -144,6 +145,17 @@ export function OrderForm({ open, onClose, editing }: {
               options={ws.items.map((i) => ({ value: i.id, label: i.name }))} />
           </Field>
         </div>
+
+        {/*
+          * Offered, never applied. Pressing the button is the only thing that
+          * changes the supplier — see §11, and `BestLanded`'s own note. Hidden
+          * once an order has been confirmed, because by then the choice was
+          * made and second-guessing it is noise rather than advice.
+          */}
+        {(!editing || state === 'draft') && (
+          <BestLanded itemId={itemId} vendorId={vendorId} qty={qtyOk ? qtyN : undefined}
+            onPick={(v) => { setVendorId(v); suggest(v, itemId) }} />
+        )}
 
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Quantity" htmlFor="of-qty"

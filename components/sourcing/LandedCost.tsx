@@ -3,9 +3,18 @@ import { useMemo, useState } from 'react'
 import { ListPage } from '@/components/ui/ListPage'
 import { DataTable, StatePill, type Column } from '@/components/ui/DataTable'
 import { useWorkspace } from '@/components/workspace/store'
-import { breakdownOf, unsetComponents, type Breakdown } from '@/lib/workspace/landed'
+import { rankByLanded, unsetComponents, type Ranked } from '@/lib/workspace/landed'
 import { money, num } from '@/lib/domain/format'
-import type { Item, Vendor, VendorItem } from '@/lib/domain/types'
+import type { Item, Vendor } from '@/lib/domain/types'
+
+/*
+ * The ranking itself lives in `lib/workspace/landed.ts`, because the order form
+ * makes the same recommendation at the moment somebody picks a supplier. Two
+ * places sorting by landed cost the same way by coincidence is not a property
+ * worth relying on — a screen that names one supplier while the order form
+ * suggests another is worse than neither of them saying anything.
+ */
+type Row = Ranked & { vendor: Vendor }
 
 /**
  * What a supplier actually costs, as against what they quoted.
@@ -26,14 +35,6 @@ import type { Item, Vendor, VendorItem } from '@/lib/domain/types'
  * comparison with nothing to work on. So when a component is unset the screen
  * says which, and says it before the table rather than under it.
  */
-interface Row {
-  vendor: Vendor
-  vi: VendorItem
-  b: Breakdown
-  cheapestLanded: boolean
-  cheapestQuoted: boolean
-}
-
 export function LandedCost() {
   const { workspace } = useWorkspace()
   const [pick, setPick] = useState('')
@@ -56,23 +57,11 @@ export function LandedCost() {
     ?? priced[0]
 
   const rows: Row[] = item
-    ? ws.vendorItems
-      .filter((vi) => vi.itemId === item.id)
-      .map((vi) => ({
-        vendor: ws.vendors.find((v) => v.id === vi.vendorId)!,
-        vi,
-        b: breakdownOf(vi),
-        cheapestLanded: false,
-        cheapestQuoted: false,
-      }))
-      .filter((r) => r.vendor)
-      .sort((a, b) => a.b.landed - b.b.landed)
+    ? rankByLanded(ws, item.id).flatMap((r) => {
+      const vendor = ws.vendors.find((v) => v.id === r.vi.vendorId)
+      return vendor ? [{ ...r, vendor }] : []
+    })
     : []
-
-  if (rows.length > 0) {
-    rows[0].cheapestLanded = true
-    rows.reduce((a, b) => (b.vi.rate < a.vi.rate ? b : a)).cheapestQuoted = true
-  }
 
   const flips = rows.length > 1 && !rows[0].cheapestQuoted
   const cheap = rows.find((r) => r.cheapestQuoted)
@@ -170,7 +159,7 @@ function Verdict({ item, rows, flips, gap, flat, missing, cheapName, bestName }:
     return (
       <Line tone="plain">
         One supplier on {item.name}, so there is nothing to rank. What they land at is
-        still worth knowing — it is {money(rows[0].b.landed, 2)} a {item.uom} against the{' '}
+        still worth knowing — it is {money(rows[0].b.landed, 2)} per {item.uom} against the{' '}
         {money(rows[0].b.rate, 2)} they quoted.
       </Line>
     )
@@ -198,7 +187,7 @@ function Verdict({ item, rows, flips, gap, flat, missing, cheapName, bestName }:
     return (
       <Line tone="accent">
         <strong className="text-ink">The cheapest quote is not the cheapest material here.</strong>{' '}
-        {cheapName} quotes less and lands {money(gap, 2)} a {item.uom} dearer than {bestName}
+        {cheapName} quotes less and lands {money(gap, 2)} per {item.uom} dearer than {bestName}
         {order > 0 ? <> — {money(gap * order)} on an order of {num(order, 0)} {item.uom}</> : null}.
         {missing.length > 0 && (
           <span className="text-ink-3"> Still unset: {missing.join(', ')}.</span>

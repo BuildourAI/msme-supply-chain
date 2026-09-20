@@ -148,3 +148,89 @@ export function unsetComponents(ws: Workspace, itemId?: string): string[] {
   if (!rates.some((vi) => vi.rejectionAllowance > 0)) missing.push('a rejection rate')
   return missing
 }
+
+/* ---------------------------------------------------------------- ranking -- */
+
+/** One supplier's rate on a material, placed against the others on it. */
+export interface Ranked {
+  vi: VendorItem
+  b: Breakdown
+  cheapestLanded: boolean
+  cheapestQuoted: boolean
+}
+
+/**
+ * Every rate on one material, cheapest-landed first.
+ *
+ * Extracted so that the comparison screen and the forms cannot disagree. They
+ * ranked the same way by coincidence before this existed, which is not a
+ * property worth relying on: a screen that says one supplier is cheapest and an
+ * order form that suggests another is worse than neither of them saying
+ * anything.
+ *
+ * Ties break on the quoted rate, then on whatever order the rates were entered
+ * in — the sort is stable, so the answer is the same every render.
+ */
+export function rankByLanded(ws: Workspace, itemId: string): Ranked[] {
+  const rows: Ranked[] = ws.vendorItems
+    .filter((vi) => vi.itemId === itemId)
+    .map((vi) => ({ vi, b: breakdownOf(vi), cheapestLanded: false, cheapestQuoted: false }))
+    .sort((a, b) => a.b.landed - b.b.landed || a.vi.rate - b.vi.rate)
+
+  if (rows.length > 0) {
+    rows[0].cheapestLanded = true
+    rows.reduce((a, b) => (b.vi.rate < a.vi.rate ? b : a)).cheapestQuoted = true
+  }
+  return rows
+}
+
+/* ------------------------------------------------------------- the advice -- */
+
+/**
+ * What is worth saying to somebody who has just picked a supplier.
+ *
+ * Deliberately a description rather than a decision. It reports where the
+ * chosen supplier stands and who lands cheapest; what the screen does with that
+ * is the screen's business, and what it must not do is act on it. §11 is that
+ * the system suggests and drafts and never places an order — and quietly
+ * swapping the supplier somebody selected is that line being crossed, however
+ * good the arithmetic behind it.
+ */
+export interface Advice {
+  /** every rate on the material, cheapest-landed first */
+  rows: Ranked[]
+  /** the one that lands cheapest, or null when nobody quotes this material */
+  best: Ranked | null
+  /** where the chosen supplier sits, or null when they have no rate for it */
+  chosen: Ranked | null
+  /** the chosen supplier is the one that lands cheapest */
+  isBest: boolean
+  /** cheapest-landed and cheapest-quoted are different suppliers */
+  flips: boolean
+  /** per unit, what moving from the chosen supplier to the best one saves */
+  saving: number
+  /** components nobody has entered — see `unsetComponents` */
+  missing: string[]
+  /**
+   * Nothing has been entered beyond rates, so every supplier lands at exactly
+   * what they quoted. A ranking in that state is a ranking on the quoted rate
+   * wearing a different hat, and the screen has to say so.
+   */
+  flat: boolean
+}
+
+export function adviseFor(ws: Workspace, itemId: string, vendorId: string): Advice {
+  const rows = rankByLanded(ws, itemId)
+  const best = rows[0] ?? null
+  const chosen = rows.find((r) => r.vi.vendorId === vendorId) ?? null
+  return {
+    rows,
+    best,
+    chosen,
+    isBest: Boolean(chosen && chosen.cheapestLanded),
+    flips: rows.length > 1 && !rows[0].cheapestQuoted,
+    saving: chosen && best ? money(chosen.b.landed - best.b.landed) : 0,
+    missing: unsetComponents(ws, itemId),
+    flat: rows.length > 1 && rows.every((r) => r.b.landed === r.vi.rate),
+  }
+}

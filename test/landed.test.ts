@@ -12,7 +12,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
-  breakdownOf, gstCost, rejectionCost, repriceTerms, termCost, unsetComponents,
+  adviseFor, breakdownOf, gstCost, rankByLanded, rejectionCost, repriceTerms, termCost,
+  unsetComponents,
 } from '@/lib/workspace/landed'
 import { buildRows } from '@/lib/domain/derive'
 import { bundleFor } from '@/lib/workspace/bundle'
@@ -251,5 +252,122 @@ describe('the cheapest quote, on a workspace an owner built', () => {
     const cheap = r.quotes.find((q) => q.isLowestRate)!
     const best = r.quotes[0]
     expect(cheap.landedPerUnit.value).toBeGreaterThan(best.landedPerUnit.value)
+  })
+})
+
+/* ================================================ the advice, where it is needed */
+
+/**
+ * The ranking the order form states, and the guard that it is the same ranking.
+ *
+ * A screen naming one supplier while the form beside it suggests another is
+ * worse than neither of them saying anything, so the first test here does not
+ * check that `rankByLanded` is correct in isolation — it checks that it agrees
+ * with `buildRows`, the derivation the comparison screen and the sample company
+ * both run on. Nothing else in this file can make them drift apart.
+ */
+describe('ranking a material\'s suppliers', () => {
+  const flipping = (): Workspace => repriceTerms({
+    ...base(),
+    policy: { ...base().policy, costOfMoneyPct: 12 },
+    items: [material()],
+    nextIds: { IT: 1, VN: 2 },
+    vendors: [
+      buildVendor({ id: 'VN-001', name: 'Dearer, easier', paymentTermsDays: 45 }),
+      buildVendor({ id: 'VN-002', name: 'Cheaper, harder', paymentTermsDays: 0 }),
+    ],
+    vendorItems: [
+      buildRate({ vendorId: 'VN-001', itemId: 'IT-001', rate: 61400, leadDays: 7, freight: 1850 }),
+      buildRate({
+        vendorId: 'VN-002', itemId: 'IT-001', rate: 60200, leadDays: 7,
+        freight: 2400, unclaimableGstPct: 1, rejectPct: 2,
+      }),
+    ],
+  })
+
+  it('puts the one that lands cheapest first, not the one that quoted least', () => {
+    const rows = rankByLanded(flipping(), 'IT-001')
+    expect(rows.map((r) => r.vi.vendorId)).toEqual(['VN-001', 'VN-002'])
+    expect(rows[0].cheapestLanded).toBe(true)
+    expect(rows[0].cheapestQuoted).toBe(false)
+    expect(rows[1].cheapestQuoted).toBe(true)
+  })
+
+  it('and agrees with the engine the comparison screen runs on', () => {
+    // the property that matters: two places, one answer
+    const ws = flipping()
+    const engine = buildRows(bundleFor(ws, TODAY), ws.policy)[0]
+    expect(rankByLanded(ws, 'IT-001')[0].vi.vendorId).toBe(engine.quotes[0].vendor.id)
+    expect(rankByLanded(ws, 'IT-001')[1].vi.vendorId).toBe(engine.quotes[1].vendor.id)
+  })
+
+  it('breaks a landed tie on the quoted rate', () => {
+    const ws = flipping()
+    const tied: Workspace = {
+      ...ws,
+      vendorItems: [
+        buildRate({ vendorId: 'VN-001', itemId: 'IT-001', rate: 1000, leadDays: 7 }),
+        buildRate({ vendorId: 'VN-002', itemId: 'IT-001', rate: 900, leadDays: 7, freight: 100 }),
+      ],
+    }
+    expect(rankByLanded(tied, 'IT-001').map((r) => r.vi.vendorId)).toEqual(['VN-002', 'VN-001'])
+  })
+
+  it('has nothing to say about a material nobody quotes', () => {
+    expect(rankByLanded(flipping(), 'IT-404')).toEqual([])
+  })
+
+  describe('and the advice it gives the order form', () => {
+    it('names the cheaper one when a dearer supplier is selected', () => {
+      const a = adviseFor(flipping(), 'IT-001', 'VN-002')
+      expect(a.isBest).toBe(false)
+      expect(a.best!.vi.vendorId).toBe('VN-001')
+      expect(a.chosen!.vi.vendorId).toBe('VN-002')
+      // 65,296.63 landed against 63,250 — the cost of taking the cheaper quote
+      expect(a.saving).toBe(2046.63)
+      expect(a.flips).toBe(true)
+    })
+
+    it('says so when the selected supplier is already the cheapest', () => {
+      const a = adviseFor(flipping(), 'IT-001', 'VN-001')
+      expect(a.isBest).toBe(true)
+      expect(a.saving).toBe(0)
+      // still worth knowing that the other one quoted less
+      expect(a.flips).toBe(true)
+    })
+
+    it('handles a supplier who has no rate on this material at all', () => {
+      const a = adviseFor(flipping(), 'IT-001', 'VN-404')
+      expect(a.chosen).toBeNull()
+      expect(a.isBest).toBe(false)
+      expect(a.saving).toBe(0)
+      expect(a.best!.vi.vendorId).toBe('VN-001')
+    })
+
+    it('refuses to call a ranking on the rate alone a recommendation', () => {
+      /*
+       * The first afternoon. Nothing but rates is entered, so every supplier
+       * lands at exactly what they quoted — and dressing that up as a landed
+       * cost comparison would be this build's one real falsehood.
+       */
+      const a = adviseFor(two(0), 'IT-001', 'VN-002')
+      expect(a.flat).toBe(true)
+      expect(a.missing).toEqual([
+        'freight', 'GST you cannot claim back', 'what your money costs', 'a rejection rate',
+      ])
+    })
+
+    it('and is not flat the moment one component has a figure', () => {
+      const a = adviseFor(flipping(), 'IT-001', 'VN-002')
+      expect(a.flat).toBe(false)
+    })
+
+    it('has nothing at all to offer on a material with no rates', () => {
+      const a = adviseFor(flipping(), 'IT-404', 'VN-001')
+      expect(a.rows).toEqual([])
+      expect(a.best).toBeNull()
+      expect(a.chosen).toBeNull()
+      expect(a.flips).toBe(false)
+    })
   })
 })

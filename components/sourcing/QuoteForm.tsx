@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { QuoteStanding } from '@/components/sourcing/BestLanded'
 import { Dialog } from '@/components/ui/Dialog'
 import { Field, NumberInput, Select, TextInput } from '@/components/ui/Field'
 import { useWorkspace } from '@/components/workspace/store'
@@ -140,6 +141,14 @@ export function QuoteForm({ open, onClose, editing, forRfqId }: {
               invalid={tried && !leadOk} />
           </Field>
         </div>
+
+        {/*
+          * Where this price sits against the rates already on file. Not a
+          * recommendation: a quote is a record of what somebody said, and
+          * suggesting a different supplier would be answering a question
+          * nobody asked.
+          */}
+        <QuoteStanding itemId={itemId} vendorId={vendorId} price={priceN} />
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Their reference" hint="Optional — the number on their quotation.">
