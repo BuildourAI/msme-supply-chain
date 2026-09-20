@@ -17,6 +17,7 @@ import type { Item, Vendor } from '@/lib/domain/types'
 import { pruneCustom } from './fields'
 import { repriceTerms } from './landed'
 import { backfillRates, buildRate } from './records'
+import type { SupplierDoc } from '@/lib/intake/types'
 import type { PurchaseOrder, Quote, Rfq, RfqState, Workspace } from './types'
 
 /* ------------------------------------------------------------- numbering -- */
@@ -136,23 +137,62 @@ export function quoteRows(ws: Workspace): QuoteRow[] {
 }
 
 /**
- * Quotes grouped by the request they answer, which is how the reference shows
+ * Quotes grouped by where they came from, which is how the reference shows
  * them — the comparison is the point, and a flat list of prices against
- * different materials compares nothing. Quotes with no request behind them are
- * a group of their own rather than hidden.
+ * different materials compares nothing.
+ *
+ * Three kinds of group, in the order they are worth seeing:
+ *
+ * A request, and the prices that came back against it. Those are for one
+ * material from several suppliers, which is the comparison this screen exists
+ * for.
+ *
+ * A document. A quotation quoting six materials is six quotes, and they
+ * arrived on one piece of paper — so they sit in one box headed by the
+ * supplier and the quotation number, with the original a click away. They used
+ * to fall into the loose bucket with everything else, which turned one upload
+ * into six unrelated cards and is what this grouping exists to stop.
+ *
+ * And everything else: a price somebody wrote down off a phone call, which is
+ * how most of them arrive and is not a failure to be hidden.
  */
 export interface QuoteGroup {
   rfq: Rfq | null
+  /** set when these quotes were all read off one supplier document */
+  doc?: SupplierDoc
   rows: QuoteRow[]
 }
 
 export function quoteGroups(ws: Workspace): QuoteGroup[] {
   const rows = quoteRows(ws)
-  const groups: QuoteGroup[] = ws.rfqs
+
+  const byRfq: QuoteGroup[] = ws.rfqs
     .map((rfq) => ({ rfq, rows: rows.filter((r) => r.quote.rfqId === rfq.id) }))
     .filter((g) => g.rows.length > 0)
+
   const loose = rows.filter((r) => !r.quote.rfqId)
-  return loose.length ? [...groups, { rfq: null, rows: loose }] : groups
+
+  /*
+   * By document, newest first, so a quotation that came in this morning is at
+   * the top. A quote whose document has since been deleted keeps its `docId`
+   * and finds no document here, so it falls through to the loose bucket rather
+   * than forming a group with no heading.
+   */
+  const byDoc: QuoteGroup[] = []
+  const filed = new Set<string>()
+  for (const doc of [...(ws.docs ?? [])].sort((a, b) => b.addedAt.localeCompare(a.addedAt))) {
+    const mine = loose.filter((r) => r.quote.docId === doc.id)
+    if (mine.length === 0) continue
+    byDoc.push({ rfq: null, doc, rows: mine })
+    for (const r of mine) filed.add(r.quote.id)
+  }
+
+  const rest = loose.filter((r) => !filed.has(r.quote.id))
+  return [
+    ...byRfq,
+    ...byDoc,
+    ...(rest.length ? [{ rfq: null, rows: rest }] : []),
+  ]
 }
 
 export interface OrderRow {

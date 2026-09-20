@@ -5,6 +5,7 @@ import { StatePill, type PillTone } from '@/components/ui/DataTable'
 import { ListPage } from '@/components/ui/ListPage'
 import { DeskTools } from '@/components/sheet/DeskTools'
 import { UploadDialog } from '@/components/intake/UploadDialog'
+import { DocViewer } from '@/components/intake/DocViewer'
 import { buildColumns, type DrawnColumn } from '@/components/sheet/columns'
 import { QuoteForm } from '@/components/sourcing/QuoteForm'
 import { ConfirmDelete } from '@/components/sourcing/ConfirmDelete'
@@ -16,6 +17,7 @@ import {
 import { issueId } from '@/lib/workspace/defaults'
 import { money, num, shortDate } from '@/lib/domain/format'
 import type { Quote, QuoteState } from '@/lib/workspace/types'
+import type { SupplierDoc } from '@/lib/intake/types'
 
 /**
  * What came back.
@@ -69,6 +71,7 @@ function Quotes() {
   const [adding, setAdding] = useState(false)
   const [deleting, setDeleting] = useState<Quote | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [viewing, setViewing] = useState<SupplierDoc | null>(null)
 
   if (!workspace) return null
   const ws = workspace
@@ -191,27 +194,67 @@ function Quotes() {
           return (
             <div className="space-y-4">
               {visible.map((g) => {
-                const best = Math.min(...g.rows.map((r) => r.quote.unitPrice))
+                /*
+                 * The lowest price, per material — which is the only way the
+                 * comparison means anything. It used to be the lowest price in
+                 * the whole box, and in the loose box that compared a tonne of
+                 * sheet steel against a cable gland and marked the gland
+                 * "lowest price quoted". Nothing is marked where there is
+                 * nothing to compare it with.
+                 */
+                const low = new Map<string, number>()
+                const seen = new Map<string, number>()
+                for (const r of g.rows) {
+                  const at = r.quote.itemId
+                  low.set(at, Math.min(low.get(at) ?? Infinity, r.quote.unitPrice))
+                  seen.set(at, (seen.get(at) ?? 0) + 1)
+                }
                 return (
-                  <section key={g.rfq?.id ?? 'loose'}
+                  <section key={g.doc?.id ?? g.rfq?.id ?? 'loose'}
                     className="rounded-xl border border-line bg-surface p-4">
                     <header className="mb-3 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
                       <h2 className="mono text-[13px] font-bold">
-                        {g.rfq ? g.rfq.no : 'No request'}
+                        {g.doc
+                          ? (g.doc.docNo ?? g.doc.fileName)
+                          : g.rfq ? g.rfq.no : 'No request'}
                       </h2>
                       {g.rfq && (
                         <span className="text-[12.5px] text-ink-2">
                           {ws.items.find((i) => i.id === g.rfq!.itemId)?.name}
                         </span>
                       )}
+                      {/*
+                        * Who sent it and when, so a box of six materials reads
+                        * as the one quotation it is rather than six loose
+                        * prices that happened to arrive together.
+                        */}
+                      {g.doc && (
+                        <>
+                          <span className="text-[12.5px] text-ink-2">
+                            {g.doc.vendorName || 'Unknown supplier'}
+                          </span>
+                          <span className="text-[11.5px] text-ink-3">
+                            {shortDate(g.doc.receivedAt || g.doc.addedAt)}
+                          </span>
+                          <button type="button" onClick={() => setViewing(g.doc!)}
+                            title={`Open ${g.doc.fileName}`}
+                            className="press inline-flex items-center gap-1 text-[11.5px] text-accent-ink underline underline-offset-2">
+                            <Icon name="doc" className="size-3" />
+                            the original
+                          </button>
+                        </>
+                      )}
                       <span className="mono ml-auto text-[11px] text-ink-3">
-                        {g.rows.length} quote{g.rows.length === 1 ? '' : 's'}
+                        {g.doc
+                          ? `${g.rows.length} line${g.rows.length === 1 ? '' : 's'}`
+                          : `${g.rows.length} quote${g.rows.length === 1 ? '' : 's'}`}
                       </span>
                     </header>
 
                     <ul className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
                       {g.rows.map((r) => {
-                        const cheapest = g.rows.length > 1 && r.quote.unitPrice === best
+                        const cheapest = (seen.get(r.quote.itemId) ?? 0) > 1
+                          && r.quote.unitPrice === low.get(r.quote.itemId)
                         return (
                           <li key={r.quote.id}
                             className={`rounded-lg border p-3 ${
@@ -262,7 +305,7 @@ function Quotes() {
 
                             {cheapest && (
                               <p className="mt-2 flex items-center gap-1 text-[11px] text-good"
-                                title="Lowest quoted price here. Freight, terms and rejection history can still change which is cheapest overall.">
+                                title="Lowest quoted price for this material here. Freight, terms and rejection history can still change which is cheapest overall.">
                                 <Icon name="check" className="size-3" />
                                 lowest price quoted
                               </p>
@@ -309,6 +352,9 @@ function Quotes() {
       </ListPage>
 
       <UploadDialog open={uploading} onClose={() => setUploading(false)} />
+
+      {/* the same viewer the Documents screen uses — one file, one way to read it */}
+      <DocViewer doc={viewing} items={ws.items} onClose={() => setViewing(null)} />
 
       <QuoteForm open={adding || editing !== null} editing={editing}
         onClose={() => { setAdding(false); setEditing(null) }} />

@@ -821,6 +821,27 @@ function Check(p: {
         </div>
       )}
 
+      {/*
+        * Two lines pointing at one material. Not refused — occasionally it is
+        * what somebody means, a supplier quoting two grades bought as one
+        * thing — but the result is two quotes for the same supplier and the
+        * same material sitting side by side as if they were competing
+        * suppliers, so it is said before it is written rather than found
+        * afterwards.
+        */}
+      {p.plan.doubled.length > 0 && (
+        <div className="rounded-lg border border-warn/30 bg-warn-soft px-3 py-2.5">
+          <p className="text-[12.5px] font-medium">
+            More than one line is going to the same material
+          </p>
+          <p className="mt-1 text-[11.5px] leading-relaxed text-ink-2">
+            {p.plan.doubled.join(', ')} — that makes two quotes from{' '}
+            {p.plan.vendor.name} for it. Go back and change one, or leave it if
+            they really did quote it twice.
+          </p>
+        </div>
+      )}
+
       {p.plan.skipped.length > 0 && (
         <div>
           <p className="text-[12.5px] font-medium">Left out</p>

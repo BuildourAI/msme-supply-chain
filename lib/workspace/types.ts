@@ -82,6 +82,20 @@ export interface Quote {
   id: string
   /** absent when the price arrived without a request behind it */
   rfqId?: string
+  /**
+   * The document this price was read off, when it was read off one.
+   *
+   * A quotation quoting six materials is six quotes, because a quote is one
+   * supplier's price for one material — that is what the comparison ranks and
+   * what accepting one turns into a rate. But they arrived together on one
+   * piece of paper, and a screen that cannot say so turns one upload into six
+   * unrelated cards.
+   *
+   * The document id rather than `ref`: a supplier's own quotation number is
+   * optional, is free text, and two of them can collide. This is exact, and it
+   * is what lets the original be opened from the group it produced.
+   */
+  docId?: string
   vendorId: string
   itemId: string
   unitPrice: number

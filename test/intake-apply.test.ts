@@ -451,3 +451,85 @@ describe('a document with columns this build has never heard of', () => {
     expect(planApproval(ws, withColumns({ doc: doc({ id: 'SD-002' }) })).columnsAdded).toBe(0)
   })
 })
+
+/* ============================ one quotation, several lines, one box on screen */
+
+/**
+ * Why a six-line quotation is six quotes.
+ *
+ * A quote is one supplier's price for one material — that is what the landed
+ * cost comparison ranks and what accepting one turns into a rate. So a
+ * quotation quoting six materials is six records, and it should be: they are
+ * six different prices for six different things.
+ *
+ * What they must not lose is that they arrived together. `docId` is the link
+ * back, and it is the document id rather than the supplier's quotation number
+ * because that number is optional, is free text, and two of them can collide.
+ */
+describe('a quotation with several lines on it', () => {
+  const threeLines = (): Approval => approval({
+    doc: doc({
+      lines: [
+        line({ id: 'SD-001/1', raw: 'CRCA SHEET 1.2MM', itemId: 'IT-001' }),
+        line({ id: 'SD-001/2', raw: 'BRASS GLAND 20MM', itemId: 'IT-002' }),
+        line({ id: 'SD-001/3', raw: 'ROCKWOOL SLAB 50MM', itemId: 'IT-003' }),
+      ],
+    }),
+    lines: [
+      { raw: 'CRCA SHEET 1.2MM', itemId: 'IT-001', rate: 62800 },
+      { raw: 'BRASS GLAND 20MM', itemId: 'IT-002', rate: 46 },
+      { raw: 'ROCKWOOL SLAB 50MM', itemId: 'IT-003', rate: 164 },
+    ],
+  })
+
+  const threeMaterials = (): Workspace => ({
+    ...withMaterial(),
+    items: [
+      material(),
+      material({ id: 'IT-002', code: 'GLAND', name: 'Brass cable gland 20 mm', uom: 'nos' }),
+      material({ id: 'IT-003', code: 'ROCK', name: 'Rockwool slab 50 mm', uom: 'm2' }),
+    ],
+    nextIds: { IT: 3 },
+  })
+
+  it('is one quote per material, because that is what a quote is', () => {
+    const { ws } = applyApproval(threeMaterials(), threeLines())
+    expect(ws.quotes).toHaveLength(3)
+    expect(ws.quotes.map((q) => q.itemId)).toEqual(['IT-001', 'IT-002', 'IT-003'])
+    expect(ws.quotes.map((q) => q.unitPrice)).toEqual([62800, 46, 164])
+  })
+
+  it('and every one of them remembers the document it came off', () => {
+    const { ws } = applyApproval(threeMaterials(), threeLines())
+    expect(new Set(ws.quotes.map((q) => q.docId))).toEqual(new Set(['SD-001']))
+  })
+
+  it('which is the id, not the supplier\'s quotation number', () => {
+    // a document whose number could not be read still groups
+    const a = threeLines()
+    const { ws } = applyApproval(threeMaterials(), {
+      ...a,
+      doc: { ...a.doc, docNo: undefined },
+    })
+    expect(ws.quotes.every((q) => q.docId === 'SD-001')).toBe(true)
+    expect(ws.quotes.every((q) => q.ref === undefined)).toBe(true)
+  })
+
+  it('says so before writing when two lines point at one material', () => {
+    /*
+     * Not refused — occasionally it is what somebody means. But it makes two
+     * quotes from one supplier for one material, which the comparison then
+     * ranks against each other as if they were two suppliers.
+     */
+    const a = threeLines()
+    a.lines[1] = { ...a.lines[1], itemId: 'IT-001' }
+    const plan = planApproval(threeMaterials(), a)
+
+    expect(plan.doubled).toEqual(['CRCA sheet 1.2 mm'])
+    expect(plan.quotesMade).toBe(3)
+  })
+
+  it('and has nothing to say when every line goes somewhere different', () => {
+    expect(planApproval(threeMaterials(), threeLines()).doubled).toEqual([])
+  })
+})

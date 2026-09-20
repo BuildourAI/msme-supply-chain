@@ -92,6 +92,16 @@ export interface ApprovalPlan {
   /** columns that would be created, which is never more than was offered */
   columnsAdded: number
   skipped: { raw: string; reason: string }[]
+  /**
+   * Materials that two or more lines have been mapped to.
+   *
+   * Not refused, because it is occasionally what somebody means — a supplier
+   * quoting two grades the owner buys as one material. But it is far more
+   * often a mis-mapping, and the result is two quotes for the same supplier
+   * and the same material sitting side by side as if they were competing
+   * suppliers. Said out loud before it is written, with the material named.
+   */
+  doubled: string[]
 }
 
 /**
@@ -109,6 +119,7 @@ export function planApproval(ws: Workspace, a: Approval): ApprovalPlan {
   let quotesMade = 0
   let itemsCreated = 0
   let aliasesLearned = 0
+  const onto = new Map<string, number>()
 
   for (const l of a.lines) {
     const makes = l.creates && (l.newName ?? '').trim().length > 1
@@ -123,7 +134,13 @@ export function planApproval(ws: Workspace, a: Approval): ApprovalPlan {
     if (makes) itemsCreated += 1
     quotesMade += 1
     if (l.learn) aliasesLearned += 1
+    // a line about to create a material cannot collide with anything yet
+    if (!makes && l.itemId) onto.set(l.itemId, (onto.get(l.itemId) ?? 0) + 1)
   }
+
+  const doubled = [...onto.entries()]
+    .filter(([, n]) => n > 1)
+    .map(([id]) => ws.items.find((i) => i.id === id)?.name ?? id)
 
   /* a heading already on the quotes list is filled, not created again */
   const known = new Set(
@@ -134,7 +151,7 @@ export function planApproval(ws: Workspace, a: Approval): ApprovalPlan {
 
   return {
     vendor: { status: existing ? 'existing' : 'new', name: existing?.name ?? a.vendorName.trim() },
-    quotesMade, itemsCreated, aliasesLearned, columnsAdded, skipped,
+    quotesMade, itemsCreated, aliasesLearned, columnsAdded, skipped, doubled,
   }
 }
 
@@ -275,6 +292,9 @@ export function applyApproval(ws: Workspace, a: Approval): { ws: Workspace; undo
       ...next,
       quotes: [...next.quotes, {
         id,
+        // what it was read off, so the six lines of one quotation stay one
+        // quotation on the screen that shows them
+        docId: a.doc.id,
         vendorId,
         itemId,
         unitPrice: l.rate,
