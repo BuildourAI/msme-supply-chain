@@ -70,6 +70,74 @@ export function rowsToLines(rows: string[][]): RawLine[] {
 export const overflowed = (rows: string[][]): boolean =>
   rows.reduce((n, r) => n + (toLine(r) ? 1 : 0), 0) > MAX_DOC_LINES
 
+/* ------------------------------------------- columns the build never knew -- */
+
+/**
+ * Headings that mean a column this reader already understands.
+ *
+ * Everything else on the heading row is something the build has never heard
+ * of — an HSN code, a brand, a pack size, a warranty — and throwing it away is
+ * what sends somebody back to a spreadsheet for the one field their trade
+ * happens to need.
+ */
+const KNOWN_HEAD = new RegExp(
+  '^(sr|s\\.?\\s?no|serial|#|item|description|particulars|goods|material|product|'
+  + 'qty|quantity|rate|price|unit\\s*(price|rate)?|uom|amount|value|total|per)\\b',
+  'i',
+)
+
+export interface DocColumn {
+  /** the heading as printed on the document */
+  label: string
+  /** what it holds on each priced line, in `rowsToLines` order */
+  values: string[]
+}
+
+/**
+ * The columns on a document that this build has no field for.
+ *
+ * Deliberately built by walking the rows again with the very same `toLine`
+ * rather than by taking indices off `rowsToLines`. The two must stay in step —
+ * a value handed to the wrong line is worse than no value — and one function
+ * deciding what a priced line is, used twice, is the only way to guarantee it.
+ *
+ * A column is only offered when most of the priced lines actually carry
+ * something in it. A heading with two values under forty lines is a stray cell
+ * from a badly-read table, not a column somebody wants.
+ */
+export function readExtraColumns(rows: string[][]): DocColumn[] {
+  const head = rows.find((row) => {
+    const cells = row.map((c) => c.trim()).filter((c) => c !== '')
+    return cells.length >= 3 && HEADING.test(cells[0]) && HEADING_MATE.test(cells.join(' '))
+  })
+  if (!head) return []
+
+  const body: string[][] = []
+  for (const row of rows) {
+    if (toLine(row)) body.push(row)
+    if (body.length >= MAX_DOC_LINES) break
+  }
+  if (body.length === 0) return []
+
+  const out: DocColumn[] = []
+  const seen = new Set<string>()
+  for (let at = 0; at < head.length; at += 1) {
+    const label = (head[at] ?? '').trim().replace(/\s+/g, ' ')
+    if (label.length < 2 || label.length > 40) continue
+    if (KNOWN_HEAD.test(label)) continue
+    // two columns headed the same thing is a read that went wrong, not two columns
+    if (seen.has(label.toLowerCase())) continue
+
+    const values = body.map((r) => (r[at] ?? '').trim())
+    const filled = values.filter((v) => v !== '').length
+    if (filled * 2 < body.length) continue
+
+    seen.add(label.toLowerCase())
+    out.push({ label, values })
+  }
+  return out
+}
+
 function toLine(row: string[]): RawLine | null {
   const cells = row.map((c) => c.trim()).filter((c) => c !== '')
   if (cells.length === 0) return null

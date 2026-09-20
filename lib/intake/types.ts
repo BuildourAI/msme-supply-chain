@@ -61,6 +61,17 @@ export interface DocLine {
    * learned from one supplier survived being reassigned to another.
    */
   picked?: boolean
+  /**
+   * Cells this build has no field for, by the heading they were printed under.
+   *
+   * An HSN code, a brand, a pack size, a warranty. The reader used to throw
+   * every one of them away and keep four figures, which is what sends somebody
+   * back to a spreadsheet for the one thing their trade happens to need. Kept
+   * per line rather than per document because that is where they sit, and
+   * because the wizard lets lines be edited and dropped — an index into a
+   * separate list would come apart the moment somebody removed a row.
+   */
+  extras?: Record<string, string>
   /** add this wording to the item master on approval — off unless ticked */
   creates?: boolean
   /** the name to create it under, when it is */

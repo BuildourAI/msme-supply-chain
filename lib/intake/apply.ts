@@ -10,14 +10,11 @@
  * owner already has, suggests what it thinks the lines are, and writes only to
  * their own workspace.
  */
-import type { Item, Uom, VendorItem } from '@/lib/domain/types'
+import type { Item, Uom } from '@/lib/domain/types'
 import { issueId, suggestCode } from '@/lib/workspace/defaults'
-import {
-  backfillRates, buildItem, buildRate, buildVendor, findVendorByName,
-} from '@/lib/workspace/records'
-import { setValues } from '@/lib/workspace/fields'
-import type { ImportUndo, Workspace } from '@/lib/workspace/types'
-import { repriceTerms } from '@/lib/workspace/landed'
+import { buildItem, buildVendor, findVendorByName } from '@/lib/workspace/records'
+import { addField, fieldsFor, setValue, setValues } from '@/lib/workspace/fields'
+import type { FieldKind, ImportUndo, Workspace } from '@/lib/workspace/types'
 import { learnAlias } from './alias'
 import type { SupplierDoc } from './types'
 
@@ -41,6 +38,8 @@ export interface ApprovalLine {
   itemId: string
   rate: number
   qty?: number
+  /** what the document's own columns held on this line, by heading */
+  extras?: Record<string, string>
   /** bring this wording into the item master — off unless the owner ticked it */
   creates?: boolean
   newName?: string
@@ -59,6 +58,15 @@ export interface Approval {
   contact?: { phone?: string; email?: string }
   custom?: Record<string, string>
   termsDays?: number
+  /**
+   * Columns off the document the owner chose to keep.
+   *
+   * The same offer the spreadsheet import makes at its mapping step, from a
+   * PDF instead — and it goes through the same `addField`, so a column
+   * invented here is an ordinary column afterwards. Only what is listed is
+   * created: a heading the owner left unticked is read and forgotten.
+   */
+  columns?: { label: string; kind: FieldKind }[]
   lines: ApprovalLine[]
   /** who is accepting, for the alias trail */
   actor: string
@@ -69,9 +77,20 @@ export interface Approval {
 
 export interface ApprovalPlan {
   vendor: { status: 'new' | 'existing'; name: string }
-  ratesSet: number
+  /**
+   * Lines that will become quotes.
+   *
+   * It counted rates until the sourcing desk grew a quotes list. What a
+   * supplier sends is a quotation, and approving it records what they said —
+   * accepting one of those quotes is the separate act that makes it a rate you
+   * are comparing suppliers on. Two suppliers' quotations for the same material
+   * now sit side by side before anything is committed to.
+   */
+  quotesMade: number
   itemsCreated: number
   aliasesLearned: number
+  /** columns that would be created, which is never more than was offered */
+  columnsAdded: number
   skipped: { raw: string; reason: string }[]
 }
 
@@ -87,7 +106,7 @@ export function planApproval(ws: Workspace, a: Approval): ApprovalPlan {
     : findVendorByName(ws, a.vendorName)
 
   const skipped: { raw: string; reason: string }[] = []
-  let ratesSet = 0
+  let quotesMade = 0
   let itemsCreated = 0
   let aliasesLearned = 0
 
@@ -102,13 +121,20 @@ export function planApproval(ws: Workspace, a: Approval): ApprovalPlan {
       continue
     }
     if (makes) itemsCreated += 1
-    ratesSet += 1
+    quotesMade += 1
     if (l.learn) aliasesLearned += 1
   }
 
+  /* a heading already on the quotes list is filled, not created again */
+  const known = new Set(
+    fieldsFor(ws, 'quote').map((f) => f.label.trim().toLowerCase()),
+  )
+  const columnsAdded = (a.columns ?? [])
+    .filter((c) => !known.has(c.label.trim().toLowerCase())).length
+
   return {
     vendor: { status: existing ? 'existing' : 'new', name: existing?.name ?? a.vendorName.trim() },
-    ratesSet, itemsCreated, aliasesLearned, skipped,
+    quotesMade, itemsCreated, aliasesLearned, columnsAdded, skipped,
   }
 }
 
@@ -128,9 +154,8 @@ export function planApproval(ws: Workspace, a: Approval): ApprovalPlan {
 export function applyApproval(ws: Workspace, a: Approval): { ws: Workspace; undo: ImportUndo } {
   let w = ws
   const created: string[] = []
-  const vendorItemsBefore: { key: string; before: VendorItem | null }[] = []
-  const itemRatesBefore: { id: string; before: number }[] = []
   const aliasesCreated: { vendorId: string; raw: string }[] = []
+  const fieldsCreated: string[] = []
   const sideBefore: ImportUndo['sideBefore'] = []
   const cells: [string, string, string][] = []
 
@@ -177,9 +202,28 @@ export function applyApproval(ws: Workspace, a: Approval): { ws: Workspace; undo
     w = setValues(w, vendorId, a.custom)
   }
 
+  /* -------- the columns the document brought with it -------- */
+
+  /*
+   * Created first, so that every line below writes into a field that exists.
+   * A heading already on the quotes list is reused rather than duplicated —
+   * two columns both called "HSN code" is a mess somebody then sorts out by
+   * hand, and the second one would hold half the values.
+   */
+  const fieldByLabel = new Map<string, string>()
+  for (const f of fieldsFor(w, 'quote')) fieldByLabel.set(f.label.trim().toLowerCase(), f.id)
+
+  for (const col of a.columns ?? []) {
+    const key = col.label.trim().toLowerCase()
+    if (key === '' || fieldByLabel.has(key)) continue
+    const made = addField(w, { entity: 'quote', label: col.label.trim(), kind: col.kind })
+    w = made.ws
+    fieldsCreated.push(made.id)
+    fieldByLabel.set(key, made.id)
+  }
+
   /* -------- the lines -------- */
 
-  const rates: VendorItem[] = []
   const plan = planApproval(ws, a)
   const skip = new Set(plan.skipped.map((s) => s.raw))
 
@@ -203,19 +247,53 @@ export function applyApproval(ws: Workspace, a: Approval): { ws: Workspace; undo
           code: suggestCode((l.newName ?? '').trim(), next.items),
           uom: l.newUom ?? 'nos',
           moq: 0, daily: 0, cushionDays: 0,
-          lastPurchaseRate: l.rate,
+          // not a purchase price: nothing has been agreed, let alone bought.
+          // `acceptQuote` back-fills it when the owner takes the price.
+          lastPurchaseRate: 0,
         })],
       }
       itemId = id
       created.push(id)
     }
 
-    const previous = w.vendorItems.find((vi) => vi.vendorId === vendorId && vi.itemId === itemId)
-    vendorItemsBefore.push({ key: `${vendorId}|${itemId}`, before: previous ?? null })
-    rates.push(buildRate(
-      { vendorId, itemId, rate: l.rate, leadDays: previous?.quotedLeadTimeDays || DEFAULT_LEAD_DAYS },
-      previous,
-    ))
+    /*
+     * A quote, not a rate.
+     *
+     * This used to write straight into `vendorItems`, which said that a
+     * document arriving in the inbox had settled what a material costs. It had
+     * not: they quoted, and the owner decides. Accepting one of these — on the
+     * Quotes screen, one press — is what writes the rate, and until then two
+     * suppliers' quotations for the same material sit side by side.
+     *
+     * The quantity the document quoted for is deliberately not carried onto the
+     * quote as a minimum order. `Quote.moq` is the floor a supplier will sell
+     * at, and a line reading "12 MT" is usually what somebody asked about. It
+     * is not lost either way — the document keeps its own lines.
+     */
+    const [next, id] = issueId(w, 'QT')
+    w = {
+      ...next,
+      quotes: [...next.quotes, {
+        id,
+        vendorId,
+        itemId,
+        unitPrice: l.rate,
+        moq: 0,
+        leadDays: DEFAULT_LEAD_DAYS,
+        ref: a.doc.docNo,
+        state: 'received' as const,
+        on: a.doc.receivedAt || a.today,
+      }],
+    }
+    created.push(id)
+
+    /* and whatever the document's own columns said on this line */
+    for (const [label, value] of Object.entries(l.extras ?? {})) {
+      const fieldId = fieldByLabel.get(label.trim().toLowerCase())
+      if (!fieldId || value.trim() === '') continue
+      cells.push([id, fieldId, ''])
+      w = setValue(w, id, fieldId, value.trim())
+    }
 
     if (l.learn && itemId) {
       w = learnAlias(w, {
@@ -224,24 +302,6 @@ export function applyApproval(ws: Workspace, a: Approval): { ws: Workspace; undo
       aliasesCreated.push({ vendorId, raw: l.raw })
     }
   }
-
-  const before = new Map(w.items.map((i) => [i.id, i.lastPurchaseRate]))
-  const items = backfillRates(w.items, rates)
-  for (const it of items) {
-    const was = before.get(it.id) ?? 0
-    if (was !== it.lastPurchaseRate && !created.includes(it.id)) {
-      itemRatesBefore.push({ id: it.id, before: was })
-    }
-  }
-
-  const keys = new Set(rates.map((r) => `${r.vendorId}|${r.itemId}`))
-  // repriced across the workspace, not just these lines — a new supplier's
-  // payment terms change what every rival on the same material costs
-  w = repriceTerms({
-    ...w,
-    items,
-    vendorItems: [...w.vendorItems.filter((vi) => !keys.has(`${vi.vendorId}|${vi.itemId}`)), ...rates],
-  })
 
   /* -------- the document -------- */
 
@@ -258,15 +318,20 @@ export function applyApproval(ws: Workspace, a: Approval): { ws: Workspace; undo
     source: a.doc.fileName,
     created,
     updated: [],
-    vendorItemsBefore,
-    itemRatesBefore,
     sideBefore,
     aliasesCreated,
     docApproved: a.doc.id,
     cells,
-    fieldsCreated: [],
+    fieldsCreated,
+    /*
+     * Everything an approval writes is new — a supplier, some materials, a
+     * quote per line — so nothing is overwritten and nothing has a "before".
+     * `vendorItemsBefore` and `itemRatesBefore` were needed while this wrote
+     * rates directly; `acceptQuote` is where a rate is overwritten now, and
+     * that is one press the owner can reverse by looking at it.
+     */
     added: created.length,
-    changed: rates.length - vendorItemsBefore.filter((v) => v.before === null).length,
+    changed: 0,
   }
 
   const doc: SupplierDoc = {

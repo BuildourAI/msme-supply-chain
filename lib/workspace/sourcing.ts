@@ -15,6 +15,8 @@
  */
 import type { Item, Vendor } from '@/lib/domain/types'
 import { pruneCustom } from './fields'
+import { repriceTerms } from './landed'
+import { backfillRates, buildRate } from './records'
 import type { PurchaseOrder, Quote, Rfq, RfqState, Workspace } from './types'
 
 /* ------------------------------------------------------------- numbering -- */
@@ -355,7 +357,8 @@ export function removeOrder(ws: Workspace, orderId: string): Workspace {
 export function acceptQuote(ws: Workspace, quoteId: string): Workspace {
   const target = ws.quotes.find((q) => q.id === quoteId)
   if (!target) return ws
-  return syncRfqStates({
+
+  const marked = syncRfqStates({
     ...ws,
     quotes: ws.quotes.map((q) => {
       if (q.id === quoteId) return { ...q, state: 'accepted' as const }
@@ -365,4 +368,53 @@ export function acceptQuote(ws: Workspace, quoteId: string): Workspace {
       return q
     }),
   })
+
+  /*
+   * And this is where a price becomes a rate.
+   *
+   * Accepting used to flip a state and nothing else, which meant a quotation
+   * somebody had agreed to never reached the supplier's rate, the landed-cost
+   * comparison, or the figure the order form suggests. The quote was a note in
+   * a different notebook.
+   *
+   * What it deliberately does NOT write is the quote's minimum order onto the
+   * material. That is the supplier's figure about what they will sell, not the
+   * owner's about what they order, and `Item.moq` is read as the latter.
+   */
+  const previous = marked.vendorItems.find(
+    (vi) => vi.vendorId === target.vendorId && vi.itemId === target.itemId,
+  )
+  const rate = buildRate({
+    vendorId: target.vendorId,
+    itemId: target.itemId,
+    rate: target.unitPrice,
+    leadDays: target.leadDays > 0 ? target.leadDays : previous?.quotedLeadTimeDays ?? 0,
+    validUntil: validUntilOf(marked, target),
+  }, previous)
+
+  return repriceTerms({
+    ...marked,
+    // §13-1 — a material never bought is valued at the first rate agreed for it
+    items: backfillRates(marked.items, [rate]),
+    vendorItems: [
+      ...marked.vendorItems.filter(
+        (vi) => !(vi.vendorId === target.vendorId && vi.itemId === target.itemId),
+      ),
+      rate,
+    ],
+  })
+}
+
+/**
+ * How long an accepted price holds.
+ *
+ * Read off the document the quote came from when there is one, because that is
+ * where a supplier states it. Nothing is invented when the document did not
+ * say: a validity somebody would act on has to come from the supplier.
+ */
+function validUntilOf(ws: Workspace, quote: Quote): string | undefined {
+  const doc = ws.docs.find(
+    (d) => d.vendorId === quote.vendorId && d.validUntil && d.status === 'approved',
+  )
+  return doc?.validUntil
 }

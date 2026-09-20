@@ -9,7 +9,8 @@ import { issueId } from '@/lib/workspace/defaults'
 import { findVendorByName, parseUom, UOM_VALUES } from '@/lib/workspace/records'
 import { applyApproval, planApproval, type ApprovalLine } from '@/lib/intake/apply'
 import { draftLines } from '@/lib/intake/draft'
-import { readHeader, readVendor } from '@/lib/intake/vendor'
+import { readHeader, readVendor, type DocHeader } from '@/lib/intake/vendor'
+import { guessKind } from '@/lib/sheet/match'
 import { acceptFiles, readDocument } from '@/lib/intake/read'
 import { readImage } from '@/lib/intake/ocr'
 import { putFile } from '@/lib/intake/blobs'
@@ -54,7 +55,7 @@ export function UploadDialog({ open, onClose, resume }: {
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [read, setRead] = useState<DocRead>('typed')
-  const [header, setHeader] = useState<{ docNo?: string; validUntil?: string }>({})
+  const [header, setHeader] = useState<DocHeader>({})
 
   const [vendorId, setVendorId] = useState('')
   const [vendorName, setVendorName] = useState('')
@@ -75,6 +76,13 @@ export function UploadDialog({ open, onClose, resume }: {
   const [lines, setLines] = useState<DocLine[]>([])
   const [type, setType] = useState('')
   const [terms, setTerms] = useState('30')
+  /*
+   * Which of the document's own columns to keep, by heading. Absent means
+   * keep — the spreadsheet import makes the same choice for the same reason:
+   * bringing a document in is meant to be how you get your columns, and one
+   * left out by default is data quietly dropped.
+   */
+  const [dropped, setDropped] = useState<Record<string, boolean>>({})
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [custom, setCustom] = useState<Record<string, string>>({})
@@ -85,6 +93,7 @@ export function UploadDialog({ open, onClose, resume }: {
     setFile(null); setBusy(null); setPct(0); setError(null); setNote(null); setRead('typed')
     setVendorId(''); setVendorName(''); setChannel('email'); setReceivedAt(today)
     setTyped(''); setRows([]); setFound(null); setLines([]); setType(''); setTerms('30')
+    setDropped({})
     setPhone(''); setEmail(''); setCustom({}); setDone(null)
   }
 
@@ -135,6 +144,8 @@ export function UploadDialog({ open, onClose, resume }: {
 
     const head = readHeader(read)
     if (head.date) setReceivedAt(head.date)
+    // only for a supplier this is about to invent; an existing one keeps theirs
+    if (head.termsDays !== undefined) setTerms(String(head.termsDays))
     setHeader(head)
 
     const drafted = draftLines(ws, forId, read, 'SD-new')
@@ -191,11 +202,32 @@ export function UploadDialog({ open, onClose, resume }: {
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)))
 
   const kept = lines.filter((l) => l.decision !== 'rejected')
+  /*
+   * The columns the document carried that this build has no field for, taken
+   * off the lines rather than off the rows — the lines are what the owner has
+   * been editing, so a row they dropped takes its cells with it.
+   */
+  const docColumns: { label: string; values: string[] }[] = []
+  for (const l of kept) {
+    for (const [label, value] of Object.entries(l.extras ?? {})) {
+      const at = docColumns.find((f) => f.label === label)
+      if (at) at.values.push(value)
+      else docColumns.push({ label, values: [value] })
+    }
+  }
+
+  const keeping = docColumns.filter((f) => !dropped[f.label])
+  const columns = keeping.map((f) => ({ label: f.label, kind: guessKind(f.values) }))
+  const keptLabels = new Set(keeping.map((f) => f.label))
+
   const approvalLines = (): ApprovalLine[] => kept.map((l) => ({
     raw: l.raw,
     itemId: l.itemId ?? '',
     rate: l.rate ?? 0,
     qty: l.qty,
+    extras: Object.fromEntries(
+      Object.entries(l.extras ?? {}).filter(([label]) => keptLabels.has(label)),
+    ),
     creates: l.creates,
     newName: l.newName ?? l.raw,
     newUom: l.newUom ?? parseUom(l.uom ?? '') ?? 'nos',
@@ -222,7 +254,7 @@ export function UploadDialog({ open, onClose, resume }: {
     receivedAt,
     addedAt: resume?.addedAt ?? today,
     docNo: header.docNo ?? resume?.docNo,
-    terms: resume?.terms,
+    terms: header.terms ?? resume?.terms,
     validUntil: header.validUntil ?? resume?.validUntil,
     remotePath: resume?.remotePath,
     lines: lines.map((l, n) => ({ ...l, id: `${id}/${n + 1}` })),
@@ -233,6 +265,7 @@ export function UploadDialog({ open, onClose, resume }: {
     doc: draftDoc('SD-preview'),
     vendorId: vendorId || undefined,
     vendorName: forName,
+    columns,
     lines: approvalLines(),
     actor: session.actor,
     today,
@@ -260,6 +293,7 @@ export function UploadDialog({ open, onClose, resume }: {
         contact: { phone: phone.trim() || undefined, email: email.trim() || undefined },
         custom: Object.keys(custom).length ? custom : undefined,
         termsDays: Number(terms) >= 0 ? Number(terms) : undefined,
+        columns,
         lines: approvalLines(),
         actor: session.actor,
         today,
@@ -358,7 +392,7 @@ export function UploadDialog({ open, onClose, resume }: {
       label: 'Lines',
       title: `What ${forName.trim() || 'they'} quoted`,
       why: 'Every line, with what it was matched to and how sure that is. Nothing is written until the last step.',
-      invalid: plan.ratesSet > 0 ? null : 'Give at least one line a material, or add it as a new one.',
+      invalid: plan.quotesMade > 0 ? null : 'Give at least one line a material, or add it as a new one.',
       body: (
         <Lines
           lines={lines} onLine={setLine}
@@ -376,8 +410,10 @@ export function UploadDialog({ open, onClose, resume }: {
         : (
           <Check
             plan={plan} newSupplier={!known}
+            columns={docColumns} dropped={dropped}
+            onDrop={(label, off) => setDropped((d) => ({ ...d, [label]: off }))}
             type={type} onType={setType}
-            terms={terms} onTerms={setTerms}
+            terms={terms} onTerms={setTerms} termsFromDoc={header.terms}
             phone={phone} onPhone={setPhone}
             email={email} onEmail={setEmail}
             custom={custom} onCustom={setCustom}
@@ -394,7 +430,7 @@ export function UploadDialog({ open, onClose, resume }: {
     <Wizard open={open} onClose={close} title="Upload a supplier document"
       sub={file?.name ?? resume?.fileName} steps={steps}
       onDone={done ? onClose : run}
-      doneLabel={done ? 'Close' : `Approve ${plan.ratesSet} line${plan.ratesSet === 1 ? '' : 's'}`} />
+      doneLabel={done ? 'Close' : `Approve ${plan.quotesMade} line${plan.quotesMade === 1 ? '' : 's'}`} />
   )
 }
 
@@ -691,6 +727,8 @@ function Check(p: {
   type: string
   onType: (v: string) => void
   terms: string
+  /** what the document said, when it said anything */
+  termsFromDoc?: string
   onTerms: (v: string) => void
   phone: string
   onPhone: (v: string) => void
@@ -700,17 +738,50 @@ function Check(p: {
   onCustom: (v: Record<string, string>) => void
   types: { value: string; label: string }[]
   onAddType: (v: string) => void
+  /** headings on the document this build has no field for */
+  columns: { label: string; values: string[] }[]
+  dropped: Record<string, boolean>
+  onDrop: (label: string, off: boolean) => void
 }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
         <Count n={p.plan.vendor.status === 'new' ? 1 : 0} one="new supplier" many="new suppliers" />
-        <Count n={p.plan.ratesSet} one="rate" many="rates" />
+        <Count n={p.plan.quotesMade} one="quote" many="quotes" />
         <Count n={p.plan.itemsCreated} one="new material" many="new materials" />
         <Count n={p.plan.aliasesLearned} one="wording learned" many="wordings learned" />
+        <Count n={p.plan.columnsAdded} one="new column" many="new columns" />
         {p.plan.skipped.length > 0
           && <Count n={p.plan.skipped.length} one="line left out" many="lines left out" />}
       </div>
+
+      {p.columns.length > 0 && (
+        <div className="space-y-2 rounded-lg border border-line bg-surface-2 p-3">
+          <p className="text-[12.5px] font-semibold">
+            This document has columns of its own
+          </p>
+          <p className="text-[11.5px] leading-relaxed text-ink-3">
+            They are kept against each quote. Untick anything you do not want —
+            nothing here changes what was quoted.
+          </p>
+          <ul className="space-y-1.5">
+            {p.columns.map((c) => (
+              <li key={c.label} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <label className="flex cursor-pointer select-none items-center gap-1.5 text-[12.5px]">
+                  <input type="checkbox" checked={!p.dropped[c.label]}
+                    onChange={(e) => p.onDrop(c.label, !e.target.checked)}
+                    className="size-3.5 accent-[var(--accent-ink)]" />
+                  <span className="font-medium">{c.label}</span>
+                </label>
+                {/* three real values, so a heading read wrongly is visible now */}
+                <span className="mono min-w-0 flex-1 truncate text-[11px] text-ink-3">
+                  {c.values.slice(0, 3).join(' · ')}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {p.newSupplier && (
         <div className="space-y-3 rounded-lg border border-line bg-surface-2 p-3">
@@ -722,7 +793,8 @@ function Check(p: {
               <Select id="ud-type" value={p.type} onChange={p.onType} options={p.types}
                 placeholder="Not set" addLabel="New supplier type…" onAdd={p.onAddType} />
             </Field>
-            <Field label="Days they give you to pay" htmlFor="ud-terms">
+            <Field label="Days they give you to pay" htmlFor="ud-terms"
+              hint={p.termsFromDoc ? `Read off the document — “${p.termsFromDoc}”.` : undefined}>
               <NumberInput id="ud-terms" value={p.terms} onChange={p.onTerms} unit="days" step="1" />
             </Field>
             <Field label="Phone" hint="With the country code, for WhatsApp." htmlFor="ud-phone">
@@ -768,9 +840,18 @@ function Finished({ added, rates, plan }: {
     <div className="space-y-3">
       <p className="flex items-center gap-2 text-[13.5px] font-semibold">
         <Icon name="check" className="size-4 text-good" />
-        {plan.vendor.name} and {plan.ratesSet} rate{plan.ratesSet === 1 ? '' : 's'} are in your suppliers table.
+        {plan.vendor.name} is in your suppliers table, with {plan.quotesMade}{' '}
+        quote{plan.quotesMade === 1 ? '' : 's'} on the Quotes screen.
       </p>
       <p className="text-[12.5px] leading-relaxed text-ink-2">
+        {/*
+          * Said here because it is the one thing that changed about what this
+          * does. A quotation is what they said, not what a material costs —
+          * accepting a quote is the separate press that makes it a rate you
+          * compare suppliers on, and until then nothing has been committed to.
+          */}
+        Nothing is priced yet. <strong className="text-ink">Accept</strong> a quote when you
+        agree to it, and that price becomes their rate.{' '}
         {plan.aliasesLearned > 0 && <>
           {plan.aliasesLearned} of their wording{plan.aliasesLearned === 1 ? '' : 's'} {plan.aliasesLearned === 1 ? 'is' : 'are'} remembered,
           so the next document from them needs less of your time.{' '}
@@ -778,7 +859,7 @@ function Finished({ added, rates, plan }: {
         Changed your mind? <strong className="text-ink">Undo import</strong> on the Suppliers screen
         puts all of it back.
       </p>
-      <p className="sr-only">{added} records added, {rates} rates touched.</p>
+      <p className="sr-only">{added} records added, {rates} touched.</p>
     </div>
   )
 }

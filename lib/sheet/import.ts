@@ -25,7 +25,8 @@ import { forgetAlias } from '@/lib/intake/alias'
 import { toIsoDate, toYesNo } from './match'
 import type { Item, StockLot, Vendor } from '@/lib/domain/types'
 import type {
-  FieldDef, FieldKind, ImportUndo, OrderState, PurchaseOrder, Quote, Rfq, SheetEntity, Workspace,
+  FieldDef, FieldKind, ImportUndo, OrderState, PurchaseOrder, Quote, Rfq, SheetEntity, TableView,
+  Workspace,
 } from '@/lib/workspace/types'
 
 /**
@@ -589,24 +590,30 @@ export function undoImport(ws: Workspace): Workspace {
     fields: w.fields.filter((f) => !undo.fieldsCreated.includes(f.id)),
     lastImport: undefined,
   }
+  /*
+   * Taken out of every view rather than out of the one the undo names. An
+   * approved document is filed as a supplier import and creates its columns on
+   * the QUOTES list, so cleaning only `undo.entity` left a dead key in the
+   * quote view's order — harmless, because `resolveColumns` drops keys that
+   * name nothing, and still litter nobody asked for.
+   */
   for (const fid of undo.fieldsCreated) {
     const cleaned: Record<string, Record<string, string>> = {}
     for (const [rid, row] of Object.entries(w.custom)) {
       const { [fid]: _drop, ...rest } = row
       if (Object.keys(rest).length) cleaned[rid] = rest
     }
-    w = {
-      ...w,
-      custom: cleaned,
-      views: {
-        ...w.views,
-        [undo.entity]: {
-          ...w.views[undo.entity],
-          order: w.views[undo.entity].order.filter((k) => k !== fid),
-          hidden: w.views[undo.entity].hidden.filter((k) => k !== fid),
-        },
-      },
+    const views = { ...w.views } as Record<SheetEntity, TableView>
+    for (const entity of Object.keys(views) as SheetEntity[]) {
+      const v = views[entity]
+      views[entity] = {
+        ...v,
+        order: (v.order ?? []).filter((k) => k !== fid),
+        hidden: (v.hidden ?? []).filter((k) => k !== fid),
+        shown: (v.shown ?? []).filter((k) => k !== fid),
+      }
     }
+    w = { ...w, custom: cleaned, views }
   }
   return w
 }

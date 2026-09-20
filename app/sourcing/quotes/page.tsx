@@ -114,11 +114,24 @@ function Quotes() {
   const kit = buildColumns<QuoteRow>(ws, 'quote', (r) => r.quote.id, drawn)
   const detail = kit.columns.filter((c) => !CHROME.has(c.key))
 
-  /** Accepting is one act; raising the order is a second, and a person does it. */
-  const accept = (row: QuoteRow) => {
+  /*
+   * Two acts, two buttons.
+   *
+   * Accepting is agreeing to a price: it writes the supplier's rate, which is
+   * what puts them into the landed-cost comparison and behind the suggestion
+   * the order form makes. Raising the order is committing the money, and §11
+   * has said from the start that a person does that.
+   *
+   * They used to be one button, which was defensible while approving a
+   * document wrote the rates — accepting then meant nothing but a pill
+   * changing colour, so it had to be bundled with something. Now it does the
+   * work, and an owner who wants the price without an order can have it.
+   */
+  const accept = (row: QuoteRow) => update((w) => acceptQuote(w, row.quote.id))
+
+  const draftOrder = (row: QuoteRow) => {
     update((w) => {
-      const accepted = acceptQuote(w, row.quote.id)
-      const [after, id] = issueId(accepted, 'PO')
+      const [after, id] = issueId(w, 'PO')
       const draft = orderFromQuote(after, row.quote, today)
       return {
         ...after,
@@ -221,10 +234,17 @@ function Quotes() {
                             )}
 
                             <div className="mt-2.5 flex items-center gap-1 border-t border-line-soft pt-2">
-                              {r.quote.state !== 'accepted' && (
+                              {r.quote.state !== 'accepted' ? (
                                 <button type="button" onClick={() => accept(r)}
+                                  title={`Take ${r.vendor?.name ?? 'this'} price — it becomes their rate`}
                                   className="press rounded-md border border-line bg-surface px-2 py-1 text-[12px] font-medium hover:bg-surface-2">
-                                  Accept &amp; draft order
+                                  Accept price
+                                </button>
+                              ) : (
+                                <button type="button" onClick={() => draftOrder(r)}
+                                  title="Draft an order from this quote. Nothing is sent."
+                                  className="press rounded-md border border-line bg-surface px-2 py-1 text-[12px] font-medium hover:bg-surface-2">
+                                  Draft an order
                                 </button>
                               )}
                               <span className="ml-auto" />

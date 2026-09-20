@@ -19,6 +19,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { cellsToRows, readPdf, type TextCell } from '@/lib/intake/pdf'
+import { readExtraColumns, rowsToLines } from '@/lib/intake/lines'
 import { readHeader, readVendor } from '@/lib/intake/vendor'
 
 /**
@@ -36,8 +37,8 @@ const nodePdfjs = async () => {
   return mod as never
 }
 
-const fixture = () => {
-  const b = readFileSync(new URL('./fixtures/quote.pdf', import.meta.url))
+const fixture = (name = 'quote.pdf') => {
+  const b = readFileSync(new URL(`./fixtures/${name}`, import.meta.url))
   return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer
 }
 
@@ -95,7 +96,10 @@ describe('a quotation that arrived as a PDF', () => {
     ], 'Patel Heaters')?.vendorId).toBe('VN-007')
 
     expect(readHeader(rows)).toEqual({
-      docNo: 'SMA/Q/2026/1184', date: '2026-09-12', validUntil: '2026-10-15',
+      docNo: 'SMA/Q/2026/1184',
+      // read off the same letterhead block, one sentence of it
+      terms: '30 days from invoice',
+      termsDays: 30, date: '2026-09-12', validUntil: '2026-10-15',
     })
   })
 })
@@ -203,5 +207,38 @@ describe('runs of text back into rows', () => {
       .toEqual([['A', 'B']])
     expect(cellsToRows([cell('A', 0, 100, 10, 6), cell('B', 50, 105, 10, 6)]))
       .toEqual([['A'], ['B']])
+  })
+})
+
+/* ==================== columns the build has no field for, off a real page == */
+
+/**
+ * The same quotation with an HSN column on it.
+ *
+ * A second file rather than a change to the first, because the first is what
+ * the reader's own expectations above are pinned against. What this asserts is
+ * the thing a hand-written fixture could never prove: that the column survives
+ * a genuine text layer, where a cell's place in a row is decided by where the
+ * glyphs landed on the page rather than by a comma somebody typed.
+ */
+describe('a quotation carrying a column nobody planned for', () => {
+  it('keeps it, lined up with the right line', async () => {
+    const { rows } = await readPdf(fixture('quote-hsn.pdf'), nodePdfjs)
+    const cols = readExtraColumns(rows)
+
+    expect(cols.map((c) => c.label)).toEqual(['HSN'])
+    expect(cols[0].values.slice(0, 3)).toEqual(['7209', '7507', '2519'])
+  })
+
+  it('and every priced line still reads the way it did without it', async () => {
+    const { rows } = await readPdf(fixture('quote-hsn.pdf'), nodePdfjs)
+    const lines = rowsToLines(rows)
+
+    expect(lines).toHaveLength(6)
+    expect(lines[0].raw).toContain('C.R.C.A. SHEET')
+    // the HSN code sits between the wording and the quantity and must not be
+    // mistaken for either — 7209 is a plausible-looking rate
+    expect(lines[0].qty).toBe(12)
+    expect(lines[0].rate).toBe(62800)
   })
 })

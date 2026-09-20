@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { readHeader, readVendor } from '@/lib/intake/vendor'
+import { readExtraColumns, rowsToLines } from '@/lib/intake/lines'
 import type { Vendor } from '@/lib/domain/types'
 
 const QUOTE: string[][] = [
@@ -94,5 +95,109 @@ describe('the rest of the letterhead block', () => {
 
   it('leaves out what is not there rather than guessing', () => {
     expect(readHeader([['SOME SUPPLIER'], ['Description', 'Rate']])).toEqual({})
+  })
+})
+
+/* ================================================== the payment terms block */
+
+describe('the payment terms printed on a quotation', () => {
+  const head = (...lines: string[]) => readHeader(lines.map((l) => [l]))
+
+  it('comes back as days, ready for the comparison to use', () => {
+    expect(head('Payment terms: 45 days from invoice').termsDays).toBe(45)
+    expect(head('Terms : 30 Days').termsDays).toBe(30)
+  })
+
+  it('and as the words the supplier actually wrote', () => {
+    expect(head('Payment terms: 45 days from invoice').terms).toBe('45 days from invoice')
+  })
+
+  it('reads every way of saying there is no credit as nothing', () => {
+    expect(head('Payment Terms: 100% advance').termsDays).toBe(0)
+    expect(head('Terms: Cash against delivery').termsDays).toBe(0)
+    expect(head('Payment terms: COD').termsDays).toBe(0)
+  })
+
+  it('does not take a delivery time for a payment term', () => {
+    /*
+     * The mistake this is shaped to avoid. "Delivery: 15 days" sits two inches
+     * from the terms on most letterheads, and taking the first number on the
+     * row would swap a lead time into the one landed-cost component the build
+     * derives rather than asks for.
+     */
+    const h = head('Delivery: 15 days ex-works', 'Payment terms: 45 days')
+    expect(h.termsDays).toBe(45)
+  })
+
+  it('says nothing at all when the document does not', () => {
+    const h = head('Quotation No. QTR-2026-118', 'Date: 14/09/2026')
+    expect(h.terms).toBeUndefined()
+    expect(h.termsDays).toBeUndefined()
+  })
+
+  it('keeps the words when they cannot be read as a number of days', () => {
+    // "as agreed" is worth showing the owner and is not worth guessing at
+    const h = head('Payment terms: As mutually agreed')
+    expect(h.terms).toBe('As mutually agreed')
+    expect(h.termsDays).toBeUndefined()
+  })
+})
+
+/* ============================================ columns the build never knew */
+
+/**
+ * The cells a quotation carries that this build has no field for.
+ *
+ * The reader kept four figures and threw the rest away, which is exactly what
+ * sends somebody back to a spreadsheet for the one thing their trade happens
+ * to need — an HSN code, a brand, a pack size, a warranty.
+ */
+describe('reading a table for columns nobody planned for', () => {
+  const TABLE = [
+    ['Sr', 'Description', 'HSN', 'Qty', 'Rate', 'Amount', 'Brand'],
+    ['1', 'CRCA sheet 1.2 mm', '7209', '12', '61400', '736800', 'Tata'],
+    ['2', 'GI sheet 2 mm', '7210', '5', '58200', '291000', 'Jindal'],
+    ['3', 'MS angle 40x40', '7216', '8', '54100', '432800', 'Tata'],
+  ]
+
+  it('finds the ones it has no field for and leaves the ones it does', () => {
+    const cols = readExtraColumns(TABLE).map((c) => c.label)
+    expect(cols).toEqual(['HSN', 'Brand'])
+  })
+
+  it('and lines every value up with the row it was printed on', () => {
+    const hsn = readExtraColumns(TABLE).find((c) => c.label === 'HSN')!
+    expect(hsn.values).toEqual(['7209', '7210', '7216'])
+    // the same order `rowsToLines` returns, which is what the wizard relies on
+    expect(rowsToLines(TABLE).map((l) => l.raw)).toEqual([
+      'CRCA sheet 1.2 mm', 'GI sheet 2 mm', 'MS angle 40x40',
+    ])
+  })
+
+  it('ignores a heading with almost nothing under it', () => {
+    // a stray cell from a table that read badly is not a column anybody wants
+    const sparse = [
+      TABLE[0],
+      ['1', 'CRCA sheet 1.2 mm', '7209', '12', '61400', '736800', 'Tata'],
+      ['2', 'GI sheet 2 mm', '', '5', '58200', '291000', ''],
+      ['3', 'MS angle 40x40', '', '8', '54100', '432800', ''],
+    ]
+    expect(readExtraColumns(sparse).map((c) => c.label)).toEqual([])
+  })
+
+  it('has nothing to say about a document with no heading row', () => {
+    expect(readExtraColumns([
+      ['CRCA sheet 1.2 mm', '12', '61400'],
+      ['GI sheet 2 mm', '5', '58200'],
+    ])).toEqual([])
+  })
+
+  it('and never offers two columns under the same heading', () => {
+    const twice = [
+      ['Sr', 'Description', 'HSN', 'Qty', 'Rate', 'HSN'],
+      ['1', 'CRCA sheet 1.2 mm', '7209', '12', '61400', '7209'],
+      ['2', 'GI sheet 2 mm', '7210', '5', '58200', '7210'],
+    ]
+    expect(readExtraColumns(twice).map((c) => c.label)).toEqual(['HSN'])
   })
 })

@@ -204,6 +204,70 @@ describe('accepting a quote', () => {
     expect(acceptQuote(base(), 'QT-001').rfqs[0].state).toBe('awarded')
   })
 
+  /*
+   * What accepting actually does, and did not until quotations started
+   * arriving as quotes. Flipping a pill was the whole of it: a price somebody
+   * had agreed to never reached the supplier's rate, so it never reached the
+   * landed-cost comparison or the figure the order form suggests. The quote
+   * was a note in a different notebook.
+   */
+  it('writes the price as that supplier\'s rate', () => {
+    const ws = acceptQuote(base(), 'QT-001')
+    const vi = ws.vendorItems.find((x) => x.vendorId === 'VN-001' && x.itemId === 'IT-001')
+    expect(vi?.rate).toBe(780)
+    expect(vi?.quotedLeadTimeDays).toBe(10)
+  })
+
+  it('and keeps everything that pairing had already measured', () => {
+    const ws = base()
+    ws.vendorItems = [rate({ rate: 800, trailingLeadTimeDays: 14, freightPerUnit: 55, onTimePct: 91 })]
+    const after = acceptQuote(ws, 'QT-001')
+    const vi = after.vendorItems[0]
+
+    expect(vi.rate).toBe(780)
+    expect(vi.trailingLeadTimeDays).toBe(14)
+    expect(vi.freightPerUnit).toBe(55)
+    expect(vi.onTimePct).toBe(91)
+  })
+
+  it('fills the valuation basis for a material nobody had bought', () => {
+    // §13-1 — a material left at zero values the stock, and every screen
+    // that sums it, at nothing
+    const ws = base()
+    ws.items = [item({ lastPurchaseRate: 0 })]
+    expect(acceptQuote(ws, 'QT-001').items[0].lastPurchaseRate).toBe(780)
+  })
+
+  it('and never overwrites one that has been bought for real', () => {
+    const ws = base()
+    ws.items = [item({ lastPurchaseRate: 800 })]
+    expect(acceptQuote(ws, 'QT-001').items[0].lastPurchaseRate).toBe(800)
+  })
+
+  it('does not put the supplier\'s minimum onto the material', () => {
+    /*
+     * `Quote.moq` is the floor they will sell at; `Item.moq` is how this
+     * factory orders. Reading one as the other would quietly change a
+     * reorder quantity on the strength of somebody else's sales policy.
+     */
+    const ws = base()
+    const before = ws.items[0].moq
+    expect(acceptQuote(ws, 'QT-001').items[0].moq).toBe(before)
+  })
+
+  it('and reprices the rivals on that material', () => {
+    // a rate arriving changes what every competitor's payment terms cost
+    const ws = base()
+    ws.policy = { ...ws.policy, costOfMoneyPct: 12 }
+    ws.vendors = [vendor(), vendor({ id: 'VN-002', name: 'Cash only', paymentTermsDays: 0 })]
+    ws.vendorItems = [rate({ vendorId: 'VN-002', rate: 800 })]
+
+    const after = acceptQuote(ws, 'QT-001')
+    // VN-001 gives 30 days, VN-002 none — so VN-002's credit now costs something
+    expect(after.vendorItems.find((v) => v.vendorId === 'VN-002')!.paymentTermCost).toBeGreaterThan(0)
+    expect(after.vendorItems.find((v) => v.vendorId === 'VN-001')!.paymentTermCost).toBe(0)
+  })
+
   it('orders what was asked for, not the supplier’s minimum', () => {
     const ws = base()                       // the request asks for 500
     expect(orderFromQuote(ws, ws.quotes[0], TODAY).qty).toBe(500)

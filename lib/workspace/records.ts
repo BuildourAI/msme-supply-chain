@@ -150,6 +150,15 @@ export interface RateInput {
   freight?: number
   unclaimableGstPct?: number
   rejectPct?: number
+  /**
+   * The day their price stops being their price.
+   *
+   * §5 has always declared it on `VendorItem` and nothing wrote it, so every
+   * rate in an owner's workspace claimed to be good for ever. A quotation is
+   * the one document that says otherwise, and accepting one is where the date
+   * comes from.
+   */
+  validUntil?: string
 }
 
 /**
@@ -188,6 +197,7 @@ export function buildRate(input: RateInput, previous?: VendorItem): VendorItem {
     rejectionAllowance: rejectionCost(input.rate, rejectPct),
     quotedLeadTimeDays: input.leadDays,
     trailingLeadTimeDays: previous?.trailingLeadTimeDays ?? input.leadDays,
+    quoteValidUntil: input.validUntil ?? before.quoteValidUntil,
     isPreferred: input.preferred || undefined,
   } as VendorItem
 }

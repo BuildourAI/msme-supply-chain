@@ -100,14 +100,31 @@ export interface DocHeader {
   /** the date printed on it, which is rarely the day it was uploaded */
   date?: string
   validUntil?: string
+  /** the payment terms as printed — "30 days", "100% advance" */
+  terms?: string
+  /**
+   * Those terms as a number of days, when they can be read as one.
+   *
+   * Separate from the text because the text is what the supplier wrote and
+   * this is what the build can do arithmetic with. It matters more than it
+   * looks: payment terms are the one landed-cost component derived rather
+   * than entered, so a quotation saying "45 days" is a figure the comparison
+   * can use the moment it is filed.
+   */
+  termsDays?: number
 }
 
+/** Terms that mean there is no credit, however they are written. */
+const NO_CREDIT = /\b(advance|against\s+delivery|before\s+dispatch|cash|c\.?o\.?d\.?|immediate|proforma)\b/i
+
 /**
- * The three things in a letterhead block worth keeping.
+ * What a letterhead block is worth reading.
  *
- * All already fields on a supplier document, and all left empty until now. The
- * date matters most: the wizard asks for it, and asking for something printed
- * two inches above is a question that answers itself.
+ * All of them already fields on a supplier document, and all left empty until
+ * the reader learned to fill them. The principle is the same each time: asking
+ * somebody for something printed two inches above is a question that answers
+ * itself. The date and the payment terms matter most — the terms because they
+ * are the one landed-cost component this build derives rather than asks for.
  */
 export function readHeader(rows: string[][]): DocHeader {
   const lines = rows.slice(0, 40).map((r) => r.join(' ').trim()).filter(Boolean)
@@ -130,6 +147,29 @@ export function readHeader(rows: string[][]): DocHeader {
       const iso = m ? toIsoDate(m[1]) : null
       // "valid until" carries a date too, and it is not this one
       if (iso && !/valid/i.test(line)) out.date = iso
+    }
+    if (!out.terms) {
+      /*
+       * Read off the phrase rather than the whole line, because "Payment
+       * terms: 30 days from invoice" sits two inches from "Delivery: 15 days"
+       * and taking the first number on the row would swap them.
+       */
+      const m = /\b(?:payment\s*)?terms?\s*[:-]\s*([^|]{2,64})/i.exec(line)
+      if (m) {
+        /*
+         * One sentence, not the rest of the row. Letterheads run the terms and
+         * whatever else is agreed together — "30 days from invoice. Freight
+         * extra at actuals." — and quoting the freight policy back as somebody's
+         * payment terms is worse than saying nothing. Cut at a sentence break
+         * rather than at any full stop, so "C.O.D." survives.
+         */
+        const phrase = m[1].split(/\.\s/)[0].trim()
+          .replace(/[.\s]+$/, '').replace(/\s+/g, ' ')
+        out.terms = phrase
+        const days = /(\d{1,3})\s*days?/i.exec(phrase)
+        if (days) out.termsDays = Number(days[1])
+        else if (NO_CREDIT.test(phrase)) out.termsDays = 0
+      }
     }
   }
 

@@ -10,7 +10,7 @@
  * tested without a browser, a file or a click.
  */
 import { resolveAlias } from './alias'
-import { rowsToLines } from './lines'
+import { readExtraColumns, rowsToLines } from './lines'
 import { bestMatch, classify, idfOf, matchable } from './match'
 import type { DocLine } from './types'
 import type { Workspace } from '@/lib/workspace/types'
@@ -24,8 +24,19 @@ export function draftLines(
   const items = matchable(ws.items)
   const idf = idfOf(items)
 
+  /*
+   * Whatever else the table carried. Read once for the document and handed to
+   * the lines by position, which is safe because `readExtraColumns` walks the
+   * rows with the very same `toLine` that produced these.
+   */
+  const columns = readExtraColumns(rows)
+
   return rowsToLines(rows).map((l, n) => {
     const id = `${docId}/${n + 1}`
+    const extras = Object.fromEntries(
+      columns.map((c) => [c.label, c.values[n] ?? '']).filter(([, v]) => v !== ''),
+    )
+    const carry = Object.keys(extras).length > 0 ? { extras } : {}
 
     /*
      * A learned wording is not a very good guess — it is a decision somebody
@@ -34,18 +45,18 @@ export function draftLines(
      */
     const known = resolveAlias(ws.aliases, vendorId, l.raw)
     if (known && ws.items.some((i) => i.id === known)) {
-      return { id, raw: l.raw, qty: l.qty, uom: l.uom, rate: l.rate, itemId: known, confidence: 1, via: 'alias' }
+      return { id, raw: l.raw, qty: l.qty, uom: l.uom, rate: l.rate, ...carry, itemId: known, confidence: 1, via: 'alias' }
     }
 
     const hit = bestMatch(l.raw, l.uom, items, idf)
     if (!hit) {
       // below the floor nothing is suggested at all — a pre-filled box under it
       // is an invitation to accept a guess with one click
-      return { id, raw: l.raw, qty: l.qty, uom: l.uom, rate: l.rate, confidence: 0, via: 'unmapped' }
+      return { id, raw: l.raw, qty: l.qty, uom: l.uom, rate: l.rate, ...carry, confidence: 0, via: 'unmapped' }
     }
 
     return {
-      id, raw: l.raw, qty: l.qty, uom: l.uom, rate: l.rate,
+      id, raw: l.raw, qty: l.qty, uom: l.uom, rate: l.rate, ...carry,
       itemId: hit.itemId,
       confidence: hit.score,
       via: classify(hit.score) === 'matched' ? 'matched' : 'review',
