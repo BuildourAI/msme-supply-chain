@@ -10,8 +10,10 @@ import { describe, expect, it } from 'vitest'
 import { emptyWorkspace, issueId } from '@/lib/workspace/defaults'
 import { addField, setValue } from '@/lib/workspace/fields'
 import { buildItem, buildVendor } from '@/lib/workspace/records'
-import { buildDoc, docsFor, forPrint, quoteByDate, undrawable } from '@/lib/rfq/document'
-import { mailtoUrl, messageFor, waNumber, whatsappUrl } from '@/lib/rfq/share'
+import {
+  buildDoc, docsFor, forPrint, messageFor, quoteByDate, sendableFor, subjectFor, undrawable,
+} from '@/lib/paper/rfq'
+import { mailtoUrl, waNumber, whatsappUrl } from '@/lib/paper/share'
 import type { Rfq, Workspace } from '@/lib/workspace/types'
 
 const TODAY = '2026-09-18'
@@ -193,12 +195,12 @@ describe('handing it over', () => {
     const { ws, rfq } = seeded()
     const doc = buildDoc(ws, rfq, ws.vendors[0], TODAY)
 
-    const wa = whatsappUrl(doc, ws.vendorContact[ws.vendors[0].id].phone)!
+    const wa = whatsappUrl(sendableFor(doc), ws.vendorContact[ws.vendors[0].id].phone)!
     expect(wa.startsWith('https://wa.me/919822011234?text=')).toBe(true)
     expect(wa).not.toMatch(/[\n ]/)
     expect(decodeURIComponent(wa.split('text=')[1])).toContain('Copper strip 25 mm')
 
-    const mail = mailtoUrl(doc, ws.vendorContact[ws.vendors[0].id].email)
+    const mail = mailtoUrl(sendableFor(doc), ws.vendorContact[ws.vendors[0].id].email)
     expect(mail).toContain('sales%40shahmetals.in')
     expect(decodeURIComponent(mail.split('subject=')[1].split('&')[0])).toBe(
       'Request for quotation RFQ-1 — Copper strip 25 mm')
@@ -207,14 +209,14 @@ describe('handing it over', () => {
   it('has no WhatsApp link for a supplier with no number', () => {
     const { ws, rfq } = seeded()
     const doc = buildDoc(ws, rfq, ws.vendors[1], TODAY)
-    expect(whatsappUrl(doc, ws.vendorContact[ws.vendors[1].id]?.phone)).toBeNull()
+    expect(whatsappUrl(sendableFor(doc), ws.vendorContact[ws.vendors[1].id]?.phone)).toBeNull()
   })
 
   it('keeps a mail body short enough that clients do not truncate it', () => {
     let { ws, rfq } = seeded()
     const long = addField(ws, { entity: 'rfq', label: 'Spec', kind: 'text', onDoc: true })
     ws = setValue(long.ws, rfq.id, long.id, 'x'.repeat(5000))
-    const mail = mailtoUrl(buildDoc(ws, rfq, ws.vendors[0], TODAY), 'a@b.c')
+    const mail = mailtoUrl(sendableFor(buildDoc(ws, rfq, ws.vendors[0], TODAY)), 'a@b.c')
     expect(decodeURIComponent(mail.split('body=')[1]).length).toBeLessThanOrEqual(1500)
   })
 })

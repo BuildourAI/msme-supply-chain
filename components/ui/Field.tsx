@@ -20,7 +20,7 @@ const BASE = 'w-full rounded-md border bg-surface px-2.5 py-2 text-[13px] outlin
 const OK = 'border-line focus:border-accent'
 const BAD = 'border-critical focus:border-critical'
 
-export function Field({ label, hint, error, children, htmlFor }: {
+export function Field({ label, hint, error, children, htmlFor, className }: {
   /** the question, in the owner's words — "What do you call it?", not "Name *" */
   label: string
   /** one line on why it is worth answering; skipped when the label says it all */
@@ -28,9 +28,11 @@ export function Field({ label, hint, error, children, htmlFor }: {
   error?: string | null
   children: React.ReactNode
   htmlFor?: string
+  /** how it sits in a row — a grid handles most cases, an order line does not */
+  className?: string
 }) {
   return (
-    <div className="min-w-0">
+    <div className={`min-w-0 ${className ?? ''}`}>
       <label htmlFor={htmlFor} className="block text-[13px] font-medium text-ink">{label}</label>
       {hint && <p className="mt-0.5 text-[11.5px] leading-snug text-ink-3">{hint}</p>}
       <div className="mt-1.5">{children}</div>

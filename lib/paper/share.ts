@@ -1,5 +1,5 @@
 /**
- * Handing a request to somebody, without the system ever sending it.
+ * Handing a document to somebody, without the system ever sending it.
  *
  * Every one of these opens something the person then presses send in. That is
  * §11 — the system drafts and recommends, it never contacts a supplier — and it
@@ -9,8 +9,34 @@
  *
  * What the app does contribute is the part that is tedious: the PDF, the
  * message with the numbers already in it, and the record that you sent it.
+ *
+ * Generic over what is being handed over. A request for prices and a purchase
+ * order need the same four buttons and the same phone-number cleaning, and
+ * differ only in the words — so the words are the argument.
  */
-import type { RfqDoc } from './document'
+
+/**
+ * A document, as far as sending it is concerned.
+ *
+ * Deliberately not `RfqDoc | PoDoc`. Sending does not care what the document
+ * says; it cares who it is for, what the subject line is, and what goes in the
+ * message body when the PDF does not make it — which on a phone is most of the
+ * time.
+ */
+export interface Sendable {
+  /** the supplier it is addressed to, if any */
+  vendor: { name: string } | null
+  subject: string
+  /**
+   * The document in words.
+   *
+   * Written to stand on its own, because on a phone the realistic outcome is
+   * that this text gets sent and the PDF does not — and a supplier can act on
+   * four lines naming the material, the quantity and the date. The attachment
+   * is the formal version, not the only version.
+   */
+  message: string
+}
 
 /* ----------------------------------------------------------------- phone -- */
 
@@ -33,54 +59,25 @@ export function waNumber(raw: string | undefined): string | null {
   return digits.length >= 11 && digits.length <= 15 ? digits : null
 }
 
-/* --------------------------------------------------------------- message -- */
-
-/**
- * The request in words.
- *
- * Written to stand on its own, because on a phone the realistic outcome is that
- * this text gets sent and the PDF does not — and a supplier can quote from four
- * lines naming the material, the quantity and the date. The attachment is the
- * formal version, not the only version.
- */
-export function messageFor(doc: RfqDoc): string {
-  const lines = [
-    `${doc.company.name} — request for quotation ${doc.no}`,
-    '',
-    `Material: ${doc.item}`,
-    `Quantity: ${doc.qty}`,
-    `Needed by: ${doc.neededBy}`,
-  ]
-  if (doc.spec) lines.push(`Spec: ${doc.spec}`)
-  for (const e of doc.extras) lines.push(`${e.label}: ${e.value}`)
-  const quoteBy = doc.terms.find((t) => t.label === 'Please quote by')
-  if (quoteBy) lines.push('', `Please send your price and earliest delivery by ${quoteBy.value}.`)
-  lines.push('', doc.contact)
-  return lines.join('\n')
-}
-
-export const subjectFor = (doc: RfqDoc): string =>
-  `Request for quotation ${doc.no} — ${doc.item}`
-
 /* ------------------------------------------------------------------ links -- */
 
-export function whatsappUrl(doc: RfqDoc, phone: string | undefined): string | null {
+export function whatsappUrl(send: Sendable, phone: string | undefined): string | null {
   const number = waNumber(phone)
   if (!number) return null
-  return `https://wa.me/${number}?text=${encodeURIComponent(messageFor(doc))}`
+  return `https://wa.me/${number}?text=${encodeURIComponent(send.message)}`
 }
 
 /**
  * A `mailto:` link.
  *
  * The body is capped, because several mail clients truncate a long one without
- * saying so and a request cut off mid-quantity is worse than one that points at
- * the attachment. The PDF carries the full version either way.
+ * saying so and a document cut off mid-quantity is worse than one that points
+ * at the attachment. The PDF carries the full version either way.
  */
-export function mailtoUrl(doc: RfqDoc, email: string | undefined): string {
-  const body = messageFor(doc).slice(0, 1500)
+export function mailtoUrl(send: Sendable, email: string | undefined): string {
+  const body = send.message.slice(0, 1500)
   const query = [
-    `subject=${encodeURIComponent(subjectFor(doc))}`,
+    `subject=${encodeURIComponent(send.subject)}`,
     `body=${encodeURIComponent(body)}`,
   ].join('&')
   return `mailto:${encodeURIComponent(email ?? '')}?${query}`
@@ -112,11 +109,11 @@ export type ShareResult = 'shared' | 'cancelled' | 'failed'
  * the handler is long enough to lose it.
  *
  * A cancel is not a failure. It comes back as its own result so the caller does
- * not record that a request was sent when the person backed out of sending it.
+ * not record that a document was sent when the person backed out of sending it.
  */
-export async function shareFile(file: File, doc: RfqDoc): Promise<ShareResult> {
+export async function shareFile(file: File, send: Sendable): Promise<ShareResult> {
   try {
-    await navigator.share({ files: [file], title: subjectFor(doc), text: messageFor(doc) })
+    await navigator.share({ files: [file], title: send.subject, text: send.message })
     return 'shared'
   } catch (e) {
     return (e as DOMException)?.name === 'AbortError' ? 'cancelled' : 'failed'

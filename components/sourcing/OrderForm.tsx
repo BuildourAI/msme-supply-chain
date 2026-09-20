@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { BestLanded } from '@/components/sourcing/BestLanded'
 import { Dialog } from '@/components/ui/Dialog'
 import { Chips, Field, NumberInput, Select } from '@/components/ui/Field'
+import { Icon } from '@/components/ui/icons'
 import { useWorkspace } from '@/components/workspace/store'
 import { issueId } from '@/lib/workspace/defaults'
 import { addDays, nextNo } from '@/lib/workspace/sourcing'
@@ -17,6 +18,12 @@ import type { OrderState, PurchaseOrder } from '@/lib/workspace/types'
  * supplier. What this buys is the thing a paper order book cannot do — knowing
  * on any given morning what is still out and when it was promised.
  *
+ * One supplier, several materials, one number. That is how an order book
+ * works, and it is what lets the whole thing print as one page: the lines you
+ * placed with somebody in one go share a `no`, and `lib/paper/po.ts` collects
+ * them by it. Editing reaches one line at a time, because an order already
+ * placed is changed a line at a time.
+ *
  * The rate is prefilled from the supplier's standing rate when there is one, and
  * from the quote when the order came from one, but it stays editable. What was
  * actually agreed on the phone beats what was written down last month.
@@ -29,6 +36,14 @@ const STATES: { value: OrderState; label: string }[] = [
   { value: 'cancelled', label: 'Cancelled' },
 ]
 
+interface Line {
+  itemId: string
+  qty: string
+  price: string
+}
+
+const BLANK: Line = { itemId: '', qty: '', price: '' }
+
 export function OrderForm({ open, onClose, editing }: {
   open: boolean
   onClose: () => void
@@ -36,9 +51,7 @@ export function OrderForm({ open, onClose, editing }: {
 }) {
   const { workspace, update, today } = useWorkspace()
   const [vendorId, setVendorId] = useState('')
-  const [itemId, setItemId] = useState('')
-  const [qty, setQty] = useState('')
-  const [price, setPrice] = useState('')
+  const [lines, setLines] = useState<Line[]>([BLANK])
   const [orderedOn, setOrderedOn] = useState('')
   const [expectedOn, setExpectedOn] = useState('')
   const [state, setState] = useState<OrderState>('confirmed')
@@ -48,16 +61,21 @@ export function OrderForm({ open, onClose, editing }: {
     if (!open || !workspace) return
     setTried(false)
     if (editing) {
-      setVendorId(editing.vendorId); setItemId(editing.itemId)
-      setQty(String(editing.qty)); setPrice(String(editing.unitPrice))
+      setVendorId(editing.vendorId)
+      setLines([{
+        itemId: editing.itemId, qty: String(editing.qty), price: String(editing.unitPrice),
+      }])
       setOrderedOn(editing.orderedOn); setExpectedOn(editing.expectedOn)
       setState(editing.state)
     } else {
       const v = workspace.vendors[0]
       const rate = workspace.vendorItems.find((vi) => vi.vendorId === v?.id)
       setVendorId(v?.id ?? '')
-      setItemId(rate?.itemId ?? workspace.items[0]?.id ?? '')
-      setQty(''); setPrice(rate ? String(rate.rate) : '')
+      setLines([{
+        itemId: rate?.itemId ?? workspace.items[0]?.id ?? '',
+        qty: '',
+        price: rate ? String(rate.rate) : '',
+      }])
       setOrderedOn(today)
       setExpectedOn(addDays(today, rate?.quotedLeadTimeDays ?? 7))
       setState('confirmed')
@@ -67,21 +85,35 @@ export function OrderForm({ open, onClose, editing }: {
   if (!open || !workspace) return null
   const ws = workspace
 
-  // picking a supplier and a material together suggests the rate they quote
-  const suggest = (v: string, i: string) => {
-    const r = ws.vendorItems.find((vi) => vi.vendorId === v && vi.itemId === i)
-    if (r) {
-      setPrice(String(r.rate))
-      setExpectedOn(addDays(orderedOn || today, r.quotedLeadTimeDays))
-    }
+  const setLine = (i: number, patch: Partial<Line>) =>
+    setLines((ls) => ls.map((l, k) => (k === i ? { ...l, ...patch } : l)))
+
+  /** picking a supplier and a material together suggests the rate they quote */
+  const rateFor = (v: string, i: string) =>
+    ws.vendorItems.find((vi) => vi.vendorId === v && vi.itemId === i)
+
+  const suggestLine = (i: number, v: string, itemId: string) => {
+    const r = rateFor(v, itemId)
+    setLine(i, { itemId, ...(r ? { price: String(r.rate) } : {}) })
+    if (r) setExpectedOn(addDays(orderedOn || today, r.quotedLeadTimeDays))
+  }
+
+  /** switching supplier re-suggests every line, because each has its own rate */
+  const useVendor = (v: string) => {
+    setVendorId(v)
+    setLines((ls) => ls.map((l) => {
+      const r = rateFor(v, l.itemId)
+      return r ? { ...l, price: String(r.rate) } : l
+    }))
   }
 
   const n = (v: string) => (v.trim() === '' ? NaN : Number(v))
-  const qtyN = n(qty)
-  const priceN = n(price)
-  const qtyOk = Number.isFinite(qtyN) && qtyN > 0
-  const priceOk = Number.isFinite(priceN) && priceN > 0
-  const ok = Boolean(vendorId) && Boolean(itemId) && qtyOk && priceOk
+  const ok = (l: Line) => Boolean(l.itemId)
+    && Number.isFinite(n(l.qty)) && n(l.qty) > 0
+    && Number.isFinite(n(l.price)) && n(l.price) > 0
+
+  const good = lines.filter(ok)
+  const valid = Boolean(vendorId) && good.length === lines.length && lines.length > 0
     && orderedOn.length === 10 && expectedOn.length === 10
 
   const blocked = ws.vendors.length === 0 || ws.items.length === 0
@@ -107,27 +139,49 @@ export function OrderForm({ open, onClose, editing }: {
 
   const save = () => {
     setTried(true)
-    if (!ok) return
+    if (!valid) return
     update((w0) => {
-      const [w, id] = editing ? [w0, editing.id] : issueId(w0, 'PO')
-      const order: PurchaseOrder = {
-        id,
-        no: editing?.no ?? nextNo('PO', w.orders),
-        vendorId, itemId,
-        qty: qtyN, unitPrice: priceN,
-        orderedOn, expectedOn, state,
-        quoteId: editing?.quoteId,
+      if (editing) {
+        const l = lines[0]
+        const order: PurchaseOrder = {
+          ...editing,
+          vendorId,
+          itemId: l.itemId,
+          qty: n(l.qty),
+          unitPrice: n(l.price),
+          orderedOn,
+          expectedOn,
+          state,
+        }
+        return { ...w0, orders: w0.orders.map((o) => (o.id === editing.id ? order : o)) }
       }
-      return {
-        ...w,
-        orders: editing ? w.orders.map((o) => (o.id === id ? order : o)) : [...w.orders, order],
+
+      /*
+       * One number for the whole thing, issued once. Every line takes it, which
+       * is what makes them one order to the Orders screen and one page to the
+       * document.
+       */
+      const no = nextNo('PO', w0.orders)
+      let w = w0
+      const made: PurchaseOrder[] = []
+      for (const l of lines) {
+        const [next, id] = issueId(w, 'PO')
+        w = next
+        made.push({
+          id, no, vendorId,
+          itemId: l.itemId,
+          qty: n(l.qty),
+          unitPrice: n(l.price),
+          orderedOn, expectedOn, state,
+        })
       }
+      return { ...w, orders: [...w.orders, ...made] }
     })
     onClose()
   }
 
-  const uom = ws.items.find((i) => i.id === itemId)?.uom
-  const total = qtyOk && priceOk ? qtyN * priceN : null
+  const total = good.reduce((a, l) => a + n(l.qty) * n(l.price), 0)
+  const uomOf = (id: string) => ws.items.find((i) => i.id === id)?.uom
 
   return (
     <Dialog open onClose={onClose} wide
@@ -135,43 +189,69 @@ export function OrderForm({ open, onClose, editing }: {
       <div className="space-y-4 px-4 py-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Supplier" htmlFor="of-vendor">
-            <Select id="of-vendor" value={vendorId}
-              onChange={(v) => { setVendorId(v); suggest(v, itemId) }}
+            <Select id="of-vendor" value={vendorId} onChange={useVendor}
               options={ws.vendors.map((v) => ({ value: v.id, label: v.name }))} />
-          </Field>
-          <Field label="Material" htmlFor="of-item">
-            <Select id="of-item" value={itemId}
-              onChange={(v) => { setItemId(v); suggest(vendorId, v) }}
-              options={ws.items.map((i) => ({ value: i.id, label: i.name }))} />
-          </Field>
-        </div>
-
-        {/*
-          * Offered, never applied. Pressing the button is the only thing that
-          * changes the supplier — see §11, and `BestLanded`'s own note. Hidden
-          * once an order has been confirmed, because by then the choice was
-          * made and second-guessing it is noise rather than advice.
-          */}
-        {(!editing || state === 'draft') && (
-          <BestLanded itemId={itemId} vendorId={vendorId} qty={qtyOk ? qtyN : undefined}
-            onPick={(v) => { setVendorId(v); suggest(v, itemId) }} />
-        )}
-
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Quantity" htmlFor="of-qty"
-            error={tried && !qtyOk ? 'Put in a quantity.' : null}>
-            <NumberInput id="of-qty" value={qty} onChange={setQty} unit={uom}
-              invalid={tried && !qtyOk} />
-          </Field>
-          <Field label="Agreed rate" htmlFor="of-price"
-            error={tried && !priceOk ? 'Put in a rate.' : null}>
-            <NumberInput id="of-price" value={price} onChange={setPrice}
-              unit={uom ? `₹/${uom}` : '₹'} invalid={tried && !priceOk} />
           </Field>
           <Field label="Status">
             <Chips value={state} onChange={(v) => setState(v as OrderState)}
-              options={STATES.slice(0, 3)} />
+              options={editing ? STATES : STATES.slice(0, 3)} />
           </Field>
+        </div>
+
+        <div className="space-y-3">
+          {lines.map((l, i) => (
+            <div key={i} className="rounded-lg border border-line bg-surface-2/40 p-3">
+              <div className="flex flex-wrap items-end gap-3">
+                <Field label="Material" className="min-w-[12rem] flex-1" htmlFor={`of-item-${i}`}>
+                  <Select id={`of-item-${i}`} value={l.itemId}
+                    onChange={(v) => suggestLine(i, vendorId, v)}
+                    options={ws.items.map((it) => ({ value: it.id, label: it.name }))} />
+                </Field>
+                <Field label="Quantity" className="w-28" htmlFor={`of-qty-${i}`}>
+                  <NumberInput id={`of-qty-${i}`} value={l.qty}
+                    onChange={(v) => setLine(i, { qty: v })} unit={uomOf(l.itemId)}
+                    invalid={tried && !ok(l)} />
+                </Field>
+                <Field label="Agreed rate" className="w-32" htmlFor={`of-price-${i}`}>
+                  <NumberInput id={`of-price-${i}`} value={l.price}
+                    onChange={(v) => setLine(i, { price: v })}
+                    unit={uomOf(l.itemId) ? `₹/${uomOf(l.itemId)}` : '₹'}
+                    invalid={tried && !ok(l)} />
+                </Field>
+                {!editing && lines.length > 1 && (
+                  <button type="button" onClick={() => setLines((ls) => ls.filter((_, k) => k !== i))}
+                    title="Remove this line"
+                    className="press mb-1 rounded-md p-1.5 text-ink-4 hover:bg-critical-soft hover:text-critical">
+                    <Icon name="trash" className="size-4" />
+                    <span className="sr-only">Remove this line</span>
+                  </button>
+                )}
+              </div>
+
+              {/*
+                * Offered, never applied. Pressing the button is the only thing
+                * that changes the supplier — see §11, and `BestLanded`'s own
+                * note. Hidden once an order has been confirmed, because by then
+                * the choice was made and second-guessing it is noise.
+                */}
+              {(!editing || state === 'draft') && (
+                <div className="mt-2.5">
+                  <BestLanded itemId={l.itemId} vendorId={vendorId}
+                    qty={Number.isFinite(n(l.qty)) ? n(l.qty) : undefined}
+                    scope={lines.length > 1 ? 'for this order' : undefined}
+                    onPick={useVendor} />
+                </div>
+              )}
+            </div>
+          ))}
+
+          {!editing && (
+            <button type="button" onClick={() => setLines((ls) => [...ls, BLANK])}
+              className="press inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-[13px] font-medium hover:bg-surface-2">
+              <Icon name="plus" className="size-3.5" />
+              Add another material
+            </button>
+          )}
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -187,15 +267,16 @@ export function OrderForm({ open, onClose, editing }: {
           </Field>
         </div>
 
-        {editing && (
-          <Field label="Status">
-            <Chips value={state} onChange={(v) => setState(v as OrderState)} options={STATES} />
-          </Field>
-        )}
-
-        {total !== null && (
+        {total > 0 && (
           <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-[13px] text-ink-2">
             Order value <strong className="num text-ink">{money(total)}</strong>
+            {lines.length > 1 && <span className="text-ink-3"> across {lines.length} lines</span>}
+          </p>
+        )}
+
+        {tried && !valid && (
+          <p className="text-[12.5px] text-critical">
+            Every line needs a material, a quantity and a rate.
           </p>
         )}
       </div>
@@ -206,7 +287,7 @@ export function OrderForm({ open, onClose, editing }: {
         <span className="ml-auto" />
         <button type="button" onClick={save}
           className="press rounded-lg border border-accent-ink bg-accent-ink px-3.5 py-2 text-[13px] font-semibold text-on-accent hover:bg-accent">
-          {editing ? 'Save changes' : 'Record order'}
+          {editing ? 'Save changes' : `Record order${lines.length > 1 ? ` · ${lines.length} lines` : ''}`}
         </button>
       </footer>
     </Dialog>

@@ -202,7 +202,7 @@ describe('values do not outlive their record', () => {
     ws = {
       ...ws,
       vendorContact: { [vid]: { phone: '+919820011234' } },
-      sendLog: [{ rfqId: 'RF-001', vendorId: vid, via: 'whatsapp', at: '2026-09-18' }],
+      sendLog: [{ kind: 'rfq' as const, id: 'RF-001', vendorId: vid, via: 'whatsapp', at: '2026-09-18' }],
     }
 
     ws = removeVendor(ws, vid)

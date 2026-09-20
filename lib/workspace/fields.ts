@@ -383,6 +383,12 @@ export function pruneCustom(ws: Workspace): Workspace {
     ...ws,
     custom,
     vendorContact: contact,
-    sendLog: (ws.sendLog ?? []).filter((s) => live.has(s.rfqId) && live.has(s.vendorId)),
+    /*
+     * A send entry names a request by id, or an order by NUMBER — several
+     * lines are one document. So only the request case can be checked against
+     * live ids; an order's number is checked against the orders themselves.
+     */
+    sendLog: (ws.sendLog ?? []).filter((s) => live.has(s.vendorId)
+      && (s.kind === 'po' ? ws.orders.some((o) => o.no === s.id) : live.has(s.id))),
   }
 }

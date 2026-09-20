@@ -5,6 +5,7 @@ import { DataTable, StatePill, type PillTone } from '@/components/ui/DataTable'
 import { DeskTools } from '@/components/sheet/DeskTools'
 import { buildColumns, type DrawnColumn } from '@/components/sheet/columns'
 import { OrderForm } from '@/components/sourcing/OrderForm'
+import { PoDocument, PoSentPill } from '@/components/sourcing/PoDocument'
 import { ConfirmDelete } from '@/components/sourcing/ConfirmDelete'
 import { DeskOnly } from '@/components/sourcing/DeskOnly'
 import { useWorkspace } from '@/components/workspace/store'
@@ -37,6 +38,7 @@ function Orders() {
   const [editing, setEditing] = useState<PurchaseOrder | null>(null)
   const [adding, setAdding] = useState(false)
   const [deleting, setDeleting] = useState<PurchaseOrder | null>(null)
+  const [papering, setPapering] = useState<string | null>(null)
 
   if (!workspace) return null
   const ws = workspace
@@ -44,7 +46,17 @@ function Orders() {
 
   const drawn: Record<string, DrawnColumn<OrderRow>> = {
     no: {
-      cell: (r) => <span className="mono text-[12.5px] font-semibold text-ink">{r.order.no}</span>,
+      cell: (r) => (
+        <span className="flex flex-wrap items-center gap-1.5">
+          <span className="mono text-[12.5px] font-semibold text-ink">{r.order.no}</span>
+          {/* one number over several rows is one order — say so, and say if it went */}
+          {rows.filter((o) => o.order.no === r.order.no).length > 1
+            && <span className="mono text-[10px] text-ink-3">
+              {rows.filter((o) => o.order.no === r.order.no).length} lines
+            </span>}
+          <PoSentPill no={r.order.no} fallback={null} />
+        </span>
+      ),
       text: (r) => r.order.no,
     },
     state: {
@@ -124,6 +136,11 @@ function Orders() {
           <>
             <DataTable
               columns={kit.columns} rows={shown} keyOf={(r) => r.order.id}
+              extra={{
+                icon: 'doc',
+                label: (r) => `Make the ${r.order.no} document`,
+                onClick: (r) => setPapering(r.order.no),
+              }}
               onEdit={(r) => setEditing(r.order)}
               onDelete={(r) => setDeleting(r.order)}
               editLabel={(r) => `Edit ${r.order.no}`}
@@ -140,6 +157,8 @@ function Orders() {
           </>
         )}
       </ListPage>
+
+      <PoDocument open={papering !== null} no={papering} onClose={() => setPapering(null)} />
 
       <OrderForm open={adding || editing !== null} editing={editing}
         onClose={() => { setAdding(false); setEditing(null) }} />

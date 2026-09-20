@@ -50,6 +50,7 @@ export function SupplierForm({ open, onClose, editing }: {
   const [terms, setTerms] = useState('30')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
+  const [address, setAddress] = useState('')
   const [custom, setCustom] = useState<Record<string, string>>({})
   const [lines, setLines] = useState<Line[]>([])
   const [tried, setTried] = useState(false)
@@ -63,6 +64,7 @@ export function SupplierForm({ open, onClose, editing }: {
       setTerms(String(editing.paymentTermsDays))
       setPhone(workspace.vendorContact[editing.id]?.phone ?? '')
       setEmail(workspace.vendorContact[editing.id]?.email ?? '')
+      setAddress(workspace.vendorContact[editing.id]?.address ?? '')
       setCustom({ ...(workspace.custom[editing.id] ?? {}) })
       setLines(workspace.vendorItems
         .filter((vi) => vi.vendorId === editing.id)
@@ -82,7 +84,7 @@ export function SupplierForm({ open, onClose, editing }: {
       setName('')
       setType(workspace.categories.supplierType[0] ?? '')
       setTerms('30')
-      setPhone(''); setEmail(''); setCustom({})
+      setPhone(''); setEmail(''); setAddress(''); setCustom({})
       setLines([])
     }
   }, [open, editing]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -126,14 +128,18 @@ export function SupplierForm({ open, onClose, editing }: {
         },
         w.vendorItems.find((vi) => vi.vendorId === id && vi.itemId === l.itemId),
       ))
-      const contact = { phone: phone.trim() || undefined, email: email.trim() || undefined }
+      const contact = {
+        phone: phone.trim() || undefined,
+        email: email.trim() || undefined,
+        address: address.trim() || undefined,
+      }
       const withRecord: Workspace = {
         ...w,
         vendors: editing ? w.vendors.map((v) => (v.id === id ? vendor : v)) : [...w.vendors, vendor],
         items: backfillRates(w.items, rates),
         vendorItems: [...w.vendorItems.filter((vi) => vi.vendorId !== id), ...rates],
         vendorType: { ...w.vendorType, [id]: type },
-        vendorContact: contact.phone || contact.email
+        vendorContact: contact.phone || contact.email || contact.address
           ? { ...w.vendorContact, [id]: contact }
           : Object.fromEntries(Object.entries(w.vendorContact).filter(([k]) => k !== id)),
       }
@@ -187,6 +193,14 @@ export function SupplierForm({ open, onClose, editing }: {
           </Field>
           <Field label="Email" htmlFor="sf-email">
             <TextInput id="sf-email" value={email} onChange={setEmail} placeholder="sales@shahmetals.in" />
+          </Field>
+          {/*
+            * Asked for because a purchase order is addressed to somebody. A
+            * request for prices can go out with a name on it; an order cannot.
+            */}
+          <Field label="Address" hint="Printed on a purchase order." htmlFor="sf-address">
+            <TextInput id="sf-address" value={address} onChange={setAddress}
+              placeholder="Plot 44, GIDC Phase II, Vatva, Ahmedabad 382445" />
           </Field>
         </div>
 

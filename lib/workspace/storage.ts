@@ -17,7 +17,7 @@ import type { Item, Vendor } from '@/lib/domain/types'
 import { highestIssued } from './defaults'
 import { SCHEMA } from './types'
 import type {
-  FieldDef, PurchaseOrder, Quote, Rfq, Session, TableView, Workspace, WorkspaceMode,
+  FieldDef, PurchaseOrder, Quote, Rfq, SendEntry, Session, TableView, Workspace, WorkspaceMode,
 } from './types'
 import type { SupplierDoc, VendorAlias } from '@/lib/intake/types'
 
@@ -195,7 +195,14 @@ function migrate(raw: Partial<Workspace>): Workspace {
       order: view(views.order),
     },
     vendorContact: map(raw.vendorContact),
-    sendLog: list(raw.sendLog),
+    /*
+     * A send entry used to name only a request, as `rfqId`. Orders can be put
+     * on paper now, so it carries a kind and an id — and an entry saved before
+     * that is a request, which is what it always was.
+     */
+    sendLog: list<SendEntry & { rfqId?: string }>(raw.sendLog)
+      .map((s) => ({ ...s, kind: s.kind ?? 'rfq', id: s.id ?? s.rfqId ?? '' }))
+      .filter((s) => s.id !== ''),
     /*
      * Both arrive empty on a workspace saved before supplier documents existed,
      * and nothing is lost — there was nothing to lose. What this must not do is

@@ -176,15 +176,33 @@ export interface TableView {
   shown?: string[]
 }
 
-/** A supplier's phone and email. `Vendor` is pinned, so they live beside it. */
+/** How to reach a supplier. `Vendor` is pinned, so this lives beside it. */
 export interface VendorContact {
   email?: string
   phone?: string
+  /**
+   * Where they are.
+   *
+   * Asked for because a purchase order is addressed to somebody — a request
+   * for prices can go out with a name on it, an order cannot. Optional, like
+   * the rest: an owner who only has a WhatsApp number for a supplier still
+   * gets a document, just without a line under their name.
+   */
+  address?: string
 }
 
-/** That a request was handed to somebody, and how. The system never sends. */
+/**
+ * That a document was handed to somebody, and how. The system never sends.
+ *
+ * `kind` and `id` rather than `rfqId`, because a purchase order is handed over
+ * the same four ways a request is and the log is how a week of silence becomes
+ * visible. Entries saved before orders could be put on paper are read as
+ * requests by `migrate`, which is what they were.
+ */
 export interface SendEntry {
-  rfqId: string
+  kind: 'rfq' | 'po'
+  /** the request's id, or the order NUMBER — several lines are one document */
+  id: string
   vendorId: string
   via: 'whatsapp' | 'email' | 'share' | 'download' | 'print'
   at: string

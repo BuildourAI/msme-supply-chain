@@ -26,13 +26,20 @@ import { useWorkspace } from '@/components/workspace/store'
  * rejections are entered every supplier lands at their quoted rate, and calling
  * that a recommendation would be this build's one real falsehood.
  */
-export function BestLanded({ itemId, vendorId, qty, onPick }: {
+export function BestLanded({ itemId, vendorId, qty, onPick, scope }: {
   itemId: string
   vendorId: string
   /** the quantity on the form, so the saving can be stated in money */
   qty?: number
   /** offered as a button; never called by this component on its own */
   onPick?: (vendorId: string) => void
+  /**
+   * Appended to the button's label — "for this order".
+   *
+   * An order has one supplier and can have several materials, so switching on
+   * one line's advice moves every line. The button has to say so.
+   */
+  scope?: string
 }) {
   const { workspace } = useWorkspace()
   if (!workspace || !itemId) return null
@@ -69,7 +76,8 @@ export function BestLanded({ itemId, vendorId, qty, onPick }: {
   /* they supply you, but have no rate against the material on the form */
   if (!a.chosen) {
     return (
-      <Note tone="plain" onPick={onPick} pick={best.vi.vendorId} pickLabel={nameOf(best.vi.vendorId)}>
+      <Note tone="plain" onPick={onPick} pick={best.vi.vendorId}
+        pickLabel={`${nameOf(best.vi.vendorId)}${scope ? ` ${scope}` : ''}`}>
         No rate on file from {nameOf(vendorId)} for {item?.name ?? 'this material'}.{' '}
         <strong className="text-ink">{nameOf(best.vi.vendorId)}</strong> {cheapest} on it,
         at {money(best.b.landed, 2)}{per}.
@@ -92,8 +100,8 @@ export function BestLanded({ itemId, vendorId, qty, onPick }: {
 
   const onOrder = qty && qty > 0 ? a.saving * qty : 0
   return (
-    <Note tone={a.flat ? 'plain' : 'accent'} onPick={onPick}
-      pick={best.vi.vendorId} pickLabel={nameOf(best.vi.vendorId)}>
+    <Note tone={a.flat ? 'plain' : 'accent'} onPick={onPick} pick={best.vi.vendorId}
+      pickLabel={`${nameOf(best.vi.vendorId)}${scope ? ` ${scope}` : ''}`}>
       <strong className="text-ink">{nameOf(best.vi.vendorId)} {cheaper}</strong> on{' '}
       {item?.name ?? 'this material'} — {money(best.b.landed, 2)} against{' '}
       {money(a.chosen.b.landed, 2)}, so {money(a.saving, 2)} less{per}
