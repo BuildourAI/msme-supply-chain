@@ -15,7 +15,7 @@ import type { PurchaseOrder, Quote, QuoteLine, Rfq, Workspace } from '@/lib/work
 import type { Item, Vendor, VendorItem } from '@/lib/domain/types'
 import {
   acceptAll, acceptLine, addDays, draftOrderFrom, itemImpact, materialRows, nextNo,
-  orderFromQuote, orderRows, quoteGroups, rejectLine, removeItem, removeQuote, removeRfq,
+  orderFromQuote, orderGroups, orderRows, orderState, quoteGroups, rejectLine, removeItem, removeQuote, removeRfq,
   removeVendor, rfqRows, rfqStateFrom, supplierRows, syncRfqStates, unorderedLines,
   vendorImpact,
 } from '@/lib/workspace/sourcing'
@@ -558,6 +558,71 @@ describe('a quotation with several prices on it', () => {
 
   it('counts a material\'s quoted prices as prices, not as pages', () => {
     expect(itemImpact(sixLines(), 'IT-002').losses.join(' | ')).toMatch(/1 quoted price/)
+  })
+})
+
+/* ============================== an order is a piece of paper, not a pile of rows */
+
+describe('an order with several lines on it', () => {
+  const threeLines = () => {
+    const ws = setUp()
+    ws.orders = [
+      order({ id: 'a', no: 'PO-1', itemId: 'IT-001', qty: 10, unitPrice: 100, expectedOn: '2026-09-30' }),
+      order({ id: 'b', no: 'PO-1', itemId: 'IT-002', qty: 5, unitPrice: 200, expectedOn: '2026-10-11' }),
+      order({ id: 'c', no: 'PO-2', itemId: 'IT-001', qty: 2, unitPrice: 100 }),
+    ]
+    return ws
+  }
+
+  /** the grouping keeps the row order, which `orderRows` sorts newest first */
+  const po = (no: string) => orderGroups(orderRows(threeLines())).find((g) => g.no === no)!
+
+  it('is one card, however many lines are on it', () => {
+    const groups = orderGroups(orderRows(threeLines()))
+    expect(groups.map((g) => g.no)).toEqual(['PO-2', 'PO-1'])
+    expect(po('PO-1').rows).toHaveLength(2)
+    expect(po('PO-2').rows).toHaveLength(1)
+  })
+
+  it('totalling what the whole order comes to', () => {
+    expect(po('PO-1').total).toBe(2000)
+  })
+
+  it('and due on the latest of its dates, not the first', () => {
+    // the same rule the document uses: a page headed with the earliest
+    // promises something the other lines were never going to meet
+    expect(po('PO-1').expectedOn).toBe('2026-10-11')
+  })
+
+  it('is only as far along as its least advanced line', () => {
+    /*
+     * Receiving one material of six marks that line delivered. Calling the
+     * whole order delivered on the strength of it is the kind of thing
+     * somebody plans a production week around.
+     */
+    expect(orderState([
+      order({ id: 'a', state: 'delivered' }),
+      order({ id: 'b', state: 'confirmed' }),
+    ])).toBe('confirmed')
+
+    expect(orderState([
+      order({ id: 'a', state: 'delivered' }),
+      order({ id: 'b', state: 'delivered' }),
+    ])).toBe('delivered')
+  })
+
+  it('ignoring lines that were called off', () => {
+    expect(orderState([
+      order({ id: 'a', state: 'delivered' }),
+      order({ id: 'b', state: 'cancelled' }),
+    ])).toBe('delivered')
+  })
+
+  it('unless every line was', () => {
+    expect(orderState([
+      order({ id: 'a', state: 'cancelled' }),
+      order({ id: 'b', state: 'cancelled' }),
+    ])).toBe('cancelled')
   })
 })
 

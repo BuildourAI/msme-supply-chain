@@ -19,7 +19,9 @@ import { pruneCustom } from './fields'
 import { repriceTerms } from './landed'
 import { backfillRates, buildRate } from './records'
 import { quoteState } from './types'
-import type { PurchaseOrder, Quote, QuoteLine, Rfq, RfqState, Workspace } from './types'
+import type {
+  OrderState, PurchaseOrder, Quote, QuoteLine, Rfq, RfqState, Workspace,
+} from './types'
 
 /* ------------------------------------------------------------- numbering -- */
 
@@ -208,6 +210,74 @@ export function orderRows(ws: Workspace): OrderRow[] {
       item: itemOf(ws, order.itemId),
       total: Math.round(order.qty * order.unitPrice * 100) / 100,
     }))
+}
+
+/**
+ * Where an order as a whole has got to, given its lines.
+ *
+ * Lines move separately — receiving against one of six marks that one
+ * delivered while the rest are still confirmed — so the order is only as far
+ * along as its least advanced live line. Calling a six-line order delivered
+ * because one material turned up is the kind of thing somebody plans a
+ * production week around.
+ *
+ * Cancelled lines are ignored unless every line is cancelled, which is the one
+ * case where the order itself is off.
+ */
+const LADDER: OrderState[] = ['draft', 'confirmed', 'shipped', 'delivered']
+
+export function orderState(orders: PurchaseOrder[]): OrderState {
+  const live = orders.filter((o) => o.state !== 'cancelled')
+  if (live.length === 0) return 'cancelled'
+  return live.reduce<OrderState>(
+    (worst, o) => (LADDER.indexOf(o.state) < LADDER.indexOf(worst) ? o.state : worst),
+    'delivered',
+  )
+}
+
+/**
+ * The lines of one order, gathered under the number that makes them one.
+ *
+ * A row is a LINE. Six lines of one order listed flat repeat the number, the
+ * supplier, the status and both dates six times, which is how a screen stops
+ * being read. The number has been the grouping key since the order form was
+ * written; this is the Orders screen finally using it.
+ */
+export interface OrderGroup {
+  no: string
+  rows: OrderRow[]
+  vendor: Vendor | undefined
+  state: OrderState
+  total: number
+  /**
+   * The latest date on it, not the first — the same rule the document uses,
+   * for the same reason: a page headed with the earliest of three promises
+   * something the other two lines were never going to meet.
+   */
+  expectedOn: string
+}
+
+export function orderGroups(rows: OrderRow[]): OrderGroup[] {
+  const order: string[] = []
+  const at = new Map<string, OrderRow[]>()
+  for (const r of rows) {
+    const held = at.get(r.order.no)
+    if (held) held.push(r)
+    else { at.set(r.order.no, [r]); order.push(r.order.no) }
+  }
+  return order.map((no) => {
+    const mine = at.get(no)!
+    return {
+      no,
+      rows: mine,
+      vendor: mine[0].vendor,
+      state: orderState(mine.map((r) => r.order)),
+      total: Math.round(mine.reduce((a, r) => a + r.total, 0) * 100) / 100,
+      expectedOn: mine.reduce(
+        (a, r) => (r.order.expectedOn > a ? r.order.expectedOn : a), mine[0].order.expectedOn,
+      ),
+    }
+  })
 }
 
 /* ----------------------------------------------------------- transitions -- */
