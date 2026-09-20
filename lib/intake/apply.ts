@@ -17,6 +17,7 @@ import {
 } from '@/lib/workspace/records'
 import { setValues } from '@/lib/workspace/fields'
 import type { ImportUndo, Workspace } from '@/lib/workspace/types'
+import { repriceTerms } from '@/lib/workspace/landed'
 import { learnAlias } from './alias'
 import type { SupplierDoc } from './types'
 
@@ -234,11 +235,13 @@ export function applyApproval(ws: Workspace, a: Approval): { ws: Workspace; undo
   }
 
   const keys = new Set(rates.map((r) => `${r.vendorId}|${r.itemId}`))
-  w = {
+  // repriced across the workspace, not just these lines — a new supplier's
+  // payment terms change what every rival on the same material costs
+  w = repriceTerms({
     ...w,
     items,
     vendorItems: [...w.vendorItems.filter((vi) => !keys.has(`${vi.vendorId}|${vi.itemId}`)), ...rates],
-  }
+  })
 
   /* -------- the document -------- */
 

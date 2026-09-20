@@ -7,7 +7,8 @@ import { useDesk } from '@/components/desk/store'
 import { Note } from '@/components/ui/Note'
 import { money } from '@/lib/domain/format'
 import type { DerivedRow } from '@/lib/domain/derive'
-import { StageGate } from '@/components/onboard/StageGate'
+import { useWorkspace } from '@/components/workspace/store'
+import { LandedCost } from '@/components/sourcing/LandedCost'
 
 /**
  * SRC-03 on its own page.
@@ -194,6 +195,16 @@ function PageBody() {
   )
 }
 
+/**
+ * One route, two companies.
+ *
+ * The sample company keeps the screen it has always had — a worked example on
+ * figures that reconcile. The owner gets the same question asked of their own
+ * suppliers, which is a different screen because it has a different job: theirs
+ * has to cope with a comparison that has nothing in it yet and say so.
+ */
 export default function Page() {
-  return <StageGate sample="the Sourcing dashboard"><PageBody /></StageGate>
+  const { mode, ready } = useWorkspace()
+  if (!ready) return <div className="min-h-[50vh]" aria-hidden />
+  return mode === 'mine' ? <LandedCost /> : <PageBody />
 }

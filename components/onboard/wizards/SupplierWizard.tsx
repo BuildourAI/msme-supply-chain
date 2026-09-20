@@ -6,6 +6,7 @@ import { Icon } from '@/components/ui/icons'
 import { useWorkspace } from '@/components/workspace/store'
 import { issueId } from '@/lib/workspace/defaults'
 import { backfillRates, buildRate, buildVendor } from '@/lib/workspace/records'
+import { repriceTerms } from '@/lib/workspace/landed'
 import { money } from '@/lib/domain/format'
 import type { Vendor, VendorItem } from '@/lib/domain/types'
 
@@ -205,7 +206,9 @@ export function SupplierWizard({ open, onClose }: { open: boolean; onClose: () =
         leadDays: Number(l.leadDays),
         preferred: l.preferred,
       }))
-      return {
+      // repriced over the whole workspace: a supplier who gives longer credit
+      // than anyone else on a material makes every rival on it dearer
+      return repriceTerms({
         ...w,
         // The valuation basis is the last purchase price (§13-1). A material
         // with no rate at all is valued at nothing, so the first quote fills it
@@ -214,7 +217,7 @@ export function SupplierWizard({ open, onClose }: { open: boolean; onClose: () =
         vendors: [...w.vendors, vendor],
         vendorItems: [...w.vendorItems, ...vendorItems],
         vendorType: { ...w.vendorType, [id]: type },
-      }
+      })
     })
     onClose()
   }

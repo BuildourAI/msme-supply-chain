@@ -14,6 +14,7 @@
  * a release. So the dialogs call these too.
  */
 import type { Item, Uom, Vendor, VendorItem } from '@/lib/domain/types'
+import { gstCost, rejectionCost } from './landed'
 import type { Workspace } from './types'
 
 /* ------------------------------------------------------------------ units -- */
@@ -136,6 +137,19 @@ export interface RateInput {
   rate: number
   leadDays: number
   preferred?: boolean
+  /**
+   * The three things a quoted rate does not mention, as the owner says them.
+   *
+   * Freight in rupees because that is how it is charged; the other two as
+   * percentages because that is how they are known — "he's on composition, I
+   * can't claim anything" and "one bundle in fifty is bent", not "₹602 a tonne"
+   * and "₹1,204 a tonne". They are converted once, here, into the rupee figures
+   * §5's formula wants. The fourth, what their payment terms cost, cannot be
+   * settled per rate — see `repriceTerms` in `landed.ts`.
+   */
+  freight?: number
+  unclaimableGstPct?: number
+  rejectPct?: number
 }
 
 /**
@@ -149,19 +163,41 @@ export interface RateInput {
  * rather than passing off as observed.
  */
 export function buildRate(input: RateInput, previous?: VendorItem): VendorItem {
+  const blank = {
+    freightPerUnit: 0, nonCreditableGst: 0, paymentTermCost: 0, rejectionAllowance: 0,
+    trailingRejectionRate: 0, onTimePct: 0, score: 0, quoteValidUntil: '',
+  }
+  const before = previous ?? blank
+
+  /*
+   * An omitted figure keeps what was there rather than clearing it, so a form
+   * that does not ask about freight cannot silently delete the freight somebody
+   * entered on the same pairing last month. Passing 0 is how you say none.
+   */
+  const rejectPct = input.rejectPct ?? before.trailingRejectionRate
   return {
-    ...(previous ?? {
-      freightPerUnit: 0, nonCreditableGst: 0, paymentTermCost: 0, rejectionAllowance: 0,
-      trailingRejectionRate: 0, onTimePct: 0, score: 0, quoteValidUntil: '',
-    }),
+    ...before,
     vendorId: input.vendorId,
     itemId: input.itemId,
     rate: input.rate,
+    freightPerUnit: input.freight ?? before.freightPerUnit,
+    nonCreditableGst: input.unclaimableGstPct === undefined
+      ? before.nonCreditableGst
+      : gstCost(input.rate, input.unclaimableGstPct),
+    trailingRejectionRate: rejectPct,
+    rejectionAllowance: rejectionCost(input.rate, rejectPct),
     quotedLeadTimeDays: input.leadDays,
     trailingLeadTimeDays: previous?.trailingLeadTimeDays ?? input.leadDays,
     isPreferred: input.preferred || undefined,
   } as VendorItem
 }
+
+/**
+ * The two percentages back out of the rupee figures, for a form reopening a
+ * rate somebody already entered. Nothing stores them twice.
+ */
+export const unclaimableGstPctOf = (vi: VendorItem): number =>
+  (vi.rate > 0 ? Math.round((vi.nonCreditableGst / vi.rate) * 1000) / 10 : 0)
 
 /**
  * The valuation basis, back-filled.

@@ -4,9 +4,10 @@ import { Wizard, type WizardStep } from '@/components/ui/Wizard'
 import { Chips, Field, NumberInput } from '@/components/ui/Field'
 import { useWorkspace } from '@/components/workspace/store'
 import { money } from '@/lib/domain/format'
+import { repriceTerms } from '@/lib/workspace/landed'
 
 /**
- * The four rules that decide what the system suggests.
+ * The five rules that decide what the system suggests.
  *
  * Every one of these already exists as a policy figure with a default, and §13
  * flags two of them as guesses a developer should not be making: the ordering
@@ -26,6 +27,7 @@ export function RulesWizard({ open, onClose }: { open: boolean; onClose: () => v
   const [ceiling, setCeiling] = useState('2')
   const [threshold, setThreshold] = useState('200000')
   const [prefer, setPrefer] = useState<'lowest_landed_cost' | 'preferred'>('lowest_landed_cost')
+  const [capital, setCapital] = useState('')
 
   useEffect(() => {
     if (!open || !workspace) return
@@ -34,14 +36,18 @@ export function RulesWizard({ open, onClose }: { open: boolean; onClose: () => v
     setCeiling(String(p.coverageCeiling.B))
     setThreshold(String(p.ownerApprovalThreshold))
     setPrefer(p.supplierDefault)
+    setCapital(p.costOfMoneyPct > 0 ? String(p.costOfMoneyPct) : '')
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open || !workspace) return null
 
   const n = (v: string) => (v.trim() === '' ? NaN : Number(v))
+  const positive = (v: number) => (Number.isFinite(v) && v > 0 ? v : 0)
   const cycleN = n(cycle)
   const ceilingN = n(ceiling)
   const thresholdN = n(threshold)
+  // blank is a real answer here, and it means zero rather than "not a number"
+  const capitalN = positive(n(capital))
 
   const steps: WizardStep[] = [
     {
@@ -121,10 +127,51 @@ export function RulesWizard({ open, onClose }: { open: boolean; onClose: () => v
         </div>
       ),
     },
+    {
+      label: 'Credit',
+      title: 'One supplier wants cash, another gives you 45 days. What is that worth?',
+      why: 'It is the one cost of buying that nobody puts on a quotation, and the only one this can work out for you.',
+      invalid: null,
+      body: (
+        <div className="space-y-3.5">
+          <Field label="What your working capital costs you"
+            hint="The rate on your cash credit or overdraft, a year. Leave it blank if you would rather not say."
+            htmlFor="rw-money">
+            <NumberInput id="rw-money" value={capital} onChange={setCapital} unit="% a year"
+              placeholder="11" />
+          </Field>
+          {/*
+            * Blank is a real answer and it has to behave like one. Every other
+            * figure in this wizard is a rule with a defensible default; this is
+            * a fact about one business that nobody here knows, and a
+            * plausible-looking 11% applied quietly would change which supplier
+            * the system recommends on a number the owner never gave.
+            */}
+          <p className="rounded-md border border-line bg-surface-2 px-2.5 py-2 text-[12px] leading-relaxed text-ink-2">
+            {capitalN > 0 ? (
+              <>Paying cash where somebody else would have given you 45 days costs you{' '}
+              <strong className="text-ink">{(capitalN * 45 / 365).toFixed(1)}%</strong> of the order —
+              on ₹1,00,000 that is {money(100000 * (capitalN / 100) * (45 / 365))}. It is counted in
+              the comparison from now on.</>
+            ) : (
+              <>Left blank, payment terms are not costed at all and the comparison says so. Nothing
+              is assumed on your behalf.</>
+            )}
+          </p>
+        </div>
+      ),
+    },
   ]
 
   const save = () => {
-    update((w) => ({
+    /*
+     * Repriced, because the cost of money is the one rule that changes a
+     * figure already written. Every other knob here is read at derivation
+     * time; this one is baked into each rate's payment-term cost when the rate
+     * is saved — so setting it after the suppliers were entered would
+     * otherwise leave every one of them at zero, which is exactly what it did.
+     */
+    update((w) => repriceTerms({
       ...w,
       policy: {
         ...w.policy,
@@ -132,6 +179,7 @@ export function RulesWizard({ open, onClose }: { open: boolean; onClose: () => v
         coverageCeiling: { A: ceilingN, B: ceilingN, C: ceilingN },
         ownerApprovalThreshold: thresholdN,
         supplierDefault: prefer,
+        costOfMoneyPct: capitalN > 0 ? capitalN : 0,
       },
       drafts: { ...w.drafts, 'rules.agreed': true },
     }))
@@ -141,7 +189,7 @@ export function RulesWizard({ open, onClose }: { open: boolean; onClose: () => v
   return (
     <Wizard open={open} onClose={onClose}
       title="Your rules"
-      sub="Four decisions. Every one can be changed later on the Sourcing Desk."
+      sub="Five decisions. Every one can be changed later on the Sourcing Desk."
       steps={steps} onDone={save} doneLabel="Save my rules" />
   )
 }

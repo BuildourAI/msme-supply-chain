@@ -5,8 +5,9 @@ import { Field, NumberInput, Select, TextInput } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/icons'
 import { useWorkspace } from '@/components/workspace/store'
 import { issueId } from '@/lib/workspace/defaults'
-import { backfillRates, buildRate, buildVendor } from '@/lib/workspace/records'
+import { backfillRates, buildRate, buildVendor, unclaimableGstPctOf } from '@/lib/workspace/records'
 import { setValues } from '@/lib/workspace/fields'
+import { repriceTerms } from '@/lib/workspace/landed'
 import { CustomFields } from '@/components/sheet/CustomFields'
 import type { Workspace } from '@/lib/workspace/types'
 import type { Vendor, VendorItem } from '@/lib/domain/types'
@@ -24,7 +25,18 @@ import type { Vendor, VendorItem } from '@/lib/domain/types'
  * without one it adds — which is also what fixes the old behaviour where
  * re-opening a finished set-up step quietly added a second copy.
  */
-interface Line { itemId: string; rate: string; leadDays: string; preferred: boolean }
+interface Line {
+  itemId: string
+  rate: string
+  leadDays: string
+  preferred: boolean
+  /** the three a quoted rate does not mention; blank means "they never said" */
+  freight: string
+  gstPct: string
+  rejectPct: string
+  /** whether the detail is open on this line — not saved, just where you were */
+  open?: boolean
+}
 
 export function SupplierForm({ open, onClose, editing }: {
   open: boolean
@@ -59,6 +71,12 @@ export function SupplierForm({ open, onClose, editing }: {
           rate: String(vi.rate),
           leadDays: String(vi.quotedLeadTimeDays),
           preferred: Boolean(vi.isPreferred),
+          // the percentages are not stored twice — they come back out of the
+          // rupee figure and the rate
+          freight: vi.freightPerUnit > 0 ? String(vi.freightPerUnit) : '',
+          gstPct: vi.nonCreditableGst > 0 ? String(unclaimableGstPctOf(vi)) : '',
+          rejectPct: vi.trailingRejectionRate > 0 ? String(vi.trailingRejectionRate) : '',
+          open: vi.freightPerUnit > 0 || vi.nonCreditableGst > 0 || vi.trailingRejectionRate > 0,
         })))
     } else {
       setName('')
@@ -97,7 +115,15 @@ export function SupplierForm({ open, onClose, editing }: {
       const [w, id] = editing ? [w0, editing.id] : issueId(w0, 'VN')
       const vendor = buildVendor({ id, name, paymentTermsDays: termsN })
       const rates = kept.map((l) => buildRate(
-        { vendorId: id, itemId: l.itemId, rate: n(l.rate), leadDays: n(l.leadDays), preferred: l.preferred },
+        {
+          vendorId: id, itemId: l.itemId, rate: n(l.rate), leadDays: n(l.leadDays),
+          preferred: l.preferred,
+          // a blank box is "they never said", not "none" — so it leaves what
+          // was there alone rather than clearing a figure typed last month
+          freight: l.freight.trim() === '' ? undefined : Number(l.freight),
+          unclaimableGstPct: l.gstPct.trim() === '' ? undefined : Number(l.gstPct),
+          rejectPct: l.rejectPct.trim() === '' ? undefined : Number(l.rejectPct),
+        },
         w.vendorItems.find((vi) => vi.vendorId === id && vi.itemId === l.itemId),
       ))
       const contact = { phone: phone.trim() || undefined, email: email.trim() || undefined }
@@ -111,7 +137,13 @@ export function SupplierForm({ open, onClose, editing }: {
           ? { ...w.vendorContact, [id]: contact }
           : Object.fromEntries(Object.entries(w.vendorContact).filter(([k]) => k !== id)),
       }
-      return setValues(withRecord, id, custom)
+      /*
+       * Last, and over the whole workspace rather than this supplier: what a
+       * supplier's payment terms cost depends on the best terms anyone offers
+       * on that material, so entering one who gives ninety days makes every
+       * rival on it dearer. See `repriceTerms`.
+       */
+      return repriceTerms(setValues(withRecord, id, custom))
     })
     onClose()
   }
@@ -168,7 +200,8 @@ export function SupplierForm({ open, onClose, editing }: {
             {lines.map((l, i) => {
               const it = ws.items.find((x) => x.id === l.itemId)
               return (
-                <div key={i} className="grid items-end gap-2 rounded-lg border border-line bg-surface-2 p-2.5 sm:grid-cols-[1.4fr_1fr_1fr_auto]">
+                <div key={i} className="rounded-lg border border-line bg-surface-2 p-2.5">
+                 <div className="grid items-end gap-2 sm:grid-cols-[1.4fr_1fr_1fr_auto]">
                   <Field label="Material">
                     <Select value={l.itemId} onChange={(v) => setLine(i, { itemId: v })}
                       placeholder="Pick one"
@@ -188,6 +221,52 @@ export function SupplierForm({ open, onClose, editing }: {
                     <Icon name="trash" className="size-4" />
                     <span className="sr-only">Remove this material</span>
                   </button>
+                 </div>
+
+                 <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line-soft pt-2">
+                  {/*
+                    * The checkbox this form has always passed to `buildRate`
+                    * and never rendered — so an owner whose rule is "the
+                    * supplier I usually use" had no way to say which that was.
+                    */}
+                  <label className="flex items-center gap-1.5 text-[12px] text-ink-2">
+                    <input type="checkbox" checked={l.preferred}
+                      onChange={(e) => setLine(i, { preferred: e.target.checked })}
+                      className="size-3.5 accent-[var(--accent-ink)]" />
+                    My usual supplier for it
+                  </label>
+
+                  <button type="button" onClick={() => setLine(i, { open: !l.open })}
+                    className="press ml-auto text-[12px] text-accent-ink underline underline-offset-2">
+                    {l.open ? 'Hide landed-cost detail' : 'Landed-cost detail'}
+                  </button>
+                 </div>
+
+                 {/*
+                   * Shut unless asked for. A rate and a lead time is the whole
+                   * of what most people have when they add a supplier, and
+                   * three more boxes on every line would make the common case
+                   * look like paperwork.
+                   */}
+                 {l.open && (
+                  <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                    <Field label="Freight"
+                      hint={it ? `On top of the rate, per ${it.uom}.` : 'On top of the rate.'}>
+                      <NumberInput value={l.freight} onChange={(v) => setLine(i, { freight: v })}
+                        unit={it ? `₹/${it.uom}` : '₹'} placeholder="0" />
+                    </Field>
+                    <Field label="GST you cannot claim"
+                      hint="Usually none. Composition dealers and blocked credits are the exceptions.">
+                      <NumberInput value={l.gstPct} onChange={(v) => setLine(i, { gstPct: v })}
+                        unit="%" placeholder="0" />
+                    </Field>
+                    <Field label="Usually rejected"
+                      hint="What you have seen, until receipts measure it.">
+                      <NumberInput value={l.rejectPct} onChange={(v) => setLine(i, { rejectPct: v })}
+                        unit="%" placeholder="0" />
+                    </Field>
+                  </div>
+                 )}
                 </div>
               )
             })}
@@ -201,6 +280,7 @@ export function SupplierForm({ open, onClose, editing }: {
             <button type="button"
               onClick={() => setLines((ls) => [...ls, {
                 itemId: ws.items[0].id, rate: '', leadDays: '', preferred: false,
+                freight: '', gstPct: '', rejectPct: '',
               }])}
               className="press mt-2 inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-[12.5px] font-medium hover:bg-surface-2">
               <Icon name="plus" className="size-3.5" />

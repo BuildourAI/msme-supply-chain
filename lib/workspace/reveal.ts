@@ -62,11 +62,45 @@ export function sourcingNav(ws: Workspace): NavRow[] {
     { label: 'Materials', href: '/sourcing/materials', icon: 'boxes', badge: count(ws.items.length) },
     { label: 'Requests', href: '/sourcing/rfqs', icon: 'doc', badge: count(waiting) },
     { label: 'Quotes', href: '/sourcing/quotes', icon: 'scale', badge: count(ws.quotes.length) },
+    /*
+     * Between the quotes and the order, which is where it sits in the work.
+     * The badge counts materials where the cheapest quote is not the cheapest
+     * material — a number that goes down when somebody acts on it, rather than
+     * one that only ever climbs.
+     */
+    { label: 'Landed cost', href: '/sourcing/compare', icon: 'cash', badge: count(flipping(ws)) },
     { label: 'Purchase orders', href: '/sourcing/orders', icon: 'cart', badge: count(open) },
   ]
 }
 
 const count = (n: number) => (n > 0 ? String(n) : undefined)
+
+/**
+ * Materials where the supplier who quoted least is not the one who costs least.
+ *
+ * Computed here rather than read off a stored flag, the same way the desk
+ * derives its own recommendation — and deliberately cheap, because it runs on
+ * every render of the sidebar.
+ */
+function flipping(ws: Workspace): number {
+  const landed = (vi: { rate: number; freightPerUnit: number; nonCreditableGst: number
+    paymentTermCost: number; rejectionAllowance: number }) =>
+    vi.rate + vi.freightPerUnit + vi.nonCreditableGst + vi.paymentTermCost + vi.rejectionAllowance
+
+  const byItem = new Map<string, typeof ws.vendorItems>()
+  for (const vi of ws.vendorItems) {
+    byItem.set(vi.itemId, [...(byItem.get(vi.itemId) ?? []), vi])
+  }
+
+  let n = 0
+  for (const quotes of byItem.values()) {
+    if (quotes.length < 2) continue
+    const best = quotes.reduce((a, b) => (landed(b) < landed(a) ? b : a))
+    const cheap = quotes.reduce((a, b) => (b.rate < a.rate ? b : a))
+    if (best.vendorId !== cheap.vendorId) n += 1
+  }
+  return n
+}
 
 /** Which stage a path belongs to, so the shell knows which nav to show. */
 export function stageOf(pathname: string): StageId | null {

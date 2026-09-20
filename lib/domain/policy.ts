@@ -17,6 +17,22 @@ export interface Policy {
   coverageCeiling: Record<ItemClass, number>
   /** §13-2 — a buyer optimises, an owner keeps a relationship. Stated, not accidental. */
   supplierDefault: 'lowest_landed_cost' | 'preferred'
+  /**
+   * What the company's working capital costs, as an annual percentage.
+   *
+   * It prices the one landed-cost component nobody quotes: a supplier who wants
+   * cash, against one who gives forty-five days, is asking for your money
+   * forty-five days earlier, and that has a price.
+   *
+   * Zero by default, which is the whole point. Every other figure in this type
+   * is a rule with a defensible default; this one is a fact about a particular
+   * business that nobody here knows. A plausible 11% applied silently would
+   * move which supplier the system recommends, on a number the owner never
+   * gave — so until they do, payment terms are not costed and the screen says
+   * exactly that. The sample company's quotes carry their own figures and are
+   * untouched by this.
+   */
+  costOfMoneyPct: number
 
   /* ------------------------------------------------------- INB-01 · inbound QC */
   /** Days a GRN may sit uninspected before it escalates. */
@@ -67,6 +83,7 @@ export const DEFAULT_POLICY: Policy = {
   bufferDays: 3,
   coverageCeiling: { A: 2.0, B: 2.0, C: 2.0 },
   supplierDefault: 'lowest_landed_cost',
+  costOfMoneyPct: 0,
   qcOverdueDays: 3,
   rejectionSpikeMultiple: 2,
   ackChaseDays: 2,
