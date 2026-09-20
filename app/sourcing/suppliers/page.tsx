@@ -6,6 +6,7 @@ import { SupplierForm } from '@/components/sourcing/SupplierForm'
 import { ConfirmDelete } from '@/components/sourcing/ConfirmDelete'
 import { DeskOnly } from '@/components/sourcing/DeskOnly'
 import { DeskTools } from '@/components/sheet/DeskTools'
+import { UploadDialog } from '@/components/intake/UploadDialog'
 import { buildColumns, type DrawnColumn } from '@/components/sheet/columns'
 import { useWorkspace } from '@/components/workspace/store'
 import { removeVendor, supplierRows, vendorImpact, type SupplierRow } from '@/lib/workspace/sourcing'
@@ -33,6 +34,7 @@ function Suppliers() {
   const [editing, setEditing] = useState<Vendor | null>(null)
   const [adding, setAdding] = useState(false)
   const [deleting, setDeleting] = useState<Vendor | null>(null)
+  const [uploading, setUploading] = useState(false)
 
   if (!workspace) return null
   const ws = workspace
@@ -112,9 +114,15 @@ function Suppliers() {
           of: (r) => r.type,
         }}
         action={{ label: 'Add supplier', onClick: () => setAdding(true) }}
-        tools={<DeskTools entity="supplier" noun="supplier" title="Suppliers" upload
+        tools={<DeskTools entity="supplier" noun="supplier" title="Suppliers"
+          onUpload={() => setUploading(true)}
           rows={() => kit.toRows(rows)} />}
-        empty={{ line: 'Nobody here yet. Add the suppliers you buy from, or bring in a spreadsheet.', cta: 'Add your first supplier' }}>
+        empty={{
+          line: 'Nobody here yet. Add the suppliers you buy from, bring in a spreadsheet, '
+            + 'or upload a quotation one of them has already sent you.',
+          cta: 'Add your first supplier',
+          second: { label: 'Upload a document', onClick: () => setUploading(true) },
+        }}>
         {(shown) => (
           <DataTable
             columns={kit.columns} rows={shown} keyOf={(r) => r.vendor.id}
@@ -125,6 +133,8 @@ function Suppliers() {
           />
         )}
       </ListPage>
+
+      <UploadDialog open={uploading} onClose={() => setUploading(false)} />
 
       <SupplierForm open={adding || editing !== null} editing={editing}
         onClose={() => { setAdding(false); setEditing(null) }} />

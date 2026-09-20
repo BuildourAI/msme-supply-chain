@@ -4,6 +4,7 @@ import { Icon } from '@/components/ui/icons'
 import { StatePill, type PillTone } from '@/components/ui/DataTable'
 import { ListPage } from '@/components/ui/ListPage'
 import { DeskTools } from '@/components/sheet/DeskTools'
+import { UploadDialog } from '@/components/intake/UploadDialog'
 import { buildColumns, type DrawnColumn } from '@/components/sheet/columns'
 import { QuoteForm } from '@/components/sourcing/QuoteForm'
 import { ConfirmDelete } from '@/components/sourcing/ConfirmDelete'
@@ -33,6 +34,13 @@ import type { Quote, QuoteState } from '@/lib/workspace/types'
  * pack size, a warranty read off somebody's quotation — appear here at all, and
  * it means hiding or renaming a column in the Columns dialog does what it says
  * on a screen that is not a table.
+ *
+ * Upload sits here as well as on Suppliers, and belongs here more. What a
+ * quotation becomes is quotes — the supplier is a side effect of reading one —
+ * so this is the screen somebody with a PDF in their inbox or a photograph on
+ * their phone will be looking at. It is offered twice: quietly in the header,
+ * and again from the empty state, which is the exact moment they have that
+ * document open in another window.
  */
 
 /**
@@ -60,6 +68,7 @@ function Quotes() {
   const [editing, setEditing] = useState<Quote | null>(null)
   const [adding, setAdding] = useState(false)
   const [deleting, setDeleting] = useState<Quote | null>(null)
+  const [uploading, setUploading] = useState(false)
 
   if (!workspace) return null
   const ws = workspace
@@ -166,10 +175,13 @@ function Quotes() {
         }}
         action={{ label: 'Record quote', onClick: () => setAdding(true) }}
         tools={<DeskTools entity="quote" noun="quote" title="Quotes"
+          onUpload={() => setUploading(true)}
           rows={() => kit.toRows(flat)} />}
         empty={{
-          line: 'Nothing quoted yet. Write down a price as soon as somebody gives you one.',
+          line: 'Nothing quoted yet. Write a price down as soon as somebody gives you one — '
+            + 'or upload what they sent: a PDF, a photograph of a quotation, or a spreadsheet.',
           cta: 'Record your first quote',
+          second: { label: 'Upload a quotation', onClick: () => setUploading(true) },
         }}>
         {(shown) => {
           const ids = new Set(shown.map((r) => r.quote.id))
@@ -295,6 +307,8 @@ function Quotes() {
           )
         }}
       </ListPage>
+
+      <UploadDialog open={uploading} onClose={() => setUploading(false)} />
 
       <QuoteForm open={adding || editing !== null} editing={editing}
         onClose={() => { setAdding(false); setEditing(null) }} />

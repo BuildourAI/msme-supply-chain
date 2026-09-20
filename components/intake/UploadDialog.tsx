@@ -81,6 +81,12 @@ export function UploadDialog({ open, onClose, resume }: {
    * keep — the spreadsheet import makes the same choice for the same reason:
    * bringing a document in is meant to be how you get your columns, and one
    * left out by default is data quietly dropped.
+   *
+   * Except off a photograph, where the default flips. A spreadsheet heading
+   * was typed by a person; a heading off a photograph is whatever the reader
+   * made of some ink, and a probe that clicked straight through created a
+   * column called "CE)RATE". Still offered, with its values underneath — just
+   * not ticked, so keeping one is a thing somebody chose to do.
    */
   const [dropped, setDropped] = useState<Record<string, boolean>>({})
   const [phone, setPhone] = useState('')
@@ -216,7 +222,8 @@ export function UploadDialog({ open, onClose, resume }: {
     }
   }
 
-  const keeping = docColumns.filter((f) => !dropped[f.label])
+  const guessedHeads = read === 'photo'
+  const keeping = docColumns.filter((f) => (dropped[f.label] ?? guessedHeads) === false)
   const columns = keeping.map((f) => ({ label: f.label, kind: guessKind(f.values) }))
   const keptLabels = new Set(keeping.map((f) => f.label))
 
@@ -410,7 +417,7 @@ export function UploadDialog({ open, onClose, resume }: {
         : (
           <Check
             plan={plan} newSupplier={!known}
-            columns={docColumns} dropped={dropped}
+            columns={docColumns} dropped={dropped} offByDefault={guessedHeads}
             onDrop={(label, off) => setDropped((d) => ({ ...d, [label]: off }))}
             type={type} onType={setType}
             terms={terms} onTerms={setTerms} termsFromDoc={header.terms}
@@ -741,6 +748,8 @@ function Check(p: {
   /** headings on the document this build has no field for */
   columns: { label: string; values: string[] }[]
   dropped: Record<string, boolean>
+  /** a heading read off a photograph starts unticked — see the note above */
+  offByDefault?: boolean
   onDrop: (label: string, off: boolean) => void
 }) {
   return (
@@ -761,14 +770,18 @@ function Check(p: {
             This document has columns of its own
           </p>
           <p className="text-[11.5px] leading-relaxed text-ink-3">
-            They are kept against each quote. Untick anything you do not want —
-            nothing here changes what was quoted.
+            {p.offByDefault
+              ? 'Read off a photograph, so the headings are a guess. Tick the ones worth '
+                + 'keeping against each quote — nothing here changes what was quoted.'
+              : 'They are kept against each quote. Untick anything you do not want — '
+                + 'nothing here changes what was quoted.'}
           </p>
           <ul className="space-y-1.5">
             {p.columns.map((c) => (
               <li key={c.label} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                 <label className="flex cursor-pointer select-none items-center gap-1.5 text-[12.5px]">
-                  <input type="checkbox" checked={!p.dropped[c.label]}
+                  <input type="checkbox"
+                    checked={(p.dropped[c.label] ?? p.offByDefault ?? false) === false}
                     onChange={(e) => p.onDrop(c.label, !e.target.checked)}
                     className="size-3.5 accent-[var(--accent-ink)]" />
                   <span className="font-medium">{c.label}</span>

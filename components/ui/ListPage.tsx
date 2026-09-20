@@ -49,8 +49,14 @@ export function ListPage<T>({
   tools?: React.ReactNode
   /** given the rows that survive search and filter */
   children: (shown: T[]) => React.ReactNode
-  /** what to say when there is nothing at all yet */
-  empty?: { line: string; cta?: string }
+  /**
+   * What to say when there is nothing at all yet.
+   *
+   * `second` is a quieter way out beside the main one — on a list that can be
+   * filled from a document as well as by typing, an empty screen is the exact
+   * moment somebody has that document open in another window.
+   */
+  empty?: { line: string; cta?: string; second?: { label: string; onClick: () => void } }
 }) {
   const [q, setQ] = useState('')
   const [pick, setPick] = useState('')
@@ -118,12 +124,20 @@ export function ListPage<T>({
       {total === 0 && empty ? (
         <div className="rounded-xl border border-line bg-surface px-6 py-12 text-center">
           <p className="text-[13.5px] text-ink-2">{empty.line}</p>
-          {action && empty.cta && (
-            <button type="button" onClick={action.onClick}
-              className="press mt-4 inline-flex items-center gap-1.5 rounded-lg border border-accent-ink bg-accent-ink px-3.5 py-2 text-[13px] font-semibold text-on-accent hover:bg-accent">
-              {empty.cta}
-            </button>
-          )}
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            {action && empty.cta && (
+              <button type="button" onClick={action.onClick}
+                className="press inline-flex items-center gap-1.5 rounded-lg border border-accent-ink bg-accent-ink px-3.5 py-2 text-[13px] font-semibold text-on-accent hover:bg-accent">
+                {empty.cta}
+              </button>
+            )}
+            {empty.second && (
+              <button type="button" onClick={empty.second.onClick}
+                className="press inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3.5 py-2 text-[13px] font-medium hover:bg-surface-2">
+                {empty.second.label}
+              </button>
+            )}
+          </div>
         </div>
       ) : shown.length === 0 ? (
         <div className="rounded-xl border border-line bg-surface px-6 py-10 text-center">

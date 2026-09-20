@@ -4,7 +4,6 @@ import { Icon, type IconName } from '@/components/ui/icons'
 import { useWorkspace } from '@/components/workspace/store'
 import { ColumnsDialog } from './ColumnsDialog'
 import { ImportDialog } from './ImportDialog'
-import { UploadDialog } from '@/components/intake/UploadDialog'
 import { Dialog } from '@/components/ui/Dialog'
 import { downloadCsv, toCsv } from '@/lib/sheet/csv'
 import { undoImport } from '@/lib/sheet/import'
@@ -19,7 +18,7 @@ import type { SheetEntity } from '@/lib/workspace/types'
  * the page header rather than the filter row: that row is hidden while the list
  * is empty, which is the exact moment Import is most worth reaching.
  */
-export function DeskTools({ entity, noun, title, rows, upload }: {
+export function DeskTools({ entity, noun, title, rows, onUpload }: {
   entity: SheetEntity
   /** singular, for the sentence a column delete has to say */
   noun: string
@@ -28,19 +27,19 @@ export function DeskTools({ entity, noun, title, rows, upload }: {
   /** what to write out — already searched, filtered and in column order */
   rows: () => string[][]
   /**
-   * Offer "Upload document" too.
+   * Offer "Upload document", and open it.
    *
-   * A prop rather than a check on `entity` inside, because this component is
-   * shared by three lists and only one of them has documents arriving at it.
-   * A condition buried in here would be a thing the other two screens carry
-   * without saying so.
+   * A callback rather than a flag, because the screens that take documents
+   * want to offer the same thing from their empty state as well — which is
+   * the exact moment somebody with a quotation in their inbox is looking at
+   * it. The dialog belongs to the page so that both ways in open the one
+   * instance; this only draws the button.
    */
-  upload?: boolean
+  onUpload?: () => void
 }) {
   const { workspace, update } = useWorkspace()
   const [columns, setColumns] = useState(false)
   const [importing, setImporting] = useState(false)
-  const [uploading, setUploading] = useState(false)
   const [undoing, setUndoing] = useState(false)
 
   if (!workspace) return null
@@ -64,7 +63,7 @@ export function DeskTools({ entity, noun, title, rows, upload }: {
         * First, and before Columns, because it is the one that brings data in
         * from outside rather than rearranging what is already here.
         */}
-      {upload && <Tool icon="doc" label="Upload document" onClick={() => setUploading(true)} />}
+      {onUpload && <Tool icon="doc" label="Upload document" onClick={onUpload} />}
       <Tool icon="columns" label="Columns" onClick={() => setColumns(true)} />
       <Tool icon="upload" label="Import" onClick={() => setImporting(true)} />
       {/*
@@ -79,7 +78,6 @@ export function DeskTools({ entity, noun, title, rows, upload }: {
         entity={entity} noun={noun} />
       <ImportDialog open={importing} onClose={() => setImporting(false)}
         entity={entity} title={title} />
-      {upload && <UploadDialog open={uploading} onClose={() => setUploading(false)} />}
 
       {undoing && undoable && (
         <Dialog open onClose={() => setUndoing(false)} title="Undo the last import?">
