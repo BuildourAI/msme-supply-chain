@@ -125,7 +125,10 @@ export function emptyWorkspace(input: {
     itemGroup: {},
     fields: [],
     custom: {},
-    views: { supplier: BLANK_VIEW, material: BLANK_VIEW, rfq: BLANK_VIEW },
+    views: {
+      supplier: BLANK_VIEW, material: BLANK_VIEW, rfq: BLANK_VIEW,
+      quote: BLANK_VIEW, order: BLANK_VIEW,
+    },
     vendorContact: {},
     sendLog: [],
     docs: [],

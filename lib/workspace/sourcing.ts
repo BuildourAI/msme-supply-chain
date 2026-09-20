@@ -330,16 +330,22 @@ export function removeRfq(ws: Workspace, rfqId: string): Workspace {
   }))
 }
 
+/*
+ * Both prune now, because quotes and orders carry the owner's own columns.
+ * Before they did, there was nothing keyed to a quote id to leave behind; a
+ * deleted quote that kept its HSN code would be a cell pointing at nothing,
+ * and the next id issued with that number would inherit it.
+ */
 export function removeQuote(ws: Workspace, quoteId: string): Workspace {
-  return syncRfqStates({
+  return pruneCustom(syncRfqStates({
     ...ws,
     quotes: ws.quotes.filter((q) => q.id !== quoteId),
     orders: ws.orders.map((o) => (o.quoteId === quoteId ? { ...o, quoteId: undefined } : o)),
-  })
+  }))
 }
 
 export function removeOrder(ws: Workspace, orderId: string): Workspace {
-  return { ...ws, orders: ws.orders.filter((o) => o.id !== orderId) }
+  return pruneCustom({ ...ws, orders: ws.orders.filter((o) => o.id !== orderId) })
 }
 
 /**

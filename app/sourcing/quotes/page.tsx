@@ -3,6 +3,8 @@ import { useState } from 'react'
 import { Icon } from '@/components/ui/icons'
 import { StatePill, type PillTone } from '@/components/ui/DataTable'
 import { ListPage } from '@/components/ui/ListPage'
+import { DeskTools } from '@/components/sheet/DeskTools'
+import { buildColumns, type DrawnColumn } from '@/components/sheet/columns'
 import { QuoteForm } from '@/components/sourcing/QuoteForm'
 import { ConfirmDelete } from '@/components/sourcing/ConfirmDelete'
 import { DeskOnly } from '@/components/sourcing/DeskOnly'
@@ -24,8 +26,24 @@ import type { Quote, QuoteState } from '@/lib/workspace/types'
  *
  * Within a group the cheapest is marked. It is marked, not chosen: the cheapest
  * price is frequently not the cheapest material once freight and a rejection
- * history are in, which is what the full comparison on the Dashboard is for.
+ * history are in, which is what the Landed cost screen is for.
+ *
+ * The detail on each card is the column view, laid out as a list rather than a
+ * table. That is what lets a column the build never heard of — an HSN code, a
+ * pack size, a warranty read off somebody's quotation — appear here at all, and
+ * it means hiding or renaming a column in the Columns dialog does what it says
+ * on a screen that is not a table.
  */
+
+/**
+ * Drawn elsewhere on the screen, so not repeated inside the card's detail.
+ *
+ * The request is the group heading these cards sit under, which is why it is
+ * here: a row reading "Against — RFQ-3" beneath a box already titled RFQ-3 is
+ * noise, and beneath the "No request" box it is a dash on every card. It stays
+ * a column, so an export still carries it.
+ */
+const CHROME = new Set(['supplier', 'item', 'state', 'rfq'])
 const TONE: Record<QuoteState, PillTone> = {
   received: 'neutral', accepted: 'good', rejected: 'critical',
 }
@@ -48,6 +66,54 @@ function Quotes() {
   const groups = quoteGroups(ws)
   const flat = groups.flatMap((g) => g.rows)
 
+  const drawn: Record<string, DrawnColumn<QuoteRow>> = {
+    supplier: {
+      cell: (r) => r.vendor?.name ?? <span className="text-ink-4">—</span>,
+      text: (r) => r.vendor?.name ?? '',
+    },
+    item: {
+      cell: (r) => r.item?.name ?? <span className="text-ink-4">—</span>,
+      text: (r) => r.item?.name ?? '',
+    },
+    state: {
+      cell: (r) => <StatePill label={LABEL[r.quote.state]} tone={TONE[r.quote.state]} />,
+      text: (r) => LABEL[r.quote.state],
+    },
+    price: {
+      align: 'right',
+      cell: (r) => `${money(r.quote.unitPrice)}${r.item ? `/${r.item.uom}` : ''}`,
+      text: (r) => String(r.quote.unitPrice),
+    },
+    moq: {
+      align: 'right',
+      cell: (r) => (r.quote.moq > 0 ? num(r.quote.moq, 0) : <span className="text-ink-4">—</span>),
+      text: (r) => String(r.quote.moq),
+    },
+    lead: {
+      align: 'right',
+      cell: (r) => `${r.quote.leadDays}d`,
+      text: (r) => String(r.quote.leadDays),
+    },
+    ref: {
+      cell: (r) => (r.quote.ref
+        ? <span className="mono text-[11.5px]">{r.quote.ref}</span>
+        : <span className="text-ink-4">—</span>),
+      text: (r) => r.quote.ref ?? '',
+    },
+    on: {
+      align: 'right',
+      cell: (r) => shortDate(r.quote.on),
+      text: (r) => r.quote.on,
+    },
+    rfq: {
+      cell: (r) => (r.rfq ? <span className="mono text-[11.5px]">{r.rfq.no}</span> : <span className="text-ink-4">—</span>),
+      text: (r) => r.rfq?.no ?? '',
+    },
+  }
+
+  const kit = buildColumns<QuoteRow>(ws, 'quote', (r) => r.quote.id, drawn)
+  const detail = kit.columns.filter((c) => !CHROME.has(c.key))
+
   /** Accepting is one act; raising the order is a second, and a person does it. */
   const accept = (row: QuoteRow) => {
     update((w) => {
@@ -65,13 +131,15 @@ function Quotes() {
     <>
       <ListPage
         title="Quotes" noun="quote" rows={flat}
-        search={(r) => `${r.vendor?.name ?? ''} ${r.item?.name ?? ''} ${r.quote.ref ?? ''}`}
+        search={(r) => `${r.vendor?.name ?? ''} ${r.item?.name ?? ''} ${r.quote.ref ?? ''} ${kit.searchText(r)}`}
         filter={{
           label: 'All statuses',
           options: (Object.keys(LABEL) as QuoteState[]).map((s) => ({ value: s, label: LABEL[s] })),
           of: (r) => r.quote.state,
         }}
         action={{ label: 'Record quote', onClick: () => setAdding(true) }}
+        tools={<DeskTools entity="quote" noun="quote" title="Quotes"
+          rows={() => kit.toRows(flat)} />}
         empty={{
           line: 'Nothing quoted yet. Write down a price as soon as somebody gives you one.',
           cta: 'Record your first quote',
@@ -115,9 +183,15 @@ function Quotes() {
                                 <span className="block truncate text-[13px] font-semibold">
                                   {r.vendor?.name ?? 'Unknown supplier'}
                                 </span>
-                                {r.quote.ref && (
-                                  <span className="mono block truncate text-[10.5px] text-ink-3">
-                                    {r.quote.ref}
+                                {/*
+                                  * The material, only where the group header is
+                                  * not already saying it. A quote with no
+                                  * request behind it is the common case and
+                                  * used to name no material anywhere.
+                                  */}
+                                {!g.rfq && (
+                                  <span className="block truncate text-[11px] text-ink-3">
+                                    {r.item?.name ?? 'Unknown material'}
                                   </span>
                                 )}
                               </span>
@@ -125,14 +199,15 @@ function Quotes() {
                             </div>
 
                             <dl className="mt-2.5 grid grid-cols-3 gap-1.5">
-                              {[
-                                ['Price', `${money(r.quote.unitPrice)}${r.item ? `/${r.item.uom}` : ''}`],
-                                ['Min', r.quote.moq > 0 ? num(r.quote.moq, 0) : '—'],
-                                ['Takes', `${r.quote.leadDays}d`],
-                              ].map(([k, v]) => (
-                                <div key={k}>
-                                  <dt className="mono text-[9.5px] uppercase tracking-wider text-ink-3">{k}</dt>
-                                  <dd className="num mt-0.5 text-[13px] font-medium">{v}</dd>
+                              {detail.map((c) => (
+                                <div key={c.key} className="min-w-0">
+                                  <dt className="mono truncate text-[9.5px] uppercase tracking-wider text-ink-3"
+                                    title={c.head}>
+                                    {c.head}
+                                  </dt>
+                                  <dd className="num mt-0.5 truncate text-[13px] font-medium">
+                                    {c.cell(r)}
+                                  </dd>
                                 </div>
                               ))}
                             </dl>
@@ -152,9 +227,7 @@ function Quotes() {
                                   Accept &amp; draft order
                                 </button>
                               )}
-                              <span className="mono ml-auto text-[10px] text-ink-4">
-                                {shortDate(r.quote.on)}
-                              </span>
+                              <span className="ml-auto" />
                               <button type="button" onClick={() => setEditing(r.quote)}
                                 title={`Edit the quote from ${r.vendor?.name ?? 'this supplier'}`}
                                 className="press rounded p-1 text-ink-3 hover:text-ink">

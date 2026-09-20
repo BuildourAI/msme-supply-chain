@@ -1,7 +1,9 @@
 'use client'
 import { useState } from 'react'
 import { ListPage } from '@/components/ui/ListPage'
-import { Column, DataTable, StatePill, type PillTone } from '@/components/ui/DataTable'
+import { DataTable, StatePill, type PillTone } from '@/components/ui/DataTable'
+import { DeskTools } from '@/components/sheet/DeskTools'
+import { buildColumns, type DrawnColumn } from '@/components/sheet/columns'
 import { OrderForm } from '@/components/sourcing/OrderForm'
 import { ConfirmDelete } from '@/components/sourcing/ConfirmDelete'
 import { DeskOnly } from '@/components/sourcing/DeskOnly'
@@ -40,39 +42,47 @@ function Orders() {
   const ws = workspace
   const rows = orderRows(ws)
 
-  const columns: Column<OrderRow>[] = [
-    {
-      key: 'no', head: 'Order',
+  const drawn: Record<string, DrawnColumn<OrderRow>> = {
+    no: {
       cell: (r) => <span className="mono text-[12.5px] font-semibold text-ink">{r.order.no}</span>,
+      text: (r) => r.order.no,
     },
-    {
-      key: 'state', head: 'Status',
+    state: {
       cell: (r) => <StatePill label={LABEL[r.order.state]} tone={TONE[r.order.state]} />,
+      text: (r) => LABEL[r.order.state],
     },
-    {
-      key: 'vendor', head: 'Supplier',
+    vendor: {
       cell: (r) => (r.vendor
         ? <span className="font-medium text-ink">{r.vendor.name}</span>
         : <span className="text-ink-4">—</span>),
+      text: (r) => r.vendor?.name ?? '',
     },
-    {
-      key: 'item', head: 'Material',
+    item: {
       cell: (r) => r.item?.name ?? <span className="text-ink-4">—</span>,
+      text: (r) => r.item?.name ?? '',
     },
-    {
-      key: 'qty', head: 'Qty', align: 'right',
+    qty: {
+      align: 'right',
       cell: (r) => `${num(r.order.qty, 3)}${r.item ? ` ${r.item.uom}` : ''}`,
+      text: (r) => String(r.order.qty),
     },
-    {
-      key: 'total', head: 'Total', align: 'right',
+    rate: {
+      align: 'right',
+      cell: (r) => <span className="text-ink-2">{money(r.order.unitPrice)}</span>,
+      text: (r) => String(r.order.unitPrice),
+    },
+    total: {
+      align: 'right',
       cell: (r) => <span className="font-medium">{money(r.total)}</span>,
+      text: (r) => String(r.total),
     },
-    {
-      key: 'ordered', head: 'Ordered', align: 'right',
+    ordered: {
+      align: 'right',
       cell: (r) => <span className="text-ink-2">{shortDate(r.order.orderedOn)}</span>,
+      text: (r) => r.order.orderedOn,
     },
-    {
-      key: 'expected', head: 'Expected', align: 'right',
+    expected: {
+      align: 'right',
       cell: (r) => {
         const open = r.order.state !== 'delivered' && r.order.state !== 'cancelled'
         const late = open && r.order.expectedOn < today
@@ -83,8 +93,11 @@ function Orders() {
           </span>
         )
       },
+      text: (r) => r.order.expectedOn,
     },
-  ]
+  }
+
+  const kit = buildColumns<OrderRow>(ws, 'order', (r) => r.order.id, drawn)
 
   const outstanding = rows.filter(
     (r) => r.order.state !== 'delivered' && r.order.state !== 'cancelled',
@@ -94,13 +107,15 @@ function Orders() {
     <>
       <ListPage
         title="Purchase orders" noun="order" rows={rows}
-        search={(r) => `${r.order.no} ${r.vendor?.name ?? ''} ${r.item?.name ?? ''}`}
+        search={(r) => `${r.order.no} ${r.vendor?.name ?? ''} ${r.item?.name ?? ''} ${kit.searchText(r)}`}
         filter={{
           label: 'All statuses',
           options: (Object.keys(LABEL) as OrderState[]).map((s) => ({ value: s, label: LABEL[s] })),
           of: (r) => r.order.state,
         }}
         action={{ label: 'New order', onClick: () => setAdding(true) }}
+        tools={<DeskTools entity="order" noun="order" title="Purchase orders"
+          rows={() => kit.toRows(rows)} />}
         empty={{
           line: 'Nothing ordered yet. An order records what you placed, at what rate, and when it is due.',
           cta: 'Record your first order',
@@ -108,7 +123,7 @@ function Orders() {
         {(shown) => (
           <>
             <DataTable
-              columns={columns} rows={shown} keyOf={(r) => r.order.id}
+              columns={kit.columns} rows={shown} keyOf={(r) => r.order.id}
               onEdit={(r) => setEditing(r.order)}
               onDelete={(r) => setDeleting(r.order)}
               editLabel={(r) => `Edit ${r.order.no}`}

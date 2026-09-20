@@ -125,8 +125,15 @@ export interface PurchaseOrder {
  */
 export type FieldKind = 'text' | 'number' | 'date' | 'choice' | 'yesno'
 
-/** The three lists that carry custom fields. Quotes and orders come later. */
-export type SheetEntity = 'supplier' | 'material' | 'rfq'
+/**
+ * The lists that carry custom fields.
+ *
+ * Quotes and orders were left out when this was written, and the note here
+ * said they came later. This is later: a quotation arrives carrying an HSN
+ * code, a brand or a pack size, and a list that cannot hold those is a list
+ * with a spreadsheet open beside it.
+ */
+export type SheetEntity = 'supplier' | 'material' | 'rfq' | 'quote' | 'order'
 
 export interface FieldDef {
   id: string
@@ -154,6 +161,19 @@ export interface TableView {
   order: string[]
   hidden: string[]
   labels: Record<string, string>
+  /**
+   * Columns the owner has deliberately un-hidden.
+   *
+   * Some columns hide themselves until somebody fills them — a phone number,
+   * a quotation reference. That is a rule, not a decision, and the two have to
+   * be told apart: writing the rule's current answer into `hidden` turns it
+   * into a decision, and the column then stays hidden for ever even once it
+   * has values in it. An import that invented a column did exactly that, so a
+   * sheet full of quotation numbers arrived with the reference column pinned
+   * shut. This is the third state the rule needs — decided-to-show, as against
+   * decided-to-hide and never-decided.
+   */
+  shown?: string[]
 }
 
 /** A supplier's phone and email. `Vendor` is pinned, so they live beside it. */

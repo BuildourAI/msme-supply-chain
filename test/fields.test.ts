@@ -142,9 +142,9 @@ describe('arranging the columns', () => {
 
   it('keeps a column auto-hidden when something else pins the arrangement', () => {
     /*
-     * Adding a custom field writes the order out. If it wrote only the order,
-     * the until-used rule would stop applying and Phone and Email would appear
-     * as two empty columns — which is exactly what an import used to do.
+     * Adding a custom field writes the order out. Until-used columns must not
+     * be dragged into view by that — Phone and Email would appear as two empty
+     * columns on a company that has neither.
      */
     const { ws } = seeded()
     expect(visibleColumns(ws, 'supplier').map((c) => c.key)).not.toContain('phone')
@@ -152,6 +152,29 @@ describe('arranging the columns', () => {
 
     const moved = moveColumn(ws, 'supplier', 'type', -1)
     expect(visibleColumns(moved, 'supplier').map((c) => c.key)).not.toContain('phone')
+  })
+
+  it('and shows it anyway the moment somebody fills it in', () => {
+    /*
+     * The bug this pair of tests exists for. Pinning the arrangement used to
+     * write the rule's current answer into `hidden`, which turned a rule into
+     * a decision: an import that invented a column pinned Phone shut at the
+     * instant before the rows arrived, so a sheet carrying a phone number for
+     * every supplier imported perfectly and showed none of them, for ever.
+     */
+    let { ws, vid } = seeded()
+    ws = moveColumn(ws, 'supplier', 'type', -1)
+    expect(visibleColumns(ws, 'supplier').map((c) => c.key)).not.toContain('phone')
+
+    ws = { ...ws, vendorContact: { [vid]: { phone: '98765 43210' } } }
+    expect(visibleColumns(ws, 'supplier').map((c) => c.key)).toContain('phone')
+  })
+
+  it('and a column hidden on purpose stays hidden once it has values', () => {
+    let { ws, vid } = seeded()
+    ws = setHidden(ws, 'supplier', 'phone', true)
+    ws = { ...ws, vendorContact: { [vid]: { phone: '98765 43210' } } }
+    expect(visibleColumns(ws, 'supplier').map((c) => c.key)).not.toContain('phone')
   })
 
   it('keeps a column shown once it is shown on purpose', () => {

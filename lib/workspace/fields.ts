@@ -68,6 +68,41 @@ export const BUILTIN: Record<SheetEntity, BuiltinColumn[]> = {
     { key: 'back', label: 'Back', derived: true },
     { key: 'needed', label: 'Needed by', kind: 'date', aliases: ['needed by', 'required by', 'due', 'delivery date'] },
   ],
+  /*
+   * A quote names two records that must already exist — who quoted, and for
+   * what — so both are identity columns and neither can be hidden. The state
+   * carries no `kind`, which is what keeps it off the import's target list:
+   * accepting a quote writes a rate and turns its rivals down, and a
+   * spreadsheet cell reading "Accepted" must not do any of that quietly.
+   */
+  quote: [
+    { key: 'supplier', label: 'Supplier', kind: 'text', identity: true, aliases: ['name', 'vendor', 'party', 'supplier name', 'quoted by'] },
+    { key: 'item', label: 'Material', kind: 'text', identity: true, aliases: ['material', 'item', 'part', 'description'] },
+    { key: 'state', label: 'Status' },
+    { key: 'price', label: 'Price', kind: 'number', aliases: ['rate', 'unit price', 'quoted rate', 'amount', 'price per unit'] },
+    { key: 'moq', label: 'Smallest order', kind: 'number', aliases: ['moq', 'minimum', 'min order', 'minimum quantity'] },
+    { key: 'lead', label: 'Takes', kind: 'number', aliases: ['lead time', 'lead days', 'delivery days', 'days'] },
+    { key: 'ref', label: 'Their reference', kind: 'text', aliases: ['reference', 'quotation no', 'quote no', 'quotation number'] },
+    { key: 'on', label: 'Quoted on', kind: 'date', aliases: ['date', 'quoted on', 'quotation date'] },
+    { key: 'rfq', label: 'Against', derived: true },
+  ],
+  /*
+   * The order number is issued here, never read from a sheet — two orders
+   * carrying the same number is a thing nobody can untangle afterwards. The
+   * status is importable, unlike a quote's: marking an order shipped has no
+   * consequences beyond saying so.
+   */
+  order: [
+    { key: 'no', label: 'Order', identity: true, derived: true },
+    { key: 'state', label: 'Status', kind: 'choice', aliases: ['status'] },
+    { key: 'vendor', label: 'Supplier', kind: 'text', aliases: ['name', 'supplier name', 'vendor', 'party'] },
+    { key: 'item', label: 'Material', kind: 'text', aliases: ['material', 'item', 'part', 'description'] },
+    { key: 'qty', label: 'Qty', kind: 'number', aliases: ['quantity', 'qty', 'how much'] },
+    { key: 'rate', label: 'Rate', kind: 'number', aliases: ['unit price', 'agreed rate', 'price', 'rate per unit'] },
+    { key: 'total', label: 'Total', derived: true },
+    { key: 'ordered', label: 'Ordered', kind: 'date', aliases: ['ordered on', 'order date', 'po date'] },
+    { key: 'expected', label: 'Expected', kind: 'date', aliases: ['expected on', 'due', 'delivery date', 'promised'] },
+  ],
 }
 
 export const EMPTY_VIEW: TableView = { order: [], hidden: [], labels: {} }
@@ -76,6 +111,8 @@ export const EMPTY_VIEWS: Record<SheetEntity, TableView> = {
   supplier: EMPTY_VIEW,
   material: EMPTY_VIEW,
   rfq: EMPTY_VIEW,
+  quote: EMPTY_VIEW,
+  order: EMPTY_VIEW,
 }
 
 /**
@@ -89,6 +126,8 @@ export const EMPTY_VIEWS: Record<SheetEntity, TableView> = {
 const HIDDEN_UNTIL_USED: Record<string, (ws: Workspace) => boolean> = {
   phone: (ws) => Object.values(ws.vendorContact ?? {}).some((c) => Boolean(c?.phone)),
   email: (ws) => Object.values(ws.vendorContact ?? {}).some((c) => Boolean(c?.email)),
+  // most quotes arrive on WhatsApp with no reference number on them at all
+  ref: (ws) => (ws.quotes ?? []).some((q) => Boolean(q.ref)),
 }
 
 /* -------------------------------------------------------------- reading -- */
@@ -138,9 +177,10 @@ export function resolveColumns(ws: Workspace, entity: SheetEntity): ResolvedColu
       key: b.key,
       label: view.labels?.[b.key] ?? b.label,
       builtin: b,
-      // an untouched view leaves the until-used columns to decide for themselves
+      // a column nobody has decided about is left to the rule; one somebody
+      // has decided about is in `hidden` or in `shown`, and the rule is over
       hidden: (view.hidden ?? []).includes(b.key)
-        || (auto !== undefined && !view.order?.includes(b.key) && !auto(ws)),
+        || (auto !== undefined && !(view.shown ?? []).includes(b.key) && !auto(ws)),
       identity: Boolean(b.identity),
     })
   }
@@ -216,6 +256,7 @@ export function removeField(ws: Workspace, id: string): Workspace {
     views[entity] = {
       order: (v.order ?? []).filter((k) => k !== id),
       hidden: (v.hidden ?? []).filter((k) => k !== id),
+      shown: (v.shown ?? []).filter((k) => k !== id),
       labels: Object.fromEntries(Object.entries(v.labels ?? {}).filter(([k]) => k !== id)),
     }
   }
@@ -247,20 +288,23 @@ function writeView(ws: Workspace, entity: SheetEntity, patch: Partial<TableView>
 /**
  * The arrangement as it stands, written down.
  *
- * Needed the moment anything is changed, because the until-used rule below only
- * applies while a view is untouched — and "untouched" has to mean the whole
- * view, not just the one column. Adding a custom field used to write out the
- * order and nothing else, which quietly promoted Phone and Email from
- * auto-hidden to visible-and-empty. Capturing what is hidden at the same moment
- * keeps every column exactly where it was.
+ * Needed the moment anything is changed, because a partial order means
+ * nothing. What it deliberately does NOT write down is the until-used rule's
+ * current answer: only the columns somebody has actually decided about go into
+ * `hidden`, and a column still governed by the rule is left to it.
+ *
+ * It used to capture the rule's answer as well, which read as careful and was
+ * wrong. Inventing a column during an import pinned Phone, Email and the
+ * quotation reference shut at the instant before the rows arrived — so a sheet
+ * carrying a phone number for every supplier imported perfectly and showed
+ * none of them, for ever.
  */
 function pin(ws: Workspace, entity: SheetEntity): Pick<TableView, 'order' | 'hidden'> {
   const view = ws.views?.[entity] ?? EMPTY_VIEW
   if (view.order?.length) return { order: view.order, hidden: view.hidden ?? [] }
-  const columns = resolveColumns(ws, entity)
   return {
-    order: columns.map((c) => c.key),
-    hidden: columns.filter((c) => c.hidden).map((c) => c.key),
+    order: resolveColumns(ws, entity).map((c) => c.key),
+    hidden: view.hidden ?? [],
   }
 }
 
@@ -275,16 +319,21 @@ export function moveColumn(ws: Workspace, entity: SheetEntity, key: string, by: 
   return writeView(ws, entity, { order: next, hidden })
 }
 
+/**
+ * Hiding or showing a column is a decision, and is recorded as one.
+ *
+ * Both lists are kept because a column with an until-used rule needs three
+ * answers, not two. Showing one has to survive the rule wanting to hide it
+ * again — somebody who un-hides Phone before entering any phone numbers meant
+ * it — and hiding one has to survive the rule wanting to show it.
+ */
 export function setHidden(ws: Workspace, entity: SheetEntity, key: string, hidden: boolean): Workspace {
+  const view = ws.views?.[entity] ?? EMPTY_VIEW
   const pinned = pin(ws, entity)
-  const set = new Set(pinned.hidden)
-  if (hidden) set.add(key); else set.delete(key)
-  /*
-   * Showing a column pins the whole arrangement. Without that, a column hidden
-   * by the until-used rule would go back to hiding itself the moment the last
-   * phone number was deleted, undoing a choice somebody made on purpose.
-   */
-  return writeView(ws, entity, { order: pinned.order, hidden: [...set] })
+  const off = new Set(pinned.hidden)
+  const on = new Set(view.shown ?? [])
+  if (hidden) { off.add(key); on.delete(key) } else { off.delete(key); on.add(key) }
+  return writeView(ws, entity, { order: pinned.order, hidden: [...off], shown: [...on] })
 }
 
 /** Renaming to the built-in name clears the override rather than pinning it. */
@@ -319,6 +368,8 @@ export function pruneCustom(ws: Workspace): Workspace {
     ...ws.vendors.map((v) => v.id),
     ...ws.items.map((i) => i.id),
     ...ws.rfqs.map((r) => r.id),
+    ...ws.quotes.map((q) => q.id),
+    ...ws.orders.map((o) => o.id),
   ])
   const custom: Record<string, Record<string, string>> = {}
   for (const [id, row] of Object.entries(ws.custom ?? {})) {

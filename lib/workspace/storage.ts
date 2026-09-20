@@ -143,6 +143,7 @@ function migrate(raw: Partial<Workspace>): Workspace {
   const view = (v: Partial<TableView> | undefined): TableView => ({
     order: list<string>(v?.order),
     hidden: list<string>(v?.hidden),
+    shown: list<string>(v?.shown),
     labels: map<string>(v?.labels),
   })
   const views = map<Partial<TableView>>(raw.views)
@@ -188,6 +189,10 @@ function migrate(raw: Partial<Workspace>): Workspace {
       supplier: view(views.supplier),
       material: view(views.material),
       rfq: view(views.rfq),
+      // a workspace saved before quotes and orders carried columns arrives with
+      // neither, which is nothing lost: there was nothing arranged to lose
+      quote: view(views.quote),
+      order: view(views.order),
     },
     vendorContact: map(raw.vendorContact),
     sendLog: list(raw.sendLog),

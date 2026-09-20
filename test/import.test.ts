@@ -10,7 +10,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import { emptyWorkspace, issueId } from '@/lib/workspace/defaults'
-import { addField, setValue, valueOf } from '@/lib/workspace/fields'
+import { BUILTIN, addField, resolveColumns, setValue, valueOf } from '@/lib/workspace/fields'
+import { removeQuote } from '@/lib/workspace/sourcing'
 import { buildVendor } from '@/lib/workspace/records'
 import {
   NEW_FIELD, applyImport, planImport, summarise, undoImport,
@@ -294,5 +295,235 @@ describe('undoing the last import', () => {
     expect(after.vendors.map((v) => v.name)).not.toContain('Fourth Supplier')
     expect(after.vendors).toHaveLength(3)
     expect(after.lastImport).toBeUndefined()
+  })
+})
+
+/* ================================================ quotes and orders as lists */
+
+/**
+ * The two lists that were left out when custom columns were written.
+ *
+ * Their own rule, and the reason both of them refuse more rows than the other
+ * lists do: a quote and an order each name two records that have to exist
+ * already. A sheet that quietly invented the supplier AND the material would
+ * leave two masters nobody has described sitting behind a price.
+ */
+describe('bringing in quotes', () => {
+  const withMasters = (): Workspace => {
+    let w = blank()
+    const [w1, vn] = issueId(w, 'VN')
+    w = { ...w1, vendors: [buildVendor({ id: vn, name: 'Shah Metals', paymentTermsDays: 30 })] }
+    const [w2, it] = issueId(w, 'IT')
+    w = {
+      ...w2,
+      items: [{
+        id: it, code: 'CRCA', name: 'CRCA sheet', uom: 'MT', itemClass: 'B',
+        coverageCeilingMonths: 2, moq: 1, safetyStock: 0, avgDailyConsumption: 1,
+        floorConsumptionPerDay: 1, lastPurchaseRate: 0, feeds: [],
+      }],
+    }
+    return w
+  }
+
+  /** header: Supplier | Material | Price | MOQ | Lead | Ref | Date | HSN */
+  const QBODY = [
+    ['Shah Metals', 'CRCA sheet', '61400', '12', '7', 'QTR-88', '15/09/2026', '7209'],
+  ]
+  const QMAP: Mapping[] = [
+    { column: 0, target: 'supplier' },
+    { column: 1, target: 'item' },
+    { column: 2, target: 'price' },
+    { column: 3, target: 'moq' },
+    { column: 4, target: 'lead' },
+    { column: 5, target: 'ref' },
+    { column: 6, target: 'on' },
+    { column: 7, target: NEW_FIELD, create: { label: 'HSN code', kind: 'text' } },
+  ]
+
+  const bring = (ws: Workspace, body = QBODY, map = QMAP) => {
+    const plans = planImport(ws, 'quote', body, map, 'update')
+    return { plans, ...applyImport(ws, 'quote', plans, map, 'quotes.csv', TODAY) }
+  }
+
+  it('writes a quote with every figure off the row', () => {
+    const { ws } = bring(withMasters())
+    expect(ws.quotes).toHaveLength(1)
+    const q = ws.quotes[0]
+    expect(q.unitPrice).toBe(61400)
+    expect(q.moq).toBe(12)
+    expect(q.leadDays).toBe(7)
+    expect(q.ref).toBe('QTR-88')
+    // day-first, the way it is written in India
+    expect(q.on).toBe('2026-09-15')
+  })
+
+  it('and a column the build never heard of, against that quote', () => {
+    const { ws } = bring(withMasters())
+    expect(valueOf(ws, ws.quotes[0].id, ws.fields[0].id)).toBe('7209')
+    expect(ws.fields[0].entity).toBe('quote')
+  })
+
+  it('refuses a row whose supplier is not on file, by name', () => {
+    const plans = planImport(withMasters(), 'quote',
+      [['Nobody Ltd', 'CRCA sheet', '61400', '', '7', '', '', '']], QMAP, 'update')
+    expect(plans[0].status).toBe('skip')
+    expect(plans[0].reason).toContain('Nobody Ltd')
+  })
+
+  it('and one whose material is not, by name', () => {
+    const plans = planImport(withMasters(), 'quote',
+      [['Shah Metals', 'Brass rod', '61400', '', '7', '', '', '']], QMAP, 'update')
+    expect(plans[0].status).toBe('skip')
+    expect(plans[0].reason).toContain('Brass rod')
+  })
+
+  it('and the whole sheet when no column says what was quoted', () => {
+    const noItem: Mapping[] = [{ column: 0, target: 'supplier' }, { column: 2, target: 'price' }]
+    const plans = planImport(withMasters(), 'quote', QBODY, noItem, 'update')
+    expect(plans[0].status).toBe('skip')
+    expect(plans[0].reason).toMatch(/matched to a material/i)
+  })
+
+  it('never lands accepted, however the sheet describes it', () => {
+    /*
+     * Accepting a quote writes the rate and turns its rivals down. A
+     * spreadsheet cell reading "Accepted" must not do any of that, which is
+     * why `state` carries no kind and cannot be mapped at all.
+     */
+    const { ws } = bring(withMasters())
+    expect(ws.quotes[0].state).toBe('received')
+    expect(BUILTIN.quote.find((b) => b.key === 'state')?.kind).toBeUndefined()
+  })
+
+  it('adds the same supplier twice rather than calling the second an edit', () => {
+    // two quotes a week apart are two quotes, not a correction of the first
+    const { ws } = bring(withMasters(), [...QBODY, ...QBODY])
+    expect(ws.quotes).toHaveLength(2)
+    expect(ws.quotes[0].id).not.toBe(ws.quotes[1].id)
+  })
+
+  it('and the undo takes the quotes, the cells and the column away', () => {
+    const before = withMasters()
+    const { ws } = bring(before)
+    const back = undoImport(ws)
+    expect(back.quotes).toEqual([])
+    expect(back.fields).toEqual([])
+    expect(back.custom).toEqual({})
+    // the masters it was hung off are untouched, because it did not create them
+    expect(back.vendors).toHaveLength(1)
+    expect(back.items).toHaveLength(1)
+  })
+})
+
+describe('bringing in orders', () => {
+  const withMasters = (): Workspace => {
+    let w = blank()
+    const [w1, vn] = issueId(w, 'VN')
+    w = { ...w1, vendors: [buildVendor({ id: vn, name: 'Shah Metals', paymentTermsDays: 30 })] }
+    const [w2, it] = issueId(w, 'IT')
+    return {
+      ...w2,
+      items: [{
+        id: it, code: 'CRCA', name: 'CRCA sheet', uom: 'MT', itemClass: 'B',
+        coverageCeilingMonths: 2, moq: 1, safetyStock: 0, avgDailyConsumption: 1,
+        floorConsumptionPerDay: 1, lastPurchaseRate: 0, feeds: [],
+      }],
+    }
+  }
+
+  /** header: Supplier | Material | Qty | Rate | Ordered | Expected | Status */
+  const OMAP: Mapping[] = [
+    { column: 0, target: 'vendor' },
+    { column: 1, target: 'item' },
+    { column: 2, target: 'qty' },
+    { column: 3, target: 'rate' },
+    { column: 4, target: 'ordered' },
+    { column: 5, target: 'expected' },
+    { column: 6, target: 'state' },
+  ]
+  const OBODY = [
+    ['Shah Metals', 'CRCA sheet', '12', '61400', '01/09/2026', '08/09/2026', 'shipped'],
+    ['Shah Metals', 'CRCA sheet', '5', '61000', '10/09/2026', '17/09/2026', 'whatever'],
+  ]
+
+  const bring = (ws: Workspace, body = OBODY) => {
+    const plans = planImport(ws, 'order', body, OMAP, 'update')
+    return { plans, ...applyImport(ws, 'order', plans, OMAP, 'orders.csv', TODAY) }
+  }
+
+  it('numbers each one itself rather than trusting the sheet', () => {
+    const { ws } = bring(withMasters())
+    expect(ws.orders.map((o) => o.no)).toEqual(['PO-1', 'PO-2'])
+  })
+
+  it('reads the dates day-first and the figures as figures', () => {
+    const { ws } = bring(withMasters())
+    expect(ws.orders[0].orderedOn).toBe('2026-09-01')
+    expect(ws.orders[0].expectedOn).toBe('2026-09-08')
+    expect(ws.orders[0].qty).toBe(12)
+    expect(ws.orders[0].unitPrice).toBe(61400)
+  })
+
+  it('takes a status it recognises and falls back to draft, never to a guess', () => {
+    // "whatever" becomes the state that asks a person to look, not one that
+    // claims goods are on their way
+    const { ws } = bring(withMasters())
+    expect(ws.orders[0].state).toBe('shipped')
+    expect(ws.orders[1].state).toBe('draft')
+  })
+
+  it('and the undo removes them without touching the supplier', () => {
+    const { ws } = bring(withMasters())
+    const back = undoImport(ws)
+    expect(back.orders).toEqual([])
+    expect(back.vendors).toHaveLength(1)
+  })
+})
+
+/* ============================================= the columns those lists carry */
+
+describe('the columns a quote and an order ship with', () => {
+  it('cannot hide the two records a quote names', () => {
+    const identity = BUILTIN.quote.filter((b) => b.identity).map((b) => b.key)
+    expect(identity).toEqual(['supplier', 'item'])
+  })
+
+  it('keeps the reference column away until a quote actually has one', () => {
+    const ws = blank()
+    const hiddenOf = (w: Workspace) =>
+      resolveColumns(w, 'quote').find((c) => c.key === 'ref')!.hidden
+    expect(hiddenOf(ws)).toBe(true)
+
+    const withRef: Workspace = {
+      ...ws,
+      quotes: [{
+        id: 'QT-001', vendorId: 'VN-001', itemId: 'IT-001', unitPrice: 1, moq: 0,
+        leadDays: 1, ref: 'QTR-88', state: 'received', on: TODAY,
+      }],
+    }
+    expect(hiddenOf(withRef)).toBe(false)
+  })
+
+  it('never offers the order number as something a sheet can set', () => {
+    // two orders sharing a number is a thing nobody can untangle afterwards
+    expect(BUILTIN.order.find((b) => b.key === 'no')?.derived).toBe(true)
+  })
+
+  it('and a deleted quote takes its own columns with it', () => {
+    let ws: Workspace = {
+      ...blank(),
+      quotes: [{
+        id: 'QT-001', vendorId: 'VN-001', itemId: 'IT-001', unitPrice: 1, moq: 0,
+        leadDays: 1, state: 'received', on: TODAY,
+      }],
+    }
+    const made = addField(ws, { entity: 'quote', label: 'HSN code', kind: 'text' })
+    ws = setValue(made.ws, 'QT-001', made.id, '7209')
+    expect(valueOf(ws, 'QT-001', made.id)).toBe('7209')
+
+    const after = removeQuote(ws, 'QT-001')
+    expect(after.custom['QT-001']).toBeUndefined()
+    // the column itself stays — it is the owner's, not that one quote's
+    expect(after.fields).toHaveLength(1)
   })
 })

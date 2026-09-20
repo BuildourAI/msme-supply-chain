@@ -19,13 +19,28 @@ import {
   buildItem, buildVendor, findItemByCode, findItemByName, findVendorByName,
   parseNumber, parseUom,
 } from '@/lib/workspace/records'
-import { addField, setValue } from '@/lib/workspace/fields'
+import { addField, BUILTIN, setValue } from '@/lib/workspace/fields'
+import { nextNo } from '@/lib/workspace/sourcing'
 import { forgetAlias } from '@/lib/intake/alias'
 import { toIsoDate, toYesNo } from './match'
 import type { Item, StockLot, Vendor } from '@/lib/domain/types'
 import type {
-  FieldDef, FieldKind, ImportUndo, Rfq, SheetEntity, Workspace,
+  FieldDef, FieldKind, ImportUndo, OrderState, PurchaseOrder, Quote, Rfq, SheetEntity, Workspace,
 } from '@/lib/workspace/types'
+
+/**
+ * A status column read back into a state.
+ *
+ * Anything unrecognised lands on draft rather than on a guess: an order the
+ * system is unsure about is one nobody has confirmed, which is the state that
+ * asks a person to look rather than the one that says goods are on their way.
+ */
+const ORDER_STATES: OrderState[] = ['draft', 'confirmed', 'shipped', 'delivered', 'cancelled']
+
+function readOrderState(raw: string): OrderState {
+  const v = raw.trim().toLowerCase()
+  return ORDER_STATES.find((s) => s === v) ?? 'draft'
+}
 
 /** What to do about a row naming something that already exists. */
 export type DupPolicy = 'update' | 'skip' | 'add'
@@ -63,16 +78,32 @@ export interface RowPlan {
   reason?: string
   /** the record it would overwrite */
   matchId?: string
+  /**
+   * The records a row points at, for the lists that name two of them. A quote
+   * is from somebody, for something; one id in `matchId` cannot carry both.
+   */
+  links?: { vendorId: string; itemId: string }
   /** target key → the value as written in the sheet */
   raw: Record<string, string>
 }
 
 /* ----------------------------------------------------------- reading a row -- */
 
-/** Which built-in column names the record, per list. */
+/**
+ * Which built-in column names the record, per list.
+ *
+ * A quote and an order each name two records that have to already exist —
+ * who, and for what — and this is only the first of them. The second is
+ * checked in `planImport`, which is also where the row is refused by name
+ * rather than being quietly written against nothing.
+ */
 const IDENTITY: Record<SheetEntity, string> = {
   supplier: 'name', material: 'name', rfq: 'item',
+  quote: 'supplier', order: 'vendor',
 }
+
+/** The second record a row has to resolve, for the lists that name two. */
+const SECOND: Partial<Record<SheetEntity, string>> = { quote: 'item', order: 'item' }
 
 /**
  * Whether a value fits the column it was matched to.
@@ -80,14 +111,20 @@ const IDENTITY: Record<SheetEntity, string> = {
  * Returns the reason it does not, or null. Every one of these stops the row
  * rather than writing something approximate: a lead time that silently became
  * zero, or a tonne read as a metre, is a number somebody will act on.
+ *
+ * The kind comes from the column's own declaration rather than a list of
+ * target names kept here. The list version had already drifted — it read
+ * "rate" as a number for every entity, which was true of materials and an
+ * accident everywhere else.
  */
-function complain(target: string, value: string, field?: FieldDef): string | null {
+function complain(
+  entity: SheetEntity, target: string, value: string, field?: FieldDef,
+): string | null {
   if (value === '') return null
   const kind: FieldKind | 'uom' | undefined = field
     ? field.kind
-    : target === 'uom' ? 'uom'
-      : target === 'terms' || target === 'qty' || target === 'rate' || target === 'onHand' ? 'number'
-        : target === 'needed' ? 'date' : undefined
+    // a unit is the one built-in whose validation is stricter than its kind
+    : target === 'uom' ? 'uom' : BUILTIN[entity].find((b) => b.key === target)?.kind
 
   if (kind === 'number' && parseNumber(value) === null) return `“${value}” is not a number`
   if (kind === 'date' && toIsoDate(value) === null) return `“${value}” is not a date`
@@ -110,6 +147,8 @@ export function planImport(
   const used = mappings.filter((m) => m.target !== null)
   const identity = IDENTITY[entity]
   const hasIdentity = used.some((m) => m.target === identity)
+  const second = SECOND[entity]
+  const hasSecond = second !== undefined && used.some((m) => m.target === second)
 
   return body.map((row, i) => {
     const line = i + 1
@@ -127,12 +166,15 @@ export function planImport(
     if (!hasIdentity) {
       return plan('skip', { reason: `No column is matched to ${identity === 'item' ? 'a material' : 'a name'}` })
     }
+    if (second !== undefined && !hasSecond) {
+      return plan('skip', { reason: 'No column is matched to a material' })
+    }
     if (name === '') return plan('skip', { reason: 'No name in this row' })
 
     // every mapped value has to make sense before anything is written
     for (const m of used) {
       const field = ws.fields.find((f) => f.id === m.target)
-      const why = complain(m.target!, raw[String(m.column)] ?? '', field)
+      const why = complain(entity, m.target!, raw[String(m.column)] ?? '', field)
       if (why) return plan('skip', { reason: why })
     }
 
@@ -142,6 +184,28 @@ export function planImport(
       const item = findItemByName(ws, name) ?? findItemByCode(ws, name)
       if (!item) return plan('skip', { reason: `No material called “${name}”` })
       return plan('new', { matchId: item.id })
+    }
+
+    if (entity === 'quote' || entity === 'order') {
+      /*
+       * Both ends have to exist, for the same reason a request's material
+       * does: a quote invents neither the supplier who gave it nor the
+       * material it is for, and a row that quietly created both would leave
+       * two records nobody has described sitting in the masters.
+       *
+       * Every row is new. There is no natural key for a quote — the same
+       * supplier can quote the same material twice in a week, and the second
+       * one is a second quote, not a correction of the first.
+       */
+      const vendor = findVendorByName(ws, name)
+      if (!vendor) return plan('skip', { reason: `No supplier called “${name}”` })
+
+      const what = raw[keyOf(second!)] ?? ''
+      if (what === '') return plan('skip', { reason: 'No material in this row' })
+      const item = findItemByName(ws, what) ?? findItemByCode(ws, what)
+      if (!item) return plan('skip', { reason: `No material called “${what}”` })
+
+      return plan('new', { links: { vendorId: vendor.id, itemId: item.id } })
     }
 
     const code = raw[keyOf('code')] ?? ''
@@ -308,6 +372,51 @@ export function applyImport(
         w = { ...w, stockLots: [...w.stockLots.filter((l) => l.id !== lotId), lot] }
       }
       recordId = id
+    } else if (entity === 'quote') {
+      // both ends were resolved by planImport, which refused the row otherwise
+      const [next, id] = issueId(w, 'QT')
+      w = next
+      created.push(id)
+      const quote: Quote = {
+        id,
+        vendorId: plan.links!.vendorId,
+        itemId: plan.links!.itemId,
+        unitPrice: parseNumber(values.price ?? '') ?? 0,
+        moq: parseNumber(values.moq ?? '') ?? 0,
+        leadDays: parseNumber(values.lead ?? '') ?? 0,
+        ref: values.ref || undefined,
+        /*
+         * Always received, however the sheet describes it. Accepting is what
+         * writes the rate and turns the rivals down, and a spreadsheet cell
+         * must not do that on somebody's behalf — which is also why `state`
+         * is not offered as a column to map.
+         */
+        state: 'received',
+        on: toIsoDate(values.on ?? '') ?? today,
+      }
+      w = { ...w, quotes: [...w.quotes, quote] }
+      recordId = id
+    } else if (entity === 'order') {
+      const [next, id] = issueId(w, 'PO')
+      w = next
+      created.push(id)
+      const ordered = toIsoDate(values.ordered ?? '') ?? today
+      const order: PurchaseOrder = {
+        id,
+        // issued here and never read from the sheet: two orders sharing a
+        // number is a thing nobody can untangle afterwards. Read off what is
+        // already there, so a second row in the same import gets the next one
+        no: nextNo('PO', w.orders),
+        vendorId: plan.links!.vendorId,
+        itemId: plan.links!.itemId,
+        qty: parseNumber(values.qty ?? '') ?? 0,
+        unitPrice: parseNumber(values.rate ?? '') ?? 0,
+        orderedOn: ordered,
+        expectedOn: toIsoDate(values.expected ?? '') ?? ordered,
+        state: readOrderState(values.state ?? ''),
+      }
+      w = { ...w, orders: [...w.orders, order] }
+      recordId = id
     } else {
       // a request, against a material that planImport already resolved
       const [next, id] = issueId(w, 'RF')
@@ -394,8 +503,15 @@ export function undoImport(ws: Workspace): Workspace {
     rfqs: w.rfqs.filter((r) => !gone.has(r.id)),
     vendorItems: w.vendorItems.filter((vi) => !gone.has(vi.vendorId) && !gone.has(vi.itemId)),
     stockLots: w.stockLots.filter((l) => !(undo.lotsCreated ?? []).includes(l.id) && !gone.has(l.itemId)),
-    quotes: w.quotes.filter((q) => !gone.has(q.vendorId) && !gone.has(q.itemId) && !(q.rfqId && gone.has(q.rfqId))),
-    orders: w.orders.filter((o) => !gone.has(o.vendorId) && !gone.has(o.itemId)),
+    /*
+     * `gone` now holds quote and order ids too, not only the masters they hang
+     * off — an import into those lists creates the records themselves, so the
+     * undo has to remove them by their own id as well as by a vanished parent.
+     */
+    quotes: w.quotes.filter((q) => !gone.has(q.id)
+      && !gone.has(q.vendorId) && !gone.has(q.itemId) && !(q.rfqId && gone.has(q.rfqId))),
+    orders: w.orders.filter((o) => !gone.has(o.id)
+      && !gone.has(o.vendorId) && !gone.has(o.itemId)),
   }
 
   for (const { id, before } of undo.updated) {
