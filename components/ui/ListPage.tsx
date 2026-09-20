@@ -25,7 +25,7 @@ export interface FilterOption {
 }
 
 export function ListPage<T>({
-  title, noun, rows, search, filter, action, tools, children, empty,
+  title, noun, rows, search, filter, action, tools, children, empty, countOf,
 }: {
   title: string
   /** singular; the count line reads "3 suppliers" */
@@ -57,6 +57,15 @@ export function ListPage<T>({
    * moment somebody has that document open in another window.
    */
   empty?: { line: string; cta?: string; second?: { label: string; onClick: () => void } }
+  /**
+   * What the count line counts, when that is not one per row.
+   *
+   * Purchase orders are the case this exists for: a row is a LINE, and several
+   * lines sharing a number are one order — so a three-line order read "3
+   * orders" and the screen was wrong about the only thing its count line says.
+   * Every other list counts its rows and passes nothing.
+   */
+  countOf?: (rows: T[]) => number
 }) {
   const [q, setQ] = useState('')
   const [pick, setPick] = useState('')
@@ -70,8 +79,9 @@ export function ListPage<T>({
     })
   }, [rows, q, pick, search, filter])
 
-  const total = rows.length
-  const narrowed = shown.length !== total
+  const total = countOf ? countOf(rows) : rows.length
+  const some = countOf ? countOf(shown) : shown.length
+  const narrowed = some !== total
 
   return (
     <div className="mx-auto w-full max-w-[72rem]">
@@ -80,7 +90,7 @@ export function ListPage<T>({
           <h1 className="text-[26px] font-extrabold leading-none tracking-[-0.03em]">{title}</h1>
           <p className="mt-1.5 text-[13px] text-ink-3">
             {narrowed
-              ? `${shown.length} of ${total} ${total === 1 ? noun : `${noun}s`}`
+              ? `${some} of ${total} ${total === 1 ? noun : `${noun}s`}`
               : `${total} ${total === 1 ? noun : `${noun}s`}`}
           </p>
         </div>

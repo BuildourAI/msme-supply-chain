@@ -9,13 +9,15 @@
 import { describe, expect, it } from 'vitest'
 import { emptyWorkspace } from '@/lib/workspace/defaults'
 import { parseStored } from '@/lib/workspace/storage'
+import { sourcingNav } from '@/lib/workspace/reveal'
 import { quoteState } from '@/lib/workspace/types'
 import type { PurchaseOrder, Quote, QuoteLine, Rfq, Workspace } from '@/lib/workspace/types'
 import type { Item, Vendor, VendorItem } from '@/lib/domain/types'
 import {
-  acceptAll, acceptLine, addDays, itemImpact, materialRows, nextNo, orderFromQuote,
-  orderRows, quoteGroups, rejectLine, removeItem, removeQuote, removeRfq, removeVendor,
-  rfqRows, rfqStateFrom, supplierRows, syncRfqStates, vendorImpact,
+  acceptAll, acceptLine, addDays, draftOrderFrom, itemImpact, materialRows, nextNo,
+  orderFromQuote, orderRows, quoteGroups, rejectLine, removeItem, removeQuote, removeRfq,
+  removeVendor, rfqRows, rfqStateFrom, supplierRows, syncRfqStates, unorderedLines,
+  vendorImpact,
 } from '@/lib/workspace/sourcing'
 
 const TODAY = '2026-09-18'
@@ -339,6 +341,140 @@ describe('accepting a quote', () => {
     const ws = base()
     ws.vendorItems = [rate({ isPreferred: true })]
     expect(acceptLine(ws, 'QT-001', 'QT-001/1').vendorItems[0].isPreferred).toBe(true)
+  })
+})
+
+/* ================================ three prices agreed is one order, not three */
+
+/**
+ * What the supplier receives.
+ *
+ * Taking three prices off a five-line quotation used to make three purchase
+ * orders, which meant three numbers, three documents and three messages to the
+ * same person about the same quotation. Nothing else in the build worked that
+ * way: `OrderForm` issues one number and gives it to every line, `buildPo`
+ * renders by number, and handing it over confirms by number.
+ */
+describe('drafting an order off a quotation', () => {
+  const fiveLines = () => {
+    const ws = setUp()
+    ws.items = [
+      item(),
+      item({ id: 'IT-002', code: 'GLAND', name: 'Brass gland' }),
+      item({ id: 'IT-003', code: 'ROCK', name: 'Rockwool' }),
+    ]
+    ws.rfqs = []
+    ws.quotes = [quote({
+      rfqId: undefined,
+      lines: [
+        line({ id: 'QT-001/1', itemId: 'IT-001', unitPrice: 780, moq: 200, leadDays: 7 }),
+        line({ id: 'QT-001/2', itemId: 'IT-002', unitPrice: 46, moq: 100, leadDays: 21 }),
+        line({ id: 'QT-001/3', itemId: 'IT-003', unitPrice: 164, moq: 50, leadDays: 10 }),
+      ],
+    })]
+    return ws
+  }
+
+  /** take the first and the third, leave the second */
+  const twoTaken = () => {
+    let ws = acceptLine(fiveLines(), 'QT-001', 'QT-001/1')
+    ws = acceptLine(ws, 'QT-001', 'QT-001/3')
+    return ws
+  }
+
+  it('puts every price you took on one order', () => {
+    const ws = draftOrderFrom(twoTaken(), 'QT-001', TODAY)
+    expect(ws.orders).toHaveLength(2)
+    expect(new Set(ws.orders.map((o) => o.no)).size).toBe(1)
+    expect(ws.orders.map((o) => o.itemId)).toEqual(['IT-001', 'IT-003'])
+  })
+
+  it('and leaves out the price you did not take', () => {
+    const ws = draftOrderFrom(twoTaken(), 'QT-001', TODAY)
+    expect(ws.orders.some((o) => o.itemId === 'IT-002')).toBe(false)
+  })
+
+  it('every line a draft, because §11 says a person places it', () => {
+    const ws = draftOrderFrom(twoTaken(), 'QT-001', TODAY)
+    expect(ws.orders.every((o) => o.state === 'draft')).toBe(true)
+  })
+
+  it('each keeping its own quantity, rate and delivery date', () => {
+    // the lead times differ — 7 days against 10 — and each line keeps its own.
+    // `buildPo` heads the page with the latest, which is its business.
+    const ws = draftOrderFrom(twoTaken(), 'QT-001', TODAY)
+    expect(ws.orders.map((o) => o.unitPrice)).toEqual([780, 164])
+    expect(ws.orders.map((o) => o.qty)).toEqual([200, 50])
+    expect(ws.orders.map((o) => o.expectedOn)).toEqual([addDays(TODAY, 7), addDays(TODAY, 10)])
+  })
+
+  it('remembers which price each line came from', () => {
+    const ws = draftOrderFrom(twoTaken(), 'QT-001', TODAY)
+    expect(ws.orders.map((o) => o.quoteLineId)).toEqual(['QT-001/1', 'QT-001/3'])
+    expect(ws.orders.every((o) => o.quoteId === 'QT-001')).toBe(true)
+  })
+
+  it('does not order the same price twice', () => {
+    // the button is still there while other prices are unordered, and pressing
+    // it again must not re-order what is already on the page
+    const once = draftOrderFrom(twoTaken(), 'QT-001', TODAY)
+    const twice = draftOrderFrom(once, 'QT-001', TODAY)
+    expect(twice.orders).toHaveLength(2)
+  })
+
+  it('and has nothing to draft when nothing was accepted', () => {
+    const ws = fiveLines()
+    expect(draftOrderFrom(ws, 'QT-001', TODAY).orders).toEqual([])
+  })
+
+  it('accepting more afterwards joins the order still sitting in draft', () => {
+    let ws = draftOrderFrom(twoTaken(), 'QT-001', TODAY)
+    ws = acceptLine(ws, 'QT-001', 'QT-001/2')
+    ws = draftOrderFrom(ws, 'QT-001', TODAY)
+
+    expect(ws.orders).toHaveLength(3)
+    expect(new Set(ws.orders.map((o) => o.no)).size).toBe(1)
+  })
+
+  it('but starts a new one once the first has been handed over', () => {
+    /*
+     * A confirmed order is one the supplier is holding. Appending to it
+     * silently would leave them with a page that no longer says what you
+     * think it says.
+     */
+    let ws = draftOrderFrom(twoTaken(), 'QT-001', TODAY)
+    ws = { ...ws, orders: ws.orders.map((o) => ({ ...o, state: 'confirmed' as const })) }
+    ws = acceptLine(ws, 'QT-001', 'QT-001/2')
+    ws = draftOrderFrom(ws, 'QT-001', TODAY)
+
+    expect(ws.orders).toHaveLength(3)
+    expect(new Set(ws.orders.map((o) => o.no)).size).toBe(2)
+  })
+
+  it('a cancelled line is not an ordered one', () => {
+    // calling an order off is how you undo it; the price is still agreed
+    let ws = draftOrderFrom(twoTaken(), 'QT-001', TODAY)
+    ws = { ...ws, orders: ws.orders.map((o) => ({ ...o, state: 'cancelled' as const })) }
+    expect(unorderedLines(ws.orders, ws.quotes[0]).map((l) => l.id))
+      .toEqual(['QT-001/1', 'QT-001/3'])
+  })
+
+  it('counts as ONE open order in the rail, not one per line', () => {
+    /*
+     * The badge and the screen's count line both say "orders". A row is a
+     * line, so counting rows made a three-line order to one supplier read as
+     * three orders in the rail — which is the same mistake the Quotes screen
+     * was making about quotations.
+     */
+    const ws = draftOrderFrom(twoTaken(), 'QT-001', TODAY)
+    expect(ws.orders).toHaveLength(2)
+    expect(sourcingNav(ws, TODAY).find((r) => r.label === 'Purchase orders')?.badge).toBe('1')
+  })
+
+  it('and the numbering still counts up from the highest ever issued', () => {
+    const ws = draftOrderFrom(twoTaken(), 'QT-001', TODAY)
+    expect(ws.orders[0].no).toBe('PO-1')
+    expect(nextNo('PO', ws.orders)).toBe('PO-2')
   })
 })
 

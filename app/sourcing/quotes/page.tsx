@@ -12,12 +12,13 @@ import { ConfirmDelete } from '@/components/sourcing/ConfirmDelete'
 import { DeskOnly } from '@/components/sourcing/DeskOnly'
 import { useWorkspace } from '@/components/workspace/store'
 import {
-  acceptAll, acceptLine, expired, nextNo, orderFromQuote, quoteGroups, rejectLine,
-  removeQuote, type QuoteLineRow, type QuoteRow,
+  acceptAll, acceptLine, draftOrderFrom, expired, quoteGroups, rejectLine, removeQuote,
+  unorderedLines, type QuoteLineRow, type QuoteRow,
 } from '@/lib/workspace/sourcing'
-import { issueId } from '@/lib/workspace/defaults'
 import { money, num, shortDate } from '@/lib/domain/format'
-import { quoteState, type Quote, type QuoteState } from '@/lib/workspace/types'
+import {
+  quoteState, type PurchaseOrder, type Quote, type QuoteState,
+} from '@/lib/workspace/types'
 import type { SupplierDoc } from '@/lib/intake/types'
 
 /**
@@ -188,16 +189,16 @@ function Quotes() {
   const reject = (r: QuoteLineRow) => update((w) => rejectLine(w, r.quote.id, r.line.id))
   const takeAll = (r: QuoteRow) => update((w) => acceptAll(w, r.quote.id))
 
-  const draftOrder = (r: QuoteLineRow) => {
-    update((w) => {
-      const [after, id] = issueId(w, 'PO')
-      const draft = orderFromQuote(after, r.quote, r.line, today)
-      return {
-        ...after,
-        orders: [...after.orders, { ...draft, id, no: nextNo('PO', after.orders) }],
-      }
-    })
-  }
+  /*
+   * One order for everything taken off one quotation.
+   *
+   * It used to be a button per line, and each press issued its own number — so
+   * taking three prices off a five-line quotation made three orders, three
+   * documents and three messages to the same supplier. The rest of the build
+   * never worked that way: the order form issues one number for all its lines,
+   * the document renders by number, and handing it over confirms by number.
+   */
+  const draftOrder = (r: QuoteRow) => update((w) => draftOrderFrom(w, r.quote.id, today))
 
   return (
     <>
@@ -269,6 +270,7 @@ function Quotes() {
                           doc={docOf(r.quote)} header={header} detail={detail}
                           itemHead={itemHead} low={low} seen={seen}
                           onView={setViewing}
+                          orders={ws.orders}
                           onAccept={accept} onReject={reject} onAcceptAll={takeAll}
                           onDraft={draftOrder}
                           onEdit={() => setEditing(r.quote)}
@@ -320,12 +322,14 @@ function Quotes() {
  * Each line carries only what is true of that price.
  */
 function Quotation({
-  row, today, doc, header, detail, itemHead, low, seen,
+  row, today, doc, header, detail, itemHead, low, seen, orders,
   onView, onAccept, onReject, onAcceptAll, onDraft, onEdit, onDelete,
 }: {
   row: QuoteRow
   today: string
   doc: SupplierDoc | undefined
+  /** every order, so a line can say which one it already went onto */
+  orders: PurchaseOrder[]
   header: Drawn[]
   detail: Drawn[]
   /** what the owner calls the material column, which they can rename */
@@ -336,7 +340,7 @@ function Quotation({
   onAccept: (r: QuoteLineRow) => void
   onReject: (r: QuoteLineRow) => void
   onAcceptAll: (r: QuoteRow) => void
-  onDraft: (r: QuoteLineRow) => void
+  onDraft: (r: QuoteRow) => void
   onEdit: () => void
   onDelete: () => void
 }) {
@@ -346,6 +350,17 @@ function Quotation({
   // the header facts are the same on every line, so any line can state them
   const first = lines[0]
   const untaken = lines.filter((l) => l.line.state === 'received')
+
+  /*
+   * What is agreed but not yet ordered, and what the rest already went onto.
+   * Both read off `quoteLineId`, so a line cannot be ordered twice and a line
+   * already on an order says which.
+   */
+  const pending = unorderedLines(orders, quote)
+  const onOrder = new Map(
+    orders.filter((o) => o.quoteLineId && o.state !== 'cancelled')
+      .map((o) => [o.quoteLineId as string, o.no]),
+  )
 
   return (
     <article className={`rounded-xl border bg-surface p-4 ${
@@ -449,11 +464,17 @@ function Quotation({
                       {r.line.state === 'accepted' ? (
                         <>
                           <StatePill label={LABEL.accepted} tone={TONE.accepted} />
-                          <button type="button" onClick={() => onDraft(r)}
-                            title="Draft an order from this price. Nothing is sent."
-                            className="press rounded-md border border-line bg-surface px-2 py-1 text-[12px] font-medium hover:bg-surface-2">
-                            Draft an order
-                          </button>
+                          {/*
+                            * Which order it went onto, rather than a button to
+                            * make another one. Drafting is a thing you do to
+                            * the quotation, not to a line of it.
+                            */}
+                          {onOrder.get(r.line.id) && (
+                            <span className="mono text-[11.5px] text-ink-3"
+                              title={`This price is on ${onOrder.get(r.line.id)}`}>
+                              {onOrder.get(r.line.id)}
+                            </span>
+                          )}
                         </>
                       ) : r.line.state === 'rejected' ? (
                         <>
@@ -492,13 +513,28 @@ function Quotation({
         * Only offered where there is more than one price left to take — on a
         * single-line quotation it would be the same button twice.
         */}
-      {untaken.length > 1 && (
-        <div className="mt-2.5 flex border-t border-line-soft pt-2.5">
-          <button type="button" onClick={() => onAcceptAll(row)}
-            title={`Take all ${untaken.length} prices on this quotation`}
-            className="press rounded-md border border-line bg-surface px-2.5 py-1 text-[12px] font-medium hover:bg-surface-2">
-            Accept all {untaken.length}
-          </button>
+      {(untaken.length > 1 || pending.length > 0) && (
+        <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t border-line-soft pt-2.5">
+          {untaken.length > 1 && (
+            <button type="button" onClick={() => onAcceptAll(row)}
+              title={`Take all ${untaken.length} prices on this quotation`}
+              className="press rounded-md border border-line bg-surface px-2.5 py-1 text-[12px] font-medium hover:bg-surface-2">
+              Accept all {untaken.length}
+            </button>
+          )}
+          {/*
+            * One order for everything taken off this quotation, which is what
+            * an order to a supplier is. Three prices agreed is one page they
+            * can act on, not three arriving separately.
+            */}
+          {pending.length > 0 && (
+            <button type="button" onClick={() => onDraft(row)}
+              title={`Draft one order to ${vendor?.name ?? 'them'} for the ${
+                pending.length === 1 ? 'price' : `${pending.length} prices`} you took. Nothing is sent.`}
+              className="press ml-auto rounded-md border border-accent-ink bg-accent-ink px-2.5 py-1 text-[12px] font-semibold text-on-accent hover:bg-accent">
+              Draft an order{pending.length > 1 ? ` · ${pending.length} lines` : ''}
+            </button>
+          )}
         </div>
       )}
     </article>

@@ -48,7 +48,12 @@ export const BUILT: StageId[] = ['sourcing']
  * a job for the screen rather than the menu.
  */
 export function sourcingNav(ws: Workspace, today = ''): NavRow[] {
-  const open = ws.orders.filter((o) => o.state !== 'delivered' && o.state !== 'cancelled').length
+  // by NUMBER, not by row: several lines sharing one are one order, so a
+  // three-line order to one supplier must not badge as three
+  const open = new Set(
+    ws.orders.filter((o) => o.state !== 'delivered' && o.state !== 'cancelled')
+      .map((o) => o.no),
+  ).size
   const waiting = ws.rfqs.filter((r) => r.state === 'sent' || r.state === 'quoted').length
   const unfiled = ws.docs.filter((d) => d.status === 'draft').length
   return [

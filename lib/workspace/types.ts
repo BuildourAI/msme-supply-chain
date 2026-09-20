@@ -163,8 +163,17 @@ export interface PurchaseOrder {
   orderedOn: string
   expectedOn: string
   state: OrderState
-  /** the quote it came from, when it came from one */
+  /** the quotation it came from, when it came from one */
   quoteId?: string
+  /**
+   * And which price on it.
+   *
+   * The quotation alone is not enough to tell whether a line has been ordered
+   * already: three prices taken off one quotation share a `quoteId`, and a
+   * quotation can carry two lines for the same material. Without this, drafting
+   * again after accepting two more prices would re-order the first three.
+   */
+  quoteLineId?: string
 }
 
 /**

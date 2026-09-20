@@ -14,6 +14,7 @@
  * there — a quote recorded against a request moves the request on by itself.
  */
 import type { Item, Vendor } from '@/lib/domain/types'
+import { issueId } from './defaults'
 import { pruneCustom } from './fields'
 import { repriceTerms } from './landed'
 import { backfillRates, buildRate } from './records'
@@ -238,9 +239,15 @@ export function syncRfqStates(ws: Workspace): Workspace {
 }
 
 /**
- * An order prefilled from a quote. It is offered, never posted: §11 has said
- * from the start that the system suggests and drafts, and that a person places
- * the order. Accepting a price is not the same act as committing the money.
+ * One line of an order, prefilled from one price on a quotation.
+ *
+ * It is offered, never posted: §11 has said from the start that the system
+ * suggests and drafts, and that a person places the order. Accepting a price
+ * is not the same act as committing the money.
+ *
+ * The number it carries is a placeholder — `draftOrderFrom` below issues one
+ * number for the whole draft and writes it over every line, because that is
+ * what makes several lines one order.
  */
 export function orderFromQuote(
   ws: Workspace, quote: Quote, line: QuoteLine, today: string,
@@ -260,7 +267,62 @@ export function orderFromQuote(
     expectedOn: addDays(today, line.leadDays || 0),
     state: 'draft',
     quoteId: quote.id,
+    quoteLineId: line.id,
   }
+}
+
+/**
+ * The prices taken off a quotation that are not on an order yet.
+ *
+ * Cancelled lines do not count as ordered — calling an order off is how you
+ * undo it, and the price you agreed to is still agreed to.
+ */
+export function unorderedLines(orders: PurchaseOrder[], quote: Quote): QuoteLine[] {
+  const already = new Set(
+    orders
+      .filter((o) => o.state !== 'cancelled' && o.quoteLineId)
+      .map((o) => o.quoteLineId as string),
+  )
+  return quote.lines.filter((l) => l.state === 'accepted' && !already.has(l.id))
+}
+
+/**
+ * Everything accepted on one quotation, drafted as ONE order.
+ *
+ * Three prices taken off a five-line quotation is one order to that supplier
+ * for three materials — not three orders, three documents and three WhatsApp
+ * messages to the same person on the same afternoon. The number is what makes
+ * them one: `OrderForm` has always issued one number and given it to every
+ * line, `buildPo` renders by number, and handing it over confirms by number.
+ * This is the quote route finally doing the same.
+ *
+ * Accepting two more prices afterwards joins the draft that is already
+ * standing rather than starting a second order — but only while it is still a
+ * draft. Once it has been handed over the supplier has your order, and
+ * appending to it silently would mean they hold a page that no longer says
+ * what you think it says.
+ *
+ * Differing lead times need nothing here: `buildPo` heads the page with the
+ * latest expected date of its lines, for reasons it explains itself.
+ */
+export function draftOrderFrom(ws: Workspace, quoteId: string, today: string): Workspace {
+  const quote = ws.quotes.find((q) => q.id === quoteId)
+  if (!quote) return ws
+
+  const pending = unorderedLines(ws.orders, quote)
+  if (pending.length === 0) return ws
+
+  const standing = ws.orders.find((o) => o.quoteId === quoteId && o.state === 'draft')
+  const no = standing?.no ?? nextNo('PO', ws.orders)
+
+  let w = ws
+  const made: PurchaseOrder[] = []
+  for (const line of pending) {
+    const [next, id] = issueId(w, 'PO')
+    w = next
+    made.push({ ...orderFromQuote(w, quote, line, today), id, no })
+  }
+  return { ...w, orders: [...w.orders, ...made] }
 }
 
 export function addDays(iso: string, days: number): string {

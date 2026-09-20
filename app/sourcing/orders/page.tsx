@@ -142,6 +142,13 @@ function Orders() {
     <>
       <ListPage
         title="Purchase orders" noun="order" rows={rows}
+        /*
+         * A row is a line; several lines sharing a number are one order. Both
+         * the count line and the money below the table say orders, so both
+         * count numbers — otherwise a three-line order to one supplier reads
+         * as three orders on the screen and in the rail badge.
+         */
+        countOf={(rs) => new Set(rs.map((r) => r.order.no)).size}
         search={(r) => `${r.order.no} ${r.vendor?.name ?? ''} ${r.item?.name ?? ''} ${kit.searchText(r)}`}
         filter={{
           label: 'All statuses',
@@ -174,14 +181,17 @@ function Orders() {
               editLabel={(r) => `Edit ${r.order.no}`}
               deleteLabel={(r) => `Delete ${r.order.no}`}
             />
-            {outstanding.length > 0 && (
-              <p className="mt-3 text-[12.5px] text-ink-3">
-                <span className="num font-medium text-ink-2">
-                  {money(outstanding.reduce((a, r) => a + r.total, 0))}
-                </span>
-                {' '}still out across {outstanding.length} order{outstanding.length === 1 ? '' : 's'}
-              </p>
-            )}
+            {outstanding.length > 0 && (() => {
+              const open = new Set(outstanding.map((r) => r.order.no)).size
+              return (
+                <p className="mt-3 text-[12.5px] text-ink-3">
+                  <span className="num font-medium text-ink-2">
+                    {money(outstanding.reduce((a, r) => a + r.total, 0))}
+                  </span>
+                  {' '}still out across {open} order{open === 1 ? '' : 's'}
+                </p>
+              )
+            })()}
           </>
         )}
       </ListPage>
