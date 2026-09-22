@@ -17,6 +17,7 @@ import type { Item, Vendor } from '@/lib/domain/types'
 import { highestIssued } from './defaults'
 import { SCHEMA } from './types'
 import type {
+  RateChange,
   FieldDef, GoodsReceipt, PurchaseOrder, Quote, QuoteLine, QuoteState, Rfq, SendEntry, Session,
   TableView, Workspace, WorkspaceMode,
 } from './types'
@@ -247,6 +248,7 @@ function migrate(raw: Partial<Workspace>): Workspace {
   seed('CF', list<FieldDef>(raw.fields))
   seed('SD', docs)
   seed('GR', receipts)
+  seed('RC', list<RateChange>(raw.rateLog))
 
   const view = (v: Partial<TableView> | undefined): TableView => ({
     order: list<string>(v?.order),
@@ -297,6 +299,13 @@ function migrate(raw: Partial<Workspace>): Workspace {
      * is that lead times and rejection rates stop being what somebody typed.
      */
     receipts,
+    /*
+     * Empty on anything saved before rates were logged, which is honest: a
+     * price that moved before there was a log is a move nobody recorded, and
+     * inventing a history from the current rate would put a straight line
+     * through months that were not flat.
+     */
+    rateLog: list<RateChange>(raw.rateLog),
     fields: list(raw.fields),
     custom: remapCells(wereQuotes, quotes, map(raw.custom)),
     views: {
@@ -330,6 +339,13 @@ function migrate(raw: Partial<Workspace>): Workspace {
     nextIds,
     schema: SCHEMA,
     drafts: map(raw.drafts),
+    /*
+     * Both optional and both meaning something by their absence: nobody has
+     * chosen which figures to show, and nobody has waved a comparison through.
+     * `undefined` is not the same as an empty one, so neither is defaulted.
+     */
+    metricPicks: raw.metricPicks,
+    reviewedFlips: map<string>(raw.reviewedFlips),
   }
 }
 

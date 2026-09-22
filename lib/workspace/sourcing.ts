@@ -20,7 +20,7 @@ import { repriceTerms } from './landed'
 import { backfillRates, buildRate } from './records'
 import { quoteState } from './types'
 import type {
-  OrderState, PurchaseOrder, Quote, QuoteLine, Rfq, RfqState, Workspace,
+  OrderState, PurchaseOrder, Quote, QuoteLine, RateChange, Rfq, RfqState, Workspace,
 } from './types'
 
 /* ------------------------------------------------------------- numbering -- */
@@ -633,7 +633,7 @@ function writeRate(ws: Workspace, quote: Quote, line: QuoteLine): Workspace {
     validUntil: validUntilOf(ws, quote),
   }, previous)
 
-  return repriceTerms({
+  return repriceTerms(logRate({
     ...ws,
     // §13-1 — a material never bought is valued at the first rate agreed for it
     items: backfillRates(ws.items, [rate]),
@@ -643,7 +643,24 @@ function writeRate(ws: Workspace, quote: Quote, line: QuoteLine): Workspace {
       ),
       rate,
     ],
-  })
+  }, { vendorId: quote.vendorId, itemId: line.itemId, was: previous?.rate ?? 0,
+    now: line.unitPrice, on: quote.on, via: 'quote' }))
+}
+
+/**
+ * A rate moving, written down.
+ *
+ * `VendorItem` holds the current rate and nothing else, so a supplier putting
+ * their price up used to leave no trace: "has steel gone up?" had nowhere to
+ * look. A move of nothing is not a move and is not logged — re-accepting the
+ * same price is not news.
+ */
+export function logRate(
+  ws: Workspace, move: Omit<RateChange, 'id'>,
+): Workspace {
+  if (move.was === move.now) return ws
+  const [w, id] = issueId(ws, 'RC')
+  return { ...w, rateLog: [...(w.rateLog ?? []), { ...move, id }] }
 }
 
 /**

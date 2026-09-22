@@ -73,7 +73,7 @@ export function issueId(ws: Workspace, prefix: string): [Workspace, string] {
 }
 
 /** Every prefix the workspace issues, so a stored counter can be seeded. */
-export const ID_PREFIXES = ['VN', 'IT', 'RF', 'QT', 'PO', 'CF', 'SD'] as const
+export const ID_PREFIXES = ['VN', 'IT', 'RF', 'QT', 'PO', 'CF', 'SD', 'GR', 'RC'] as const
 
 /**
  * A code suggested from the material's name: first letters of the first two
@@ -108,6 +108,7 @@ export function emptyWorkspace(input: {
     owner: { name: input.ownerName.trim(), contact: input.contact.trim() },
     company: { name: input.companyName.trim(), makes: input.makes.trim() },
     people: [{ name: input.ownerName.trim(), role: input.role ?? 'owner' }],
+    rateLog: [],
     categories: {
       supplierType: [...STARTER_CATEGORIES.supplierType],
       materialGroup: [...STARTER_CATEGORIES.materialGroup],

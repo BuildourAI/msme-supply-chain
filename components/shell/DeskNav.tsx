@@ -1,4 +1,5 @@
 'use client'
+import { useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Icon, Logo } from '@/components/ui/icons'
@@ -16,11 +17,20 @@ import { sourcingNav, stageOf, STAGE_TILES } from '@/lib/workspace/reveal'
 export function DeskNav({ onNavigate }: { onNavigate?: () => void }) {
   const { workspace, today } = useWorkspace()
   const pathname = usePathname()
+  /*
+   * Above the early return, because a hook cannot be called conditionally.
+   * The dashboard badge runs the reorder derivation, so this is not free — it
+   * is recomputed when the workspace changes, not on every render of every
+   * screen.
+   */
+  const rows = useMemo(
+    () => (workspace ? sourcingNav(workspace, today) : []),
+    [workspace, today],
+  )
   if (!workspace) return null
 
   const stage = stageOf(pathname) ?? 'sourcing'
   const tile = STAGE_TILES.find((s) => s.id === stage)!
-  const rows = sourcingNav(workspace, today)
 
   return (
     <>

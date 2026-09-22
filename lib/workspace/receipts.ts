@@ -156,6 +156,9 @@ export function recordReceipt(ws: Workspace, r: ReceiptInput): Workspace {
     rejected: r.rejected,
     note: r.note?.trim() || undefined,
     orderedOn: r.order.orderedOn,
+    // the promise, copied for the same reason the order date is: whether this
+    // delivery was late must not change because somebody edits the order later
+    expectedOn: r.order.expectedOn,
     receivedOn: r.receivedOn,
   }
   w = { ...w, receipts: [...(w.receipts ?? []), receipt] }

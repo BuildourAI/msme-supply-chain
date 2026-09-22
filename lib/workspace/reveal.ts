@@ -12,6 +12,9 @@
  * useless for that.
  */
 import type { IconName } from '@/components/ui/icons'
+import { buildRows } from '@/lib/domain/derive'
+import { bundleFor } from './bundle'
+import { openCount } from './decisions'
 import { staleRates } from './sourcing'
 import type { Workspace } from './types'
 
@@ -57,7 +60,24 @@ export function sourcingNav(ws: Workspace, today = ''): NavRow[] {
   const waiting = ws.rfqs.filter((r) => r.state === 'sent' || r.state === 'quoted').length
   const unfiled = ws.docs.filter((d) => d.status === 'draft').length
   return [
-    { label: 'Dashboard', href: '/sourcing/dashboard', icon: 'activity', later: true },
+    /*
+     * The badge is the length of the work queue, so it is the one number on
+     * the rail that goes DOWN when somebody does something — and the only one
+     * that counts things from every other row at once, which is the point of
+     * the screen it leads to.
+     *
+     * It runs the same derivation the dashboard runs. Doing it the cheap way,
+     * without the at-risk rows, would have the rail say 2 and the screen it
+     * opens say 3 — a badge that disagrees with its own page is worse than no
+     * badge. It is arithmetic over a handful of materials, and the desk has
+     * always run it on every render.
+     */
+    {
+      label: 'Dashboard',
+      href: '/sourcing/dashboard',
+      icon: 'activity',
+      badge: count(openCount(ws, today, atRisk(ws, today))),
+    },
     { label: 'Suppliers', href: '/sourcing/suppliers', icon: 'truck', badge: count(ws.vendors.length) },
     /*
      * Straight after Suppliers, because documents are how suppliers arrive. The
@@ -91,6 +111,16 @@ export function sourcingNav(ws: Workspace, today = ''): NavRow[] {
 }
 
 const count = (n: number) => (n > 0 ? String(n) : undefined)
+
+/**
+ * The materials the desk says are in trouble.
+ *
+ * Empty when no date is in hand — `CommandSearch` asks for the rows to know
+ * what screens exist, not what is on fire, and a reorder point worked out
+ * against an empty date would be arithmetic on a NaN.
+ */
+const atRisk = (ws: Workspace, today: string) =>
+  (today ? buildRows(bundleFor(ws, today), ws.policy) : [])
 
 /**
  * Materials where the supplier who quoted least is not the one who costs least.

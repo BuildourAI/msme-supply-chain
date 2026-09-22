@@ -153,6 +153,25 @@ export function quoteState(q: Quote): QuoteState {
   return 'received'
 }
 
+/**
+ * A rate changing, kept because nothing else remembers that it did.
+ *
+ * `VendorItem` holds one rate — the current one — so a supplier putting their
+ * price up left no trace at all. An owner asking "has steel gone up?" had
+ * nowhere to look. Appended to, never edited: this is what happened.
+ */
+export interface RateChange {
+  id: string
+  vendorId: string
+  itemId: string
+  /** what it was. Zero when this is the first rate ever agreed for the pairing */
+  was: number
+  now: number
+  on: string
+  /** what caused it — taking a quotation's price, or typing it in */
+  via: 'quote' | 'entered'
+}
+
 export interface PurchaseOrder {
   id: string
   no: string
@@ -211,6 +230,17 @@ export interface GoodsReceipt {
    * corrected a date last month is not a measurement.
    */
   orderedOn: string
+  /**
+   * And what was promised, copied off the order for the same reason.
+   *
+   * On-time is a comparison against the date the supplier gave. If it were
+   * looked up when the tile is drawn, correcting a delivery date next month
+   * would change whether last month's delivery was late — which is not a
+   * measurement, it is a rewrite. Optional: receipts recorded before this
+   * existed have no promise to be judged against, and are left out of the
+   * figure rather than counted as on time.
+   */
+  expectedOn?: string
   receivedOn: string
 }
 
@@ -398,6 +428,8 @@ export interface Workspace {
   orders: PurchaseOrder[]
   /** and what actually turned up, which is the only thing that measures anybody */
   receipts: GoodsReceipt[]
+  /** every time a rate moved, so "has it gone up?" has an answer */
+  rateLog: RateChange[]
   /** the columns the owner invented, and what each record holds in them */
   fields: FieldDef[]
   /**
@@ -435,6 +467,27 @@ export interface Workspace {
   schema?: number
   /** a wizard closed halfway reopens where it was */
   drafts: Record<string, unknown>
+  /**
+   * Which figures the owner keeps on the dashboard.
+   *
+   * Undefined means they have never chosen, and the default set stands. An
+   * empty array is a choice — somebody who wants the work queue and nothing
+   * else — so it is not the same as never having decided.
+   */
+  metricPicks?: string[]
+  /**
+   * Flips the owner has looked at and decided to leave.
+   *
+   * itemId → what the comparison looked like when they looked. "I know
+   * somebody is cheaper and I am staying with them" is a real decision, and
+   * without somewhere to put it the queue asks the same question every
+   * morning until the owner stops reading the queue.
+   *
+   * It stores the shape of the comparison rather than a date, so the question
+   * comes back when the answer might have changed — a new rate, a different
+   * supplier winning — and not merely because a week passed.
+   */
+  reviewedFlips?: Record<string, string>
 }
 
 /**
