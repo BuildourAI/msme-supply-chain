@@ -283,6 +283,37 @@ describe('the work queue', () => {
     expect(decisionsFor(ws, TODAY).some((d) => d.kind === 'unordered')).toBe(false)
   })
 
+  it('asks for a quantity when nothing in the records could give one', () => {
+    /*
+     * The bottom rung of `orderQtyFor`: nobody asked for it, the desk is not
+     * short of it, the owner set no order size and the supplier named no
+     * minimum. Nothing invents a figure — so the queue asks, rather than a
+     * document going out saying zero.
+     */
+    const bare: Workspace = {
+      ...quoted(),
+      items: [item({ moq: 0, avgDailyConsumption: 0, floorConsumptionPerDay: 0 })],
+    }
+    let ws = acceptLine(bare, 'QT-001', 'QT-001/1')
+    ws = draftOrderFrom(ws, 'QT-001', TODAY)
+
+    expect(ws.orders[0].qty).toBe(0)
+    const d = decisionsFor(ws, TODAY).find((x) => x.kind === 'no-qty')!
+    expect(d.detail).toMatch(/has no quantity/)
+    expect(d.actLabel).toBe('Set the quantity')
+  })
+
+  it('and does not also nag to send an order it cannot send', () => {
+    const bare: Workspace = {
+      ...quoted(),
+      items: [item({ moq: 0, avgDailyConsumption: 0, floorConsumptionPerDay: 0 })],
+    }
+    let ws = acceptLine(bare, 'QT-001', 'QT-001/1')
+    ws = draftOrderFrom(ws, 'QT-001', TODAY)
+    expect(ws.orders[0].qty).toBe(0)
+    expect(decisionsFor(ws, TODAY).some((d) => d.kind === 'unsent')).toBe(false)
+  })
+
   it('asks about an order drafted and never handed over', () => {
     let ws = acceptLine(quoted(), 'QT-001', 'QT-001/1')
     ws = draftOrderFrom(ws, 'QT-001', TODAY)

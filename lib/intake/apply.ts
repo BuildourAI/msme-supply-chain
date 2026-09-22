@@ -293,10 +293,12 @@ export function applyApproval(ws: Workspace, a: Approval): { ws: Workspace; undo
      * screen, one press — is what writes the rate, and until then two
      * suppliers' quotations for the same material sit side by side.
      *
-     * The quantity the document quoted for is deliberately not carried onto the
-     * line as a minimum order. `QuoteLine.moq` is the floor a supplier will
-     * sell at, and a line reading "12 MT" is usually what somebody asked about.
-     * It is not lost either way — the document keeps its own lines.
+     * The quantity the document quoted for is carried as `qty` and never as
+     * `moq`. `QuoteLine.moq` is the floor a supplier will sell at, and a line
+     * reading "12 MT" is usually what somebody asked them about — putting it
+     * there would claim they refuse to sell eleven. Kept all the same, because
+     * it is a real number a person wrote down, and it is what stops a draft
+     * ordering nothing when the material is too new to have any history.
      */
     const lineId = `${quoteId}/${lines.length + 1}`
     lines.push({
@@ -304,6 +306,7 @@ export function applyApproval(ws: Workspace, a: Approval): { ws: Workspace; undo
       itemId,
       unitPrice: l.rate,
       moq: 0,
+      qty: l.qty && l.qty > 0 ? l.qty : undefined,
       leadDays: DEFAULT_LEAD_DAYS,
       state: 'received' as const,
     })

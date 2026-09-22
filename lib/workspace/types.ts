@@ -93,6 +93,15 @@ export interface QuoteLine {
   unitPrice: number
   /** smallest quantity they will sell at this price */
   moq: number
+  /**
+   * What their quotation priced against, when it named a quantity.
+   *
+   * Not a minimum and not a want — "12 MT @ ₹62,800" is usually what somebody
+   * asked them about on the phone. It is kept because it is a real number a
+   * person wrote down, and when nothing else in the records says how much to
+   * buy it beats drafting an order for nothing. See `orderQtyFor`.
+   */
+  qty?: number
   leadDays: number
   state: QuoteState
 }

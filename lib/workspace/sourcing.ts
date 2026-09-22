@@ -13,7 +13,9 @@
  * parallel notebook for. What the joins do is notice the connection when it is
  * there — a quote recorded against a request moves the request on by itself.
  */
+import { buildRows, type DerivedRow } from '@/lib/domain/derive'
 import type { Item, Vendor } from '@/lib/domain/types'
+import { bundleFor } from './bundle'
 import { issueId } from './defaults'
 import { pruneCustom } from './fields'
 import { repriceTerms } from './landed'
@@ -320,18 +322,13 @@ export function syncRfqStates(ws: Workspace): Workspace {
  * what makes several lines one order.
  */
 export function orderFromQuote(
-  ws: Workspace, quote: Quote, line: QuoteLine, today: string,
+  ws: Workspace, quote: Quote, line: QuoteLine, today: string, rows: DerivedRow[] = [],
 ): Omit<PurchaseOrder, 'id'> {
-  // What you asked for, if you asked. A quote's minimum order is the floor a
-  // supplier will sell at, not a quantity anybody wanted, and most quotes carry
-  // no minimum at all — taking it blindly drafts an order for nothing.
-  const asked = quote.rfqId ? ws.rfqs.find((r) => r.id === quote.rfqId)?.qty : undefined
-  const qty = asked && asked > 0 ? Math.max(asked, line.moq) : line.moq
   return {
     no: nextNo('PO', ws.orders),
     vendorId: quote.vendorId,
     itemId: line.itemId,
-    qty: qty > 0 ? qty : 0,
+    qty: orderQtyFor(ws, quote, line, rows),
     unitPrice: line.unitPrice,
     orderedOn: today,
     expectedOn: addDays(today, line.leadDays || 0),
@@ -385,14 +382,75 @@ export function draftOrderFrom(ws: Workspace, quoteId: string, today: string): W
   const standing = ws.orders.find((o) => o.quoteId === quoteId && o.state === 'draft')
   const no = standing?.no ?? nextNo('PO', ws.orders)
 
+  /*
+   * Once, not per line. This is the whole reorder derivation, and it is what
+   * lets a drafted order carry the quantity the desk already knows you are
+   * short of rather than a zero somebody has to notice.
+   */
+  const rows = buildRows(bundleFor(ws, today), ws.policy)
+
   let w = ws
   const made: PurchaseOrder[] = []
   for (const line of pending) {
     const [next, id] = issueId(w, 'PO')
     w = next
-    made.push({ ...orderFromQuote(w, quote, line, today), id, no })
+    made.push({ ...orderFromQuote(w, quote, line, today, rows), id, no })
   }
   return { ...w, orders: [...w.orders, ...made] }
+}
+
+/**
+ * How much to order, from whatever the records actually say.
+ *
+ * Five rungs, and the build climbs down them rather than reaching for the
+ * first number it can find. The supplier's minimum is the floor at every rung:
+ * it is what they will sell at, not a quantity anybody wanted, so it raises an
+ * answer and never becomes one on its own until there is nothing else.
+ *
+ * Drafting used to take the request's quantity or the supplier's minimum and
+ * nothing else — so a price accepted off an uploaded quotation, with no
+ * request behind it and no minimum on it, drafted an order for zero. The
+ * middle three rungs are the fix, and none of them invents anything: the
+ * figure the desk already computes for a material you are short of, what the
+ * owner said they buy at a time, and the quantity printed on the quotation
+ * itself — which the reader has always pulled off the page and thrown away.
+ *
+ * Nothing is invented at the bottom. A material nobody is short of, that the
+ * owner has set no order size for, quoted with no minimum, has no quantity in
+ * the records — and the queue asks for one rather than a document going out
+ * saying zero.
+ */
+export function orderQtyFor(
+  ws: Workspace, quote: Quote, line: QuoteLine, rows: DerivedRow[] = [],
+): number {
+  const floor = line.moq > 0 ? line.moq : 0
+
+  // 1. what you asked them for
+  const asked = quote.rfqId ? ws.rfqs.find((r) => r.id === quote.rfqId)?.qty ?? 0 : 0
+  if (asked > 0) return Math.max(asked, floor)
+
+  /*
+   * 2. what the desk says you are short of. Already rounded to the material's
+   * own order size by §5, and zero for anything not at risk — the system does
+   * not raise a purchase for a line that is covered.
+   */
+  const need = rows.find((r) => r.item.id === line.itemId)?.reorderQty.value ?? 0
+  if (need > 0) return Math.max(need, floor)
+
+  // 3. how this factory buys it when it does — the owner's figure, not theirs
+  const mine = ws.items.find((i) => i.id === line.itemId)?.moq ?? 0
+  if (mine > 0) return Math.max(mine, floor)
+
+  /*
+   * 4. what their quotation priced against. The weakest of the four, because
+   * it is their framing rather than the owner's — but "12 MT" on a letterhead
+   * is a real number a person wrote, and a material quoted last week has no
+   * consumption history for the rungs above to read.
+   */
+  if (line.qty && line.qty > 0) return Math.max(line.qty, floor)
+
+  // 5. their minimum, alone, which is better than nothing but is not a want
+  return floor
 }
 
 export function addDays(iso: string, days: number): string {

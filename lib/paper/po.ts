@@ -50,6 +50,8 @@ export interface PoDoc {
   extras: DocLine[]
   contact: string
   problems: Problem[]
+  /** materials on it that have no quantity — it is not ready to hand over */
+  blanks: string[]
 }
 
 /** Every line of one order — the rows sharing a number, in the order placed. */
@@ -136,6 +138,7 @@ export function buildPo(ws: Workspace, no: string): PoDoc | null {
     extras,
     contact: [ws.owner.name, ws.company.phone ?? ws.owner.contact].filter(Boolean).join(' · '),
     problems: [],
+    blanks: [],
   }
 
   doc.problems = problemsIn([
@@ -147,6 +150,15 @@ export function buildPo(ws: Workspace, no: string): PoDoc | null {
     ...rows.map((r, i) => [`line ${i + 1}`, r.material] as [string, string]),
     ...extras.map((e) => [e.label, e.value] as [string, string]),
   ])
+
+  /*
+   * Lines nobody has put a quantity on. Kept apart from `problems`, which is
+   * about characters the page cannot draw — the two read nothing like each
+   * other and sharing a panel would produce "line 1 contains no quantity".
+   */
+  doc.blanks = lines
+    .map((o, i) => (o.qty > 0 ? '' : rows[i].material))
+    .filter(Boolean)
 
   return doc
 }

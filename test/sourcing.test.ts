@@ -297,21 +297,67 @@ describe('accepting a quote', () => {
     expect(orderFromQuote(ws, ws.quotes[0], ws.quotes[0].lines[0], TODAY).qty).toBe(900)
   })
 
-  it('falls back to the minimum when no request is behind it', () => {
-    const ws = base()
-    ws.quotes = [quote({ rfqId: undefined, lines: [line({ moq: 200 })] })]
-    expect(orderFromQuote(ws, ws.quotes[0], ws.quotes[0].lines[0], TODAY).qty).toBe(200)
-  })
+  /*
+   * The four rungs, climbed down in order. A price accepted off an uploaded
+   * quotation — no request behind it, no minimum on it — used to draft an
+   * order for zero, and a document saying zero is worse than no document.
+   */
+  describe('and how much of it to order', () => {
+    const only = (ws: Workspace, rows: Parameters<typeof orderFromQuote>[4] = []) =>
+      orderFromQuote(ws, ws.quotes[0], ws.quotes[0].lines[0], TODAY, rows).qty
 
-  it('does not invent a quantity when there is nothing to take one from', () => {
-    // a quote with no request and no minimum used to draft an order for 0,
-    // which prices at nothing and reads as a bug
-    const ws = base()
-    ws.rfqs = []
-    ws.quotes = [quote({ rfqId: undefined, lines: [line({ moq: 0 })] })]
-    const draft = orderFromQuote(ws, ws.quotes[0], ws.quotes[0].lines[0], TODAY)
-    expect(draft.qty).toBe(0)
-    expect(draft.unitPrice).toBe(780)
+    it('takes what you asked for, when you asked', () => {
+      const ws = base() // the request asks for 500
+      expect(only(ws)).toBe(500)
+    })
+
+    it('then what the desk says you are short of', () => {
+      const ws = base()
+      ws.rfqs = []
+      ws.quotes = [quote({ rfqId: undefined, lines: [line({ moq: 0 })] })]
+      const rows = [{ item: { id: 'IT-001' }, reorderQty: { value: 340 } }] as never
+      expect(only(ws, rows)).toBe(340)
+    })
+
+    it('then the order size the owner set on the material', () => {
+      const ws = base()
+      ws.rfqs = []
+      ws.items = [item({ moq: 120 })]
+      ws.quotes = [quote({ rfqId: undefined, lines: [line({ moq: 0 })] })]
+      expect(only(ws)).toBe(120)
+    })
+
+    it('and their minimum last, which is a floor rather than a want', () => {
+      const ws = base()
+      ws.rfqs = []
+      ws.items = [item({ moq: 0 })]
+      ws.quotes = [quote({ rfqId: undefined, lines: [line({ moq: 200 })] })]
+      expect(only(ws)).toBe(200)
+    })
+
+    it('with that minimum raising every rung above it', () => {
+      // they will not sell 120, so the owner's usual order is lifted to 900
+      const ws = base()
+      ws.rfqs = []
+      ws.items = [item({ moq: 120 })]
+      ws.quotes = [quote({ rfqId: undefined, lines: [line({ moq: 900 })] })]
+      expect(only(ws)).toBe(900)
+    })
+
+    it('and nothing invented when the records say nothing at all', () => {
+      /*
+       * Nobody asked for it, the desk is not short of it, the owner set no
+       * order size and the supplier named no minimum. There is no quantity to
+       * be had, so none is made up — the queue asks for one instead.
+       */
+      const ws = base()
+      ws.rfqs = []
+      ws.items = [item({ moq: 0 })]
+      ws.quotes = [quote({ rfqId: undefined, lines: [line({ moq: 0 })] })]
+      const draft = orderFromQuote(ws, ws.quotes[0], ws.quotes[0].lines[0], TODAY)
+      expect(draft.qty).toBe(0)
+      expect(draft.unitPrice).toBe(780)
+    })
   })
 
   it('fills an order with the quote’s own figures, as a draft', () => {
@@ -399,13 +445,23 @@ describe('drafting an order off a quotation', () => {
     expect(ws.orders.every((o) => o.state === 'draft')).toBe(true)
   })
 
-  it('each keeping its own quantity, rate and delivery date', () => {
+  it('each keeping its own rate and delivery date', () => {
     // the lead times differ — 7 days against 10 — and each line keeps its own.
     // `buildPo` heads the page with the latest, which is its business.
     const ws = draftOrderFrom(twoTaken(), 'QT-001', TODAY)
     expect(ws.orders.map((o) => o.unitPrice)).toEqual([780, 164])
-    expect(ws.orders.map((o) => o.qty)).toEqual([200, 50])
     expect(ws.orders.map((o) => o.expectedOn)).toEqual([addDays(TODAY, 7), addDays(TODAY, 10)])
+  })
+
+  it('and a real quantity on every line, never a zero', () => {
+    /*
+     * These materials are short, so the figure comes off the desk's own
+     * reorder calculation — the same one `/sourcing/desk` would suggest.
+     * Drafting ran no derivation before this, so both lines came out at the
+     * supplier's minimum, and a line quoted without one came out at nothing.
+     */
+    const ws = draftOrderFrom(twoTaken(), 'QT-001', TODAY)
+    expect(ws.orders.every((o) => o.qty > 0)).toBe(true)
   })
 
   it('remembers which price each line came from', () => {

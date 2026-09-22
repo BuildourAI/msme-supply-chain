@@ -27,6 +27,8 @@ export interface Paper {
   /** null for an unaddressed copy, which only a request ever has */
   vendor: { id: string; name: string } | null
   problems: Problem[]
+  /** materials with no quantity on them — not ready to hand over at all */
+  blanks?: string[]
   fileName: string
   sendable: Sendable
   render: () => Promise<Blob>
@@ -125,6 +127,29 @@ export function PaperDialog({ open, onClose, title, sub, papers, sentTo, onSent 
         )}
 
         <div className="px-4 py-4">
+          {/*
+            * A different kind of not-ready from the one below. Those are
+            * characters the PDF cannot draw and the message carries fine; this
+            * is a line with no quantity, which no way of sending fixes.
+            */}
+          {(paper.blanks?.length ?? 0) > 0 && (
+            <div className="mb-3 rounded-lg border border-critical/30 bg-critical-soft px-3 py-2.5">
+              <p className="text-[12.5px] font-medium">
+                {paper.blanks!.length === 1
+                  ? 'One line has no quantity on it'
+                  : `${paper.blanks!.length} lines have no quantity on them`}
+              </p>
+              <p className="mt-1 text-[12px] leading-snug text-ink-2">
+                {paper.blanks!.join(', ')}
+              </p>
+              <p className="mt-1.5 text-[11.5px] leading-snug text-ink-3">
+                Nothing in your records said how much to buy — no request behind it,
+                nothing short on the shelf, and no order size on the material. Put a
+                quantity on the order before handing it over.
+              </p>
+            </div>
+          )}
+
           {paper.problems.length > 0 && (
             <div className="mb-3 rounded-lg border border-warn/30 bg-warn-soft px-3 py-2.5">
               <p className="text-[12.5px] font-medium">Some of this cannot be printed</p>

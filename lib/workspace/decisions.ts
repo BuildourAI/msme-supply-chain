@@ -60,7 +60,7 @@ export type Act =
 export type DecisionKind =
   | 'at-risk' | 'late' | 'unsourced'
   | 'flip' | 'stale'
-  | 'unfiled' | 'undecided' | 'unordered' | 'unsent' | 'to-receive' | 'no-reply'
+  | 'unfiled' | 'undecided' | 'unordered' | 'no-qty' | 'unsent' | 'to-receive' | 'no-reply'
 
 export interface Decision {
   /** stable across renders, so a list key is not an index */
@@ -316,8 +316,36 @@ function unfinished(ws: Workspace, today: string): Decision[] {
   const sentOn = new Set(ws.sendLog.filter((s) => s.kind === 'po').map((s) => s.id))
 
   for (const g of orderGroups(orderRows(ws))) {
+    /*
+     * Lines the records could not put a quantity on.
+     *
+     * `orderQtyFor` climbs four rungs and this is the bottom of them: nobody
+     * asked for it, the desk is not short of it, the owner has set no order
+     * size and the supplier named no minimum. Nothing in the records says how
+     * much, so nothing invents it — but a document saying zero must not go out
+     * quietly either, so it is asked for here.
+     */
+    const blank = g.rows.filter((r) => r.order.qty <= 0 && r.order.state !== 'cancelled')
+    if (blank.length > 0) {
+      out.push({
+        id: `no-qty:${g.no}`,
+        band: 'unfinished',
+        kind: 'no-qty',
+        title: `${g.no} · ${g.vendor?.name ?? 'Unknown supplier'}`,
+        detail: blank.length === 1
+          ? `${blank[0].item?.name ?? 'one line'} has no quantity`
+          : `${blank.length} lines have no quantity`,
+        act: 'open',
+        actLabel: 'Set the quantity',
+        href: '/sourcing/orders',
+        refs: { orderNo: g.no, vendorId: g.vendor?.id },
+        // above "never sent", because it cannot be sent until this is answered
+        weight: 95,
+      })
+    }
+
     /* Drafted and never handed over. */
-    if (g.state === 'draft' && !sentOn.has(g.no)) {
+    if (g.state === 'draft' && !sentOn.has(g.no) && blank.length === 0) {
       out.push({
         id: `unsent:${g.no}`,
         band: 'unfinished',

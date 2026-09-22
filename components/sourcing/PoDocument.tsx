@@ -33,6 +33,7 @@ export function PoDocument({ open, onClose, no }: {
     return [{
       vendor: doc.vendor ? { id: doc.vendor.id, name: doc.vendor.name } : null,
       problems: doc.problems,
+      blanks: doc.blanks,
       fileName: poFileName(doc),
       sendable: poSendableFor(doc),
       render: () => renderPo(doc),
