@@ -13,6 +13,7 @@ import {
   metricsFor, onTimePct, onTimeRun, orderShares, pickedMetrics, priceMoves, sourcing,
 } from '@/lib/workspace/metrics'
 import { byBand, decisionsFor, openCount } from '@/lib/workspace/decisions'
+import { arrivesIn, flightCount, inFlight } from '@/lib/workspace/flight'
 import { acceptLine, draftOrderFrom, logRate } from '@/lib/workspace/sourcing'
 import { recordReceipt } from '@/lib/workspace/receipts'
 import type { Workspace } from '@/lib/workspace/types'
@@ -522,5 +523,79 @@ describe('the count on the rail', () => {
     expect(decisionsFor(after, TODAY).some((d) => d.kind === 'undecided')).toBe(false)
     expect(openCount(draftOrderFrom(after, 'QT-001', TODAY), TODAY))
       .toBeLessThanOrEqual(before + 1)
+  })
+})
+
+/* =========================================================== out with them */
+
+describe('what is on its way', () => {
+  /*
+   * The claim the two columns rest on: every open order is late, due, or
+   * still coming, and exactly one of those is true of it. If this ever
+   * stopped holding, the dashboard would either say something twice or lose
+   * an order between its two halves.
+   */
+  const at = (expectedOn: string, over = {}) => ({
+    ...set(),
+    orders: [order({ state: 'confirmed' as const, expectedOn, orderedOn: '2026-09-10', ...over })],
+  })
+
+  it('leaves an order that is late to the queue', () => {
+    const ws = at('2026-09-18')
+    expect(inFlight(ws, TODAY)).toEqual([])
+    expect(decisionsFor(ws, TODAY).map((d) => d.kind)).toContain('late')
+  })
+
+  it('leaves an order due today to the queue', () => {
+    const ws = at(TODAY)
+    expect(inFlight(ws, TODAY)).toEqual([])
+    expect(decisionsFor(ws, TODAY).map((d) => d.kind)).toContain('to-receive')
+  })
+
+  it('and takes the one still coming, which the queue never mentions', () => {
+    const ws = at('2026-09-30')
+    const kinds = decisionsFor(ws, TODAY).map((d) => d.kind)
+    expect(kinds).not.toContain('late')
+    expect(kinds).not.toContain('to-receive')
+
+    const berths = inFlight(ws, TODAY)
+    expect(berths).toHaveLength(1)
+    expect(berths[0].vendor?.name).toBe('Shah Metals')
+    expect(berths[0].orders[0].daysAway).toBe(10)
+  })
+
+  it('never shows a draft, whatever its date — a draft is on your desk', () => {
+    const ws = at('2026-09-30', { state: 'draft' as const })
+    expect(inFlight(ws, TODAY)).toEqual([])
+  })
+
+  it('draws how much of the promised wait has gone, not a guess at the lorry', () => {
+    // ordered on the 10th for the 30th; today is the 20th, so half of it
+    expect(inFlight(at('2026-09-30'), TODAY)[0].orders[0].progress).toBeCloseTo(50, 5)
+    // promised for the day it was placed: no span to divide, so it reads full
+    expect(inFlight(at('2026-09-30', { orderedOn: '2026-09-30' }), TODAY)[0]
+      .orders[0].progress).toBe(100)
+  })
+
+  it('gathers a supplier one heading, the way the orders themselves are', () => {
+    const ws: Workspace = {
+      ...set(),
+      vendors: [vendor(), vendor({ id: 'VN-002', name: 'Bombay' })],
+      orders: [
+        order({ id: 'a', no: 'PO-1', state: 'confirmed', expectedOn: '2026-09-30' }),
+        order({ id: 'b', no: 'PO-2', state: 'confirmed', expectedOn: '2026-09-25' }),
+        order({ id: 'c', no: 'PO-3', vendorId: 'VN-002', state: 'confirmed', expectedOn: '2026-09-23' }),
+      ],
+    }
+    const berths = inFlight(ws, TODAY)
+    // soonest supplier first, and soonest order first within a supplier
+    expect(berths.map((b) => b.vendor?.name)).toEqual(['Bombay', 'Shah Metals'])
+    expect(berths[1].orders.map((o) => o.no)).toEqual(['PO-2', 'PO-1'])
+    expect(flightCount(ws, TODAY)).toBe(3)
+  })
+
+  it('says when it lands in words a person uses', () => {
+    expect(arrivesIn(1)).toBe('tomorrow')
+    expect(arrivesIn(6)).toBe('in 6 days')
   })
 })

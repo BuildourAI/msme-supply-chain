@@ -10,9 +10,8 @@ import { ReceiveForm } from '@/components/sourcing/ReceiveForm'
 import { useWorkspace } from '@/components/workspace/store'
 import { buildRows } from '@/lib/domain/derive'
 import { bundleFor } from '@/lib/workspace/bundle'
-import {
-  BAND_LABEL, byBand, decisionsFor, type Act, type Band, type Decision,
-} from '@/lib/workspace/decisions'
+import { decisionsFor, type Act, type Band, type Decision } from '@/lib/workspace/decisions'
+import { inFlight } from '@/lib/workspace/flight'
 import { flipSignature, pickedMetrics } from '@/lib/workspace/metrics'
 import { acceptLine, draftOrderFrom, rejectLine, syncRfqStates } from '@/lib/workspace/sourcing'
 import type { PurchaseOrder } from '@/lib/workspace/types'
@@ -20,17 +19,23 @@ import type { PurchaseOrder } from '@/lib/workspace/types'
 /**
  * Where the day starts.
  *
- * The work queue first and the figures below it, which is the whole argument
- * of the screen. Tiles above a worklist is the pattern `ListPage` refuses in
- * its own doc comment — "no KPI strip above the data" — and it has a second
- * cost here: a queue must be able to empty, and a strip of metrics permanently
- * above it means the screen never reads as done. Underneath, the figures are
- * what you scroll to once the queue is clear, which makes them the reward for
- * an empty queue rather than wallpaper you scroll past every morning.
+ * The work first and the figures below it, which is the whole argument of the
+ * screen. Tiles above a worklist is the pattern `ListPage` refuses in its own
+ * doc comment — "no KPI strip above the data" — and it has a second cost here:
+ * a queue must be able to empty, and a strip of metrics permanently above it
+ * means the screen never reads as done. Underneath, the figures are what you
+ * scroll to once the queue is clear, which makes them the reward for an empty
+ * queue rather than wallpaper you scroll past every morning.
+ *
+ * The work itself is two columns — what is waiting on you, and what is out
+ * with a supplier — because those are the two questions somebody opens this
+ * screen with and only one of them was answered anywhere. `Queue` holds the
+ * layout and `flight.ts` the partition that keeps the columns from saying
+ * anything twice.
  *
  * The queue and the tiles are the same information seen twice — both read from
- * one workspace through two pure functions, so the number on a tile and the
- * rows behind it cannot disagree.
+ * one workspace through pure functions, so the number on a tile and the rows
+ * behind it cannot disagree.
  *
  * Nothing here sends anything. Chasing a late order and handing over a draft
  * both open the document, and §11 holds exactly as it does everywhere else:
@@ -62,6 +67,7 @@ function Dashboard() {
   const ws = workspace
 
   const queue = decisionsFor(ws, today, rows)
+  const berths = inFlight(ws, today)
   const metrics = pickedMetrics(ws, today)
 
   /*
@@ -118,24 +124,17 @@ function Dashboard() {
 
   return (
     <div className="anim-page mx-auto w-full max-w-[72rem]">
+      {/*
+        * The heading says only what screen this is. Every count that used to
+        * sit here — the total, and the bar breaking it into bands — is now on
+        * the columns and their sub-headings, where it is next to the rows it
+        * counts. Saying it three times in the top inch was the opposite of
+        * making the screen quick to read.
+        */}
       <header className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-3">
-        <div className="min-w-0">
-          <h1 className="text-[26px] font-extrabold leading-none tracking-[-0.03em]">Sourcing</h1>
-          <p className="mt-1.5 text-[13px] text-ink-3">
-            {queue.length === 0
-              ? 'nothing needs you'
-              : `${queue.length} thing${queue.length === 1 ? '' : 's'} need${queue.length === 1 ? 's' : ''} you`}
-          </p>
-        </div>
-
-        {/*
-          * The queue's shape, beside its size. "5 things need you" reads very
-          * differently when four of them are half-finished paperwork and when
-          * four of them will stop the line, and the bar says which before a
-          * single row is read. It is the same list the bands below are, so the
-          * two cannot disagree.
-          */}
-        <Shape rows={queue} />
+        <h1 className="min-w-0 text-[26px] font-extrabold leading-none tracking-[-0.03em]">
+          Sourcing
+        </h1>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <button type="button" onClick={() => setPicking(true)}
@@ -146,7 +145,7 @@ function Dashboard() {
         </div>
       </header>
 
-      <Queue rows={queue} onAct={act} showAll={opened}
+      <Queue rows={queue} berths={berths} onAct={act} showAll={opened}
         onShowAll={(b) => setOpened((s) => new Set(s).add(b))} />
 
       {metrics.length > 0 && (
@@ -164,40 +163,6 @@ function Dashboard() {
       <PoDocument open={papering !== null} no={papering} onClose={() => setPapering(null)} />
       <ReceiveForm open={receiving !== null} order={receiving}
         onClose={() => setReceiving(null)} />
-    </div>
-  )
-}
-
-/**
- * The queue's make-up, as one bar.
- *
- * Three segments in band order, each as wide as its share. Drawn only when
- * there is something in the queue — an empty bar next to "nothing needs you"
- * would be a second way of saying nothing.
- */
-function Shape({ rows }: { rows: Decision[] }) {
-  if (rows.length === 0) return null
-  const bands = byBand(rows)
-  const tone: Record<Band, string> = {
-    stops: 'bg-critical', costs: 'bg-warn', unfinished: 'bg-ink-4',
-  }
-  return (
-    <div className="flex min-w-[9rem] max-w-[16rem] flex-1 flex-col gap-1">
-      <span aria-hidden className="flex h-1.5 gap-0.5 overflow-hidden rounded-full bg-surface-3">
-        {bands.map((g, i) => (
-          <span key={g.band} style={{
-            '--i': i, width: `${(g.rows.length / rows.length) * 100}%`,
-          } as React.CSSProperties} className={`anim-reveal ${tone[g.band]}`} />
-        ))}
-      </span>
-      <span className="flex flex-wrap gap-x-2.5 gap-y-0.5 text-[10.5px] text-ink-3">
-        {bands.map((g) => (
-          <span key={g.band} className="inline-flex items-center gap-1">
-            <span aria-hidden className={`size-1.5 rounded-full ${tone[g.band]}`} />
-            {g.rows.length} {BAND_LABEL[g.band].toLowerCase()}
-          </span>
-        ))}
-      </span>
     </div>
   )
 }
