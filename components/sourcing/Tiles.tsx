@@ -1,6 +1,8 @@
 'use client'
 import Link from 'next/link'
 import { Icon, type IconName } from '@/components/ui/icons'
+import { Spark } from '@/components/sourcing/Spark'
+import { useFlash } from '@/components/ui/motion'
 import type { Metric, MetricKey, MetricTone } from '@/lib/workspace/metrics'
 
 /**
@@ -54,12 +56,19 @@ export function Tiles({ metrics }: { metrics: Metric[] }) {
   if (metrics.length === 0) return null
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {metrics.map((m) => <Tile key={m.key} m={m} />)}
+      {metrics.map((m, i) => <Tile key={m.key} m={m} i={i} />)}
     </div>
   )
 }
 
-function Tile({ m }: { m: Metric }) {
+function Tile({ m, i }: { m: Metric; i: number }) {
+  /*
+   * A figure that has just moved is worth catching the eye. Only on a CHANGE —
+   * `useFlash` does nothing on mount, so the screen does not light up all over
+   * on every load, which is how people learn to ignore highlighting.
+   */
+  const flash = useFlash(m.value)
+
   const body = (
     <>
       <div className="flex items-start gap-3">
@@ -72,21 +81,33 @@ function Tile({ m }: { m: Metric }) {
           <span className="block truncate text-[12.5px] font-medium text-ink-2">{m.label}</span>
           <span className={`num mt-0.5 block truncate ${
             m.measured
-              ? `text-[24px] font-extrabold leading-tight tracking-[-0.02em] ${FIGURE[m.tone]}`
+              ? `text-[26px] font-extrabold leading-tight tracking-[-0.02em] ${FIGURE[m.tone]}`
               : 'text-[14px] font-semibold leading-snug text-ink-3'}`}>
             {m.value}
           </span>
         </span>
+        {/* a share is drawn beside its figure; everything else is drawn under */}
+        <Spark chart={m.chart} tone={m.tone} place="aside" />
       </div>
       <p className="mt-1.5 truncate text-[11.5px] text-ink-3">{m.sub}</p>
+      <Spark chart={m.chart} tone={m.tone} />
     </>
   )
 
-  const cls = 'block rounded-xl border border-line bg-surface p-3.5 text-left transition-colors'
+  const cls = `anim-fade-up block rounded-xl border border-line bg-surface p-3.5 text-left ${flash}`
 
   // the rows behind a figure are worth reaching; one with nothing behind it yet
   // is not a link to an empty screen
   return m.href && m.measured
-    ? <Link href={m.href} title={m.how} className={`press ${cls} hover:border-accent/40 hover:bg-surface-2`}>{body}</Link>
-    : <div title={m.how} className={cls}>{body}</div>
+    ? (
+      <Link href={m.href} title={m.how} style={{ '--i': i } as React.CSSProperties}
+        className={`press lift ${cls}`}>
+        {body}
+      </Link>
+    )
+    : (
+      <div title={m.how} style={{ '--i': i } as React.CSSProperties} className={cls}>
+        {body}
+      </div>
+    )
 }

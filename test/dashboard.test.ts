@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest'
 import { emptyWorkspace } from '@/lib/workspace/defaults'
 import {
   DEFAULT_PICKS, concentration, defectPct, flipSignature, flippingItems, leadSpreads,
-  metricsFor, onTimePct, pickedMetrics, priceMoves, sourcing,
+  metricsFor, onTimePct, onTimeRun, orderShares, pickedMetrics, priceMoves, sourcing,
 } from '@/lib/workspace/metrics'
 import { byBand, decisionsFor, openCount } from '@/lib/workspace/decisions'
 import { acceptLine, draftOrderFrom, logRate } from '@/lib/workspace/sourcing'
@@ -149,7 +149,9 @@ describe('what the deliveries say', () => {
     const ws = recordReceipt(set(), {
       order: order(), qty: 100, accepted: 96, rejected: 4, receivedOn: '2026-09-08',
     })
-    expect(defectPct(ws)).toEqual({ pct: 4, of: 1 })
+    // good and bad are what the tile's little bar is drawn from — the same
+    // arithmetic as the percentage, so the picture cannot disagree with it
+    expect(defectPct(ws)).toEqual({ pct: 4, of: 1, good: 96, bad: 4 })
   })
 })
 
@@ -221,6 +223,83 @@ describe('what the records say about exposure', () => {
     const after = acceptLine(ws, 'QT-001', 'QT-001/1')
     expect(after.rateLog).toHaveLength(1)
     expect(priceMoves(after)[0].pct).toBeCloseTo(10, 5)
+  })
+})
+
+/* ============================================ the pictures, made of the numbers */
+
+describe('the little picture on a tile', () => {
+  it('is left off entirely when there is nothing behind the figure', () => {
+    /*
+     * `Sparkbars` set this rule for the sample company and it holds here: a
+     * chart is the number shown a second way, never decoration that resembles
+     * data. Nothing measured, nothing drawn.
+     */
+    for (const m of metricsFor(fresh(), TODAY).filter((x) => !x.measured)) {
+      expect(m.chart).toBeUndefined()
+    }
+  })
+
+  it('marks one delivery per receipt, in the order they arrived', () => {
+    let ws = recordReceipt(set(), {
+      order: order({ id: 'a', no: 'a', expectedOn: '2026-09-08' }),
+      qty: 10, accepted: 10, rejected: 0, receivedOn: '2026-09-08',
+    })
+    ws = recordReceipt(ws, {
+      order: order({ id: 'b', no: 'b', expectedOn: '2026-09-10' }),
+      qty: 10, accepted: 10, rejected: 0, receivedOn: '2026-09-14',
+    })
+    expect(onTimeRun(ws)).toEqual([true, false])
+
+    const tile = metricsFor(ws, TODAY).find((m) => m.key === 'onTime')!
+    expect(tile.chart).toEqual({ kind: 'dots', dots: [true, false] })
+  })
+
+  it('and the shares of the ordering add up to the whole of it', () => {
+    const ws: Workspace = {
+      ...set(),
+      vendors: [vendor(), vendor({ id: 'VN-002', name: 'Bombay' })],
+      orders: [
+        order({ id: 'a', qty: 10, unitPrice: 800 }),
+        order({ id: 'b', no: 'PO-2', vendorId: 'VN-002', qty: 10, unitPrice: 200 }),
+      ],
+    }
+    const parts = orderShares(ws)
+    expect(parts).toEqual([80, 20])
+    expect(parts.reduce((a, b) => a + b, 0)).toBeCloseTo(100, 5)
+  })
+
+  it('counts the flip against the materials that CAN flip, not all of them', () => {
+    /*
+     * A material one supplier quotes cannot have a cheaper-landed rival, so it
+     * is not part of the whole. Two suppliers on one material, one on another:
+     * the pips count one.
+     */
+    const ws: Workspace = {
+      ...set(),
+      items: [item(), item({ id: 'IT-002', code: 'SS', name: 'SS strip' })],
+      vendors: [vendor(), vendor({ id: 'VN-002', name: 'Bombay' })],
+      vendorItems: [
+        rate(), rate({ vendorId: 'VN-002', rate: 820 }),
+        rate({ itemId: 'IT-002' }),
+      ],
+    }
+    const tile = metricsFor(ws, TODAY).find((m) => m.key === 'flip')!
+    expect(tile.chart).toEqual({ kind: 'pips', on: 0, of: 1 })
+  })
+
+  it('and draws no pips at all when no material has a second supplier', () => {
+    // one grey pip under a green nought is a picture of nothing
+    const tile = metricsFor(set(), TODAY).find((m) => m.key === 'flip')!
+    expect(tile.measured).toBe(true)
+    expect(tile.chart).toBeUndefined()
+  })
+
+  it('leaving the bar off when one supplier has all of it', () => {
+    // a single full-width segment is a rectangle, not a comparison
+    const ws: Workspace = { ...set(), orders: [order()] }
+    const tile = metricsFor(ws, TODAY).find((m) => m.key === 'outstanding')!
+    expect(tile.chart).toBeUndefined()
   })
 })
 

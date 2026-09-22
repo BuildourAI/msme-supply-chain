@@ -10,7 +10,9 @@ import { ReceiveForm } from '@/components/sourcing/ReceiveForm'
 import { useWorkspace } from '@/components/workspace/store'
 import { buildRows } from '@/lib/domain/derive'
 import { bundleFor } from '@/lib/workspace/bundle'
-import { decisionsFor, type Act, type Band, type Decision } from '@/lib/workspace/decisions'
+import {
+  BAND_LABEL, byBand, decisionsFor, type Act, type Band, type Decision,
+} from '@/lib/workspace/decisions'
 import { flipSignature, pickedMetrics } from '@/lib/workspace/metrics'
 import { acceptLine, draftOrderFrom, rejectLine, syncRfqStates } from '@/lib/workspace/sourcing'
 import type { PurchaseOrder } from '@/lib/workspace/types'
@@ -115,8 +117,8 @@ function Dashboard() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[72rem]">
-      <header className="mb-5 flex flex-wrap items-start gap-x-4 gap-y-3">
+    <div className="anim-page mx-auto w-full max-w-[72rem]">
+      <header className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-3">
         <div className="min-w-0">
           <h1 className="text-[26px] font-extrabold leading-none tracking-[-0.03em]">Sourcing</h1>
           <p className="mt-1.5 text-[13px] text-ink-3">
@@ -125,6 +127,16 @@ function Dashboard() {
               : `${queue.length} thing${queue.length === 1 ? '' : 's'} need${queue.length === 1 ? 's' : ''} you`}
           </p>
         </div>
+
+        {/*
+          * The queue's shape, beside its size. "5 things need you" reads very
+          * differently when four of them are half-finished paperwork and when
+          * four of them will stop the line, and the bar says which before a
+          * single row is read. It is the same list the bands below are, so the
+          * two cannot disagree.
+          */}
+        <Shape rows={queue} />
+
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <button type="button" onClick={() => setPicking(true)}
             className="press inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-[13px] font-medium hover:bg-surface-2">
@@ -139,8 +151,10 @@ function Dashboard() {
 
       {metrics.length > 0 && (
         <section className="mt-7">
-          <h2 className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-3">
+          <h2 className="mb-2.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-3">
+            <span aria-hidden className="h-px w-4 bg-line" />
             How you are doing
+            <span aria-hidden className="h-px flex-1 bg-line" />
           </h2>
           <Tiles metrics={metrics} />
         </section>
@@ -150,6 +164,40 @@ function Dashboard() {
       <PoDocument open={papering !== null} no={papering} onClose={() => setPapering(null)} />
       <ReceiveForm open={receiving !== null} order={receiving}
         onClose={() => setReceiving(null)} />
+    </div>
+  )
+}
+
+/**
+ * The queue's make-up, as one bar.
+ *
+ * Three segments in band order, each as wide as its share. Drawn only when
+ * there is something in the queue — an empty bar next to "nothing needs you"
+ * would be a second way of saying nothing.
+ */
+function Shape({ rows }: { rows: Decision[] }) {
+  if (rows.length === 0) return null
+  const bands = byBand(rows)
+  const tone: Record<Band, string> = {
+    stops: 'bg-critical', costs: 'bg-warn', unfinished: 'bg-ink-4',
+  }
+  return (
+    <div className="flex min-w-[9rem] max-w-[16rem] flex-1 flex-col gap-1">
+      <span aria-hidden className="flex h-1.5 gap-0.5 overflow-hidden rounded-full bg-surface-3">
+        {bands.map((g, i) => (
+          <span key={g.band} style={{
+            '--i': i, width: `${(g.rows.length / rows.length) * 100}%`,
+          } as React.CSSProperties} className={`anim-reveal ${tone[g.band]}`} />
+        ))}
+      </span>
+      <span className="flex flex-wrap gap-x-2.5 gap-y-0.5 text-[10.5px] text-ink-3">
+        {bands.map((g) => (
+          <span key={g.band} className="inline-flex items-center gap-1">
+            <span aria-hidden className={`size-1.5 rounded-full ${tone[g.band]}`} />
+            {g.rows.length} {BAND_LABEL[g.band].toLowerCase()}
+          </span>
+        ))}
+      </span>
     </div>
   )
 }

@@ -402,7 +402,7 @@ body {
 .anim-draw     { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 1000ms cubic-bezier(.4,0,.2,1) 160ms forwards }
 .anim-arc      { animation: arc-in 700ms var(--ease-quint) 140ms backwards }
 .anim-donut    { transform-origin: center; transform-box: fill-box; animation: donut-in 520ms var(--ease-quint) 120ms backwards }
-.anim-dot      { transform-origin: center; transform-box: fill-box; animation: dot-in 320ms var(--ease-std) backwards; animation-delay: calc(360ms + var(--i, 0) * 110ms) }
+.anim-dot      { transform-origin: center; transform-box: fill-box; animation: dot-in 300ms var(--ease-std) backwards; animation-delay: calc(240ms + var(--i, 0) * 42ms) }
 .anim-tick     { transform-origin: bottom; animation: tick-in 300ms var(--ease-std) 760ms backwards }
 .flash         { animation: flash 900ms ease-out }
 

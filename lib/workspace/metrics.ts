@@ -25,6 +25,30 @@ import type { Workspace } from './types'
 
 export type MetricTone = 'good' | 'warn' | 'critical' | 'neutral'
 
+/**
+ * The little picture on a tile, as data rather than as marks.
+ *
+ * Built here so it is pure and testable, and so a shape can only ever be made
+ * of the figure's OWN arithmetic. `Sparkbars` set the rule this follows: draw
+ * what the number is made of, never noise that looks like data — and a figure
+ * with nothing behind it gets no picture at all rather than a decorative one.
+ */
+export type Chart =
+  /** one mark per delivery judged, true where it landed by the promised day */
+  | { kind: 'dots'; dots: boolean[] }
+  /** the fastest, the usual and the slowest of the last six */
+  | { kind: 'range'; low: number; mean: number; high: number }
+  /** what arrived against what could not be used */
+  | { kind: 'split'; good: number; bad: number }
+  /** n of a countable whole — materials, rates */
+  | { kind: 'pips'; on: number; of: number }
+  /** one share of a total, as a closed arc */
+  | { kind: 'ring'; pct: number }
+  /** rates that moved, signed, biggest first */
+  | { kind: 'moves'; values: number[] }
+  /** how one total divides between suppliers, largest first */
+  | { kind: 'stack'; parts: number[] }
+
 export interface Metric {
   key: MetricKey
   /** what it is called on the tile */
@@ -44,6 +68,8 @@ export interface Metric {
   href?: string
   /** how it was worked out, for the owner who wants to argue with it */
   how: string
+  /** its own numbers, drawn. Absent when there is nothing honest to draw. */
+  chart?: Chart
 }
 
 export type MetricKey =
@@ -109,6 +135,35 @@ export function onTimePct(ws: Workspace): { pct: number; of: number } | null {
   return { pct: (kept / judged.length) * 100, of: judged.length }
 }
 
+/**
+ * Each judged delivery, in order, true where it landed by the promised day.
+ *
+ * The percentage says how often; this says which, and a run of three reds at
+ * the end means something a single figure cannot.
+ */
+export function onTimeRun(ws: Workspace, cap = 14): boolean[] {
+  return (ws.receipts ?? [])
+    .filter((r) => Boolean(r.expectedOn))
+    .sort((a, b) => a.receivedOn.localeCompare(b.receivedOn))
+    .slice(-cap)
+    .map((r) => r.receivedOn <= (r.expectedOn as string))
+}
+
+/** How one supplier's share of the ordering divides, largest first. */
+export function orderShares(ws: Workspace, cap = 6): number[] {
+  const live = ws.orders.filter((o) => o.state !== 'cancelled')
+  const total = live.reduce((a, o) => a + o.qty * o.unitPrice, 0)
+  if (total <= 0) return []
+  const byVendor = new Map<string, number>()
+  for (const o of live) {
+    byVendor.set(o.vendorId, (byVendor.get(o.vendorId) ?? 0) + o.qty * o.unitPrice)
+  }
+  return [...byVendor.values()]
+    .sort((a, b) => b - a)
+    .slice(0, cap)
+    .map((v) => (v / total) * 100)
+}
+
 export interface Spread {
   vendorId: string
   itemId: string
@@ -155,12 +210,15 @@ const days = (from: string, to: string) =>
   Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000)
 
 /** What you cannot use, across everything that has arrived. */
-export function defectPct(ws: Workspace): { pct: number; of: number } | null {
+export function defectPct(
+  ws: Workspace,
+): { pct: number; of: number; good: number; bad: number } | null {
   const rs = ws.receipts ?? []
   if (rs.length === 0) return null
   const qty = rs.reduce((a, r) => a + r.qty, 0)
   if (qty <= 0) return null
-  return { pct: (rs.reduce((a, r) => a + r.rejected, 0) / qty) * 100, of: rs.length }
+  const bad = rs.reduce((a, r) => a + r.rejected, 0)
+  return { pct: (bad / qty) * 100, of: rs.length, good: qty - bad, bad }
 }
 
 /**
@@ -292,6 +350,13 @@ export function metricsFor(ws: Workspace, today: string): Metric[] {
   const moves = priceMoves(ws, 90, today)
   const stale = ws.vendorItems.filter((vi) => expired(vi.quoteValidUntil, today))
   const out = outstandingValue(ws)
+  const run = onTimeRun(ws)
+  const shares = orderShares(ws)
+  // only materials two suppliers quote can flip, so that is what the pips count
+  const comparable = new Set(
+    ws.items.map((i) => i.id)
+      .filter((id) => ws.vendorItems.filter((vi) => vi.itemId === id).length > 1),
+  ).size
 
   const nothing = (key: MetricKey, value: string, how: string): Metric => ({
     key, label: METRIC_LABEL[key], value, sub: 'nothing to measure yet',
@@ -306,6 +371,7 @@ export function metricsFor(ws: Workspace, today: string): Metric[] {
         tone: ot.pct >= 90 ? 'good' : ot.pct >= 75 ? 'warn' : 'critical',
         measured: true, href: '/sourcing/orders',
         how: 'received_on ≤ expected_on, over every receipt carrying a promised date',
+        chart: { kind: 'dots', dots: run },
       }
       : nothing('onTime', 'No deliveries yet',
         'needs a receipt recorded against an order that had a delivery date'),
@@ -319,6 +385,7 @@ export function metricsFor(ws: Workspace, today: string): Metric[] {
         measured: true, href: '/sourcing/suppliers',
         how: 'widest gap between the fastest and slowest of the last 6 receipts, '
           + 'across every supplier-material pairing',
+        chart: { kind: 'range', low: spread.low, mean: spread.mean, high: spread.high },
       }
       : nothing('lead', 'Not enough receipts',
         'needs two receipts on one supplier-material pairing before there is a spread'),
@@ -330,6 +397,7 @@ export function metricsFor(ws: Workspace, today: string): Metric[] {
         tone: def.pct <= 1 ? 'good' : def.pct <= 4 ? 'warn' : 'critical',
         measured: true, href: '/sourcing/compare',
         how: 'Σ rejected ÷ Σ received, over every receipt',
+        chart: { kind: 'split', good: def.good, bad: def.bad },
       }
       : nothing('defects', 'Nothing received yet',
         'needs a receipt recording what was accepted and what was not'),
@@ -343,6 +411,11 @@ export function metricsFor(ws: Workspace, today: string): Metric[] {
         tone: flip.length === 0 ? 'good' : 'warn',
         measured: true, href: '/sourcing/compare',
         how: 'materials where the lowest rate and the lowest landed cost are different suppliers',
+        // no material has two suppliers yet, so there is no whole to count
+        // against — a lone grey pip would be a picture of nothing
+        chart: comparable > 0
+          ? { kind: 'pips', on: flip.length, of: Math.max(comparable, flip.length) }
+          : undefined,
       }
       : nothing('flip', 'No rates on file',
         'needs two suppliers quoting one material before there is a comparison'),
@@ -354,6 +427,7 @@ export function metricsFor(ws: Workspace, today: string): Metric[] {
         tone: stale.length === 0 ? 'good' : 'critical',
         measured: true, href: '/sourcing/compare',
         how: 'rates whose quotation validity is earlier than today',
+        chart: { kind: 'pips', on: stale.length, of: ws.vendorItems.length },
       }
       : nothing('stale', 'No rates on file',
         'needs an accepted price carrying the validity its quotation gave'),
@@ -368,6 +442,7 @@ export function metricsFor(ws: Workspace, today: string): Metric[] {
         tone: src.none.length > 0 ? 'critical' : src.alone.length > 0 ? 'warn' : 'good',
         measured: true, href: '/sourcing/materials',
         how: 'materials quoted by one supplier or none',
+        chart: { kind: 'pips', on: src.alone.length + src.none.length, of: ws.items.length },
       }
       : nothing('singleSource', 'No materials yet',
         'needs a material on file before its suppliers can be counted'),
@@ -380,6 +455,7 @@ export function metricsFor(ws: Workspace, today: string): Metric[] {
         measured: true, href: '/sourcing/orders',
         how: 'largest share of order value (qty × rate) held by one supplier, '
           + 'cancelled orders excluded. Ordered, not paid — this build holds no invoices',
+        chart: { kind: 'ring', pct: con.share },
       }
       : nothing('concentration', 'Nothing ordered yet',
         'needs a purchase order with a quantity and a rate on it'),
@@ -392,6 +468,7 @@ export function metricsFor(ws: Workspace, today: string): Metric[] {
         tone: moves[0].pct > 5 ? 'critical' : moves[0].pct > 0 ? 'warn' : 'good',
         measured: true, href: '/sourcing/compare',
         how: 'biggest rate change in the last 90 days. A first rate is not a move',
+        chart: { kind: 'moves', values: moves.slice(0, 8).map((m) => m.pct) },
       }
       : nothing('priceMoves', 'No price has moved',
         'a rate is logged when it changes — nothing has changed yet'),
@@ -402,6 +479,7 @@ export function metricsFor(ws: Workspace, today: string): Metric[] {
         sub: 'on orders not yet delivered',
         tone: 'neutral', measured: true, href: '/sourcing/orders',
         how: 'Σ qty × rate on orders that are neither delivered nor cancelled',
+        chart: shares.length > 1 ? { kind: 'stack', parts: shares } : undefined,
       }
       : nothing('outstanding', 'Nothing ordered yet',
         'needs a purchase order that is neither delivered nor called off'),
