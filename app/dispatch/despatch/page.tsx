@@ -38,5 +38,5 @@ function PageBody() {
 }
 
 export default function Page() {
-  return <StageGate later="Dispatch and logistics"><PageBody /></StageGate>
+  return <StageGate sample="Dispatch notes" shows="the worked example’s despatch notes against its order book"><PageBody /></StageGate>
 }

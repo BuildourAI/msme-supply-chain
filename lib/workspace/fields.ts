@@ -358,6 +358,8 @@ export const BUILTIN: Record<SheetEntity, BuiltinColumn[]> = {
     { key: 'weight', label: 'Weight', derived: true },
     { key: 'carrier', label: 'Carrier', derived: true },
     { key: 'authorised', label: 'Authorised by', derived: true },
+    { key: 'taxable', label: 'Taxable value', derived: true },
+    { key: 'eway', label: 'E-way bill', derived: true },
   ],
   consignment: [
     { key: 'note', label: 'Note', identity: true, derived: true },

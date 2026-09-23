@@ -136,10 +136,46 @@ const KIND: Record<DecisionKind, IconName> = {
   'job-late': 'calendar',
   'no-plan': 'factory',
   'no-bom': 'doc',
+  // the shipping bay's
+  'order-late': 'truck',
+  'order-at-risk': 'alert',
+  'order-short-stock': 'boxes',
+  'order-no-style': 'factory',
+  'note-no-carrier': 'truck',
+  'note-eway': 'doc',
+  'delivery-due': 'clock',
+  'carrier-late': 'scale',
+  'return-overdue': 'undo',
 }
 
-export function Queue({ rows, berths, onAct, showAll, onShowAll, clear }: {
+/** One card on the right-hand column of a desk that is not waiting on suppliers. */
+export interface SideCard {
+  key: string
+  title: string
+  detail: string
+  foot?: string
+  progress?: number
+  /** the one figure the column is scanned by — "in 2 days", "3 days late" */
+  big: string
+  small?: string
+  flag?: { text: string; tone: 'warn' | 'critical' }
+}
+
+/**
+ * The right-hand column, when what is "on its way" is not a supplier's order —
+ * the bay's consignments on the road, under their carrier.
+ */
+export interface Side {
+  title: string
+  icon: IconName
+  groups: { key: string; label: string; cards: SideCard[] }[]
+  quiet: { title: string; line: string }
+}
+
+export function Queue({ rows, berths, onAct, showAll, onShowAll, clear, side }: {
   rows: Decision[]
+  /** replaces the suppliers' column */
+  side?: Side
   /** what "nothing needs you" means on this desk, said plainly */
   clear?: string
   /** orders out with a supplier and not yet due, under their supplier */
@@ -199,6 +235,37 @@ export function Queue({ rows, berths, onAct, showAll, onShowAll, clear }: {
         )}
       </Column>
 
+      {side ? (
+        <Column icon={side.icon} title={side.title} count={side.groups.reduce((a, g) => a + g.cards.length, 0)}
+          pill="bg-accent-tint text-accent-ink">
+          {side.groups.length === 0 ? <Quiet title={side.quiet.title} line={side.quiet.line} icon={side.icon} /> : (
+            <div className="space-y-4">
+              {side.groups.map((g, gi) => (
+                <section key={g.key}>
+                  <Sub dot={FLIGHT.dot} pill={FLIGHT.pill} count={g.cards.length} label={g.label} />
+                  <ul className="space-y-2">
+                    {g.cards.map((c, i) => (
+                      <Card key={c.key} i={gi * 2 + i} skin={FLIGHT} icon={side.icon}
+                        title={c.title} detail={c.detail} progress={c.progress} foot={c.foot}>
+                        <span className="shrink-0 text-right">
+                          <span className="num block text-[13px] font-bold leading-none">{c.big}</span>
+                          {c.small && <span className="mono mt-1 block text-[10.5px] text-ink-3">{c.small}</span>}
+                          {c.flag && (
+                            <span className={`mt-1 block text-[10.5px] font-semibold ${
+                              c.flag.tone === 'critical' ? 'text-critical' : 'text-warn'}`}>
+                              {c.flag.text}
+                            </span>
+                          )}
+                        </span>
+                      </Card>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          )}
+        </Column>
+      ) : (
       <Column icon="truck" title="Out with suppliers" count={coming}
         pill="bg-accent-tint text-accent-ink">
         {coming === 0 ? <Quiet /> : (
@@ -239,6 +306,7 @@ export function Queue({ rows, berths, onAct, showAll, onShowAll, clear }: {
           </div>
         )}
       </Column>
+      )}
     </div>
   )
 }
@@ -395,16 +463,15 @@ function Clear({ line = 'Every price is decided, every order is out, and nothing
  * it is simply a day with nothing on its way, and it says how something gets
  * here so the column is not a mystery on the first morning.
  */
-function Quiet() {
+function Quiet({ title = 'Nothing on its way', icon = 'truck', line }: { title?: string; icon?: IconName; line?: string }) {
   return (
     <div className="rounded-xl border border-dashed border-line px-4 py-7 text-center">
       <span aria-hidden className="mx-auto mb-2 grid size-9 place-items-center rounded-full bg-surface-2 text-ink-4">
-        <Icon name="truck" className="size-4" />
+        <Icon name={icon} className="size-4" />
       </span>
-      <p className="text-[13px] font-semibold text-ink-2">Nothing on its way</p>
+      <p className="text-[13px] font-semibold text-ink-2">{title}</p>
       <p className="mx-auto mt-1 max-w-[26rem] text-[12px] leading-relaxed text-ink-3">
-        An order shows up here once you have handed it over, and stays until the
-        day the supplier promised.
+        {line ?? 'An order shows up here once you have handed it over, and stays until the day the supplier promised.'}
       </p>
     </div>
   )

@@ -41,5 +41,5 @@ function PageBody() {
 }
 
 export default function Page() {
-  return <StageGate later="Dispatch and logistics"><PageBody /></StageGate>
+  return <StageGate sample="Consignments" shows="deliveries, carriers and on-time-in-full in the worked example"><PageBody /></StageGate>
 }

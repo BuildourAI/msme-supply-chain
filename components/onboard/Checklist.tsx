@@ -12,6 +12,10 @@ import { StoreRulesWizard } from './wizards/StoreRulesWizard'
 import { FloorRulesWizard } from './wizards/FloorRulesWizard'
 import { ProductsWizard } from './wizards/ProductsWizard'
 import { PlanForm } from '@/components/production/desk/PlanDialogs'
+import { OrderForm } from '@/components/dispatch/desk/OrderDialogs'
+import { CustomersWizard } from './wizards/CustomersWizard'
+import { CarriersWizard } from './wizards/CarriersWizard'
+import { DispatchRulesWizard } from './wizards/DispatchRulesWizard'
 import { JobworkerWizard } from './wizards/JobworkerWizard'
 import { MaterialWizard } from './wizards/MaterialWizard'
 import { SupplierWizard } from './wizards/SupplierWizard'
@@ -155,6 +159,10 @@ function Wizards({ open, onClose }: { open: StepId | null; onClose: () => void }
       <ProductsWizard open={open === 'products'} onClose={onClose} />
       <PlanForm jobId={open === 'plan' ? null : undefined} onClose={onClose} />
       <FloorRulesWizard open={open === 'floorRules'} onClose={onClose} />
+      <CustomersWizard open={open === 'customers'} onClose={onClose} />
+      <CarriersWizard open={open === 'carriers'} onClose={onClose} />
+      <OrderForm order={open === 'firstOrder' ? null : undefined} onClose={onClose} />
+      <DispatchRulesWizard open={open === 'dispatchRules'} onClose={onClose} />
     </>
   )
 }

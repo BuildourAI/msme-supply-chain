@@ -56,5 +56,5 @@ function PageBody() {
 }
 
 export default function Page() {
-  return <StageGate later="Dispatch and logistics"><PageBody /></StageGate>
+  return <StageGate sample="the Dispatch dashboard" shows="what the whole dispatch stage does, system by system"><PageBody /></StageGate>
 }

@@ -23,6 +23,9 @@ import { lineWatch, stoppingThisWeek } from './linewatch'
 import { jobPlanRows } from './plan'
 import { productionOpenCount } from './production-decisions'
 import { productsWanting } from './products'
+import { orderRows } from './sales'
+import { unbooked } from './dispatch-notes'
+import { dispatchOpenCount } from './dispatch-decisions'
 import { cutRows, offcutRows } from './cutting'
 import { openJobs } from './jobs'
 import { lotRows } from './ledger'
@@ -65,7 +68,7 @@ export type StageId = typeof STAGE_TILES[number]['id']
  * Inbound is second because it is where sourcing ends: every order in the
  * sourcing dashboard's right-hand column finishes at this gate.
  */
-export const BUILT: StageId[] = ['sourcing', 'inbound', 'inventory', 'production']
+export const BUILT: StageId[] = ['sourcing', 'inbound', 'inventory', 'production', 'dispatch']
 
 export const isBuilt = (s: StageId | null): s is StageId => s !== null && BUILT.includes(s)
 
@@ -79,7 +82,7 @@ export const STAGE_HOME: Record<StageId, string> = {
   inbound: '/inbound/dashboard',
   inventory: '/inventory/dashboard',
   production: '/production/dashboard',
-  dispatch: '/',
+  dispatch: '/dispatch/dashboard',
 }
 
 /**
@@ -251,12 +254,34 @@ export function productionNav(ws: Workspace, today = ''): NavRow[] {
   ]
 }
 
+/**
+ * The shipping bay's rows: the order book first, because every dispatch
+ * starts from an order. Customers and carriers are masters, reached now and
+ * then, so they sit under "More".
+ */
+export function dispatchNav(ws: Workspace, today = ''): NavRow[] {
+  const late = today ? orderRows(ws, today).filter((r) => r.overdue).length : 0
+  return [
+    {
+      label: 'Dashboard',
+      href: '/dispatch/dashboard',
+      icon: 'activity',
+      badge: count(dispatchOpenCount(ws, today)),
+    },
+    { label: 'Order book', href: '/dispatch/orders', icon: 'doc', badge: count(late) },
+    { label: 'Dispatch notes', href: '/dispatch/notes', icon: 'truck', badge: count(unbooked(ws).length) },
+    { label: 'Customers', href: '/dispatch/customers', icon: 'star', tucked: true },
+    { label: 'Carriers', href: '/dispatch/carriers', icon: 'share', tucked: true },
+  ]
+}
+
 /** The rail for the stage somebody is standing in. */
 export const navFor = (stage: StageId, ws: Workspace, today = ''): NavRow[] =>
   stage === 'inbound' ? inboundNav(ws, today)
     : stage === 'inventory' ? inventoryNav(ws, today)
       : stage === 'production' ? productionNav(ws, today)
-        : sourcingNav(ws, today)
+        : stage === 'dispatch' ? dispatchNav(ws, today)
+          : sourcingNav(ws, today)
 
 const count = (n: number) => (n > 0 ? String(n) : undefined)
 

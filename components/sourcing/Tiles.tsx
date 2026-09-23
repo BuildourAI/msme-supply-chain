@@ -50,6 +50,13 @@ const ICON: Record<MetricKey, IconName> = {
   floorDays: 'clock',
   rmToFg: 'arrow-right',
   haltDays: 'alert',
+  otif: 'check',
+  orderToDock: 'clock',
+  pastPromise: 'alert',
+  fgValue: 'boxes',
+  freightUnit: 'truck',
+  carrierLate: 'truck',
+  dispatchedMonth: 'arrow-right',
 }
 
 /*

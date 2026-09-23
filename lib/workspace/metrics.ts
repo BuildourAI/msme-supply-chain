@@ -30,6 +30,12 @@ import { HALT_WORD, lineRunsFor, lineWatch, stoppingThisWeek } from './linewatch
 import { haltsByCause } from './halts'
 import { meanTurnaround } from './turnaround'
 import { jobPlanRows } from './plan'
+import { despatchedValue, overdueValue } from '@/lib/domain/dispatch'
+import { consignmentRows, freightUnitOf, orderToDock, otifOf } from './consignments'
+import { dispatchRulesOf } from './customers'
+import { asNote, asOrderRow } from './dispatch-domain'
+import { asFg, fgOnHand, productOf } from './products'
+import { orderRows } from './sales'
 import type { Workspace } from './types'
 
 /* -------------------------------------------------------------- the shape -- */
@@ -94,6 +100,8 @@ export type MetricKey =
   | 'remnants'
   /* the floor's */
   | 'lineRunsFor' | 'jobsStopping' | 'attainment' | 'firstPass' | 'floorDays' | 'rmToFg' | 'haltDays'
+  /* the bay's */
+  | 'otif' | 'orderToDock' | 'pastPromise' | 'fgValue' | 'freightUnit' | 'carrierLate' | 'dispatchedMonth'
 
 /** The desks that have a dashboard of figures. */
 export type MetricStage = 'sourcing' | 'inbound' | 'inventory' | 'production' | 'dispatch'
@@ -114,7 +122,7 @@ export const STAGE_METRICS: Record<MetricStage, MetricKey[]> = {
   inbound: ['qcHeld', 'inspectedOnTime', 'defects', 'onTime', 'unacked', 'atJobworkers', 'lead'],
   inventory: ['stockValue', 'unconfirmed', 'accuracy', 'heldStock', 'netLoss', 'scrap', 'dio', 'remnants'],
   production: ['lineRunsFor', 'jobsStopping', 'attainment', 'firstPass', 'floorDays', 'rmToFg', 'haltDays'],
-  dispatch: [],
+  dispatch: ['otif', 'orderToDock', 'pastPromise', 'fgValue', 'freightUnit', 'carrierLate', 'dispatchedMonth'],
 }
 
 /** Figures that belong to a switch in the store rules, and are not offered with it off. */
@@ -148,7 +156,7 @@ export const DEFAULTS_FOR: Record<MetricStage, MetricKey[]> = {
   inbound: INBOUND_PICKS,
   inventory: INVENTORY_PICKS,
   production: ['lineRunsFor', 'jobsStopping', 'attainment', 'firstPass', 'floorDays', 'haltDays'],
-  dispatch: [],
+  dispatch: ['otif', 'orderToDock', 'pastPromise', 'fgValue', 'freightUnit', 'dispatchedMonth'],
 }
 
 export const METRIC_LABEL: Record<MetricKey, string> = {
@@ -180,6 +188,13 @@ export const METRIC_LABEL: Record<MetricKey, string> = {
   floorDays: 'Days on the floor',
   rmToFg: 'Raw material to finished',
   haltDays: 'Days halted',
+  otif: 'On time, in full',
+  orderToDock: 'Order to dock',
+  pastPromise: 'Past the promise',
+  fgValue: 'Finished stock',
+  freightUnit: 'Freight per unit',
+  carrierLate: 'Delivered late',
+  dispatchedMonth: 'Dispatched this month',
 }
 
 /** One line each, for the dialog where the owner picks. */
@@ -212,6 +227,13 @@ export const METRIC_WHY: Record<MetricKey, string> = {
   floorDays: 'How long a job takes from its first issue of material to its last output — over jobs closed in the last 90 days.',
   rmToFg: 'From the day material came onto the book to the day the finished product came off the floor — shelf time and floor time added.',
   haltDays: 'Working days jobs stood still this month, and the cause that cost most.',
+  otif: 'Of the consignments somebody confirmed as delivered, the share that landed by the promised day with the whole order gone.',
+  orderToDock: 'Days from taking an order to the goods leaving the bay — the wait a customer feels before anything moves.',
+  pastPromise: 'What is still to go on orders whose promised day has passed, at the order’s own rates.',
+  fgValue: 'Finished goods on the shelf, at what each costs you to make.',
+  freightUnit: 'What the carriers billed, per piece shipped — the figure a creeping surcharge shows up in.',
+  carrierLate: 'Of this month’s confirmed deliveries, the share that landed after the day the customer was given.',
+  dispatchedMonth: 'What left the building this month, at what it cost to make.',
 }
 
 /* ------------------------------------------------------------- the maths -- */
@@ -930,10 +952,138 @@ function productionMetrics(
   ]
 }
 
+/**
+ * The bay's figures.
+ *
+ * On time and in full, order to dock, freight per unit, the late share and
+ * the value past its promise are the domain's own sums over the owner's
+ * orders, notes and consignments; finished stock is each product's journal at
+ * its cost to make. Each is unmeasured until the record behind it exists — a
+ * consignment nobody confirmed is not on time and not late.
+ */
+function dispatchMetrics(
+  ws: Workspace, today: string,
+  nothing: (key: MetricKey, value: string, how: string) => Metric,
+): Metric[] {
+  const rules = dispatchRulesOf(ws)
+  const orders = orderRows(ws, today)
+  const notes = ws.dispatchNotes ?? []
+  const cons = consignmentRows(ws, today)
+  const landed = cons.filter((r) => r.delivered)
+  const otif = otifOf(cons)
+  const dock = orderToDock(ws)
+  const past = overdueValue(orders.map((r) => asOrderRow(r.order, r.customer, notes.filter((n) => n.orderId === r.order.id), {
+    value: r.value, pending: r.pending, ordered: r.ordered, despatched: r.dispatched, complete: r.complete, overdue: r.overdue,
+  })))
+  const overdueN = orders.filter((r) => r.overdue).length
+  const products = ws.products ?? []
+  const onShelf = products.map((p) => ({ p, qty: fgOnHand(ws, p.id) })).filter((x) => x.qty > 0)
+  const shelfUnits = onShelf.reduce((a, x) => a + x.qty, 0)
+  const unpriced = onShelf.filter((x) => !x.p.standardCost).length
+  const shelfValue = onShelf.reduce((a, x) => a + x.qty * (x.p.standardCost ?? 0), 0)
+  const billed = cons.filter((r) => r.consignment.freight !== undefined)
+  const freight = freightUnitOf(billed)
+  const month = today.slice(0, 7)
+  const landedMonth = landed.filter((r) => r.consignment.deliveredOn!.slice(0, 7) === month)
+  const lateMonth = landedMonth.filter((r) => !r.onTime)
+  const out = notes.filter((n) => n.on.slice(0, 7) === month)
+  const outUnits = out.reduce((a, n) => a + n.lines.reduce((b, l) => b + l.qty, 0), 0)
+  const outValue = despatchedValue(out.map((n) => asNote(n, '')), (id) => {
+    const p = productOf(ws, id)
+    return p ? asFg(p) : undefined
+  })
+  const outUnpriced = out.some((n) => n.lines.some((l) => !productOf(ws, l.productId)?.standardCost))
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
+
+  return [
+    landed.length > 0
+      ? {
+        key: 'otif', label: METRIC_LABEL.otif, value: pct(otif.value as number),
+        sub: `${landed.filter((r) => r.onTime && r.inFull).length} of ${plural(landed.length, 'delivery')} · target ${rules.otifTargetPct}%`,
+        tone: (otif.value as number) >= rules.otifTargetPct ? 'good' : (otif.value as number) >= rules.otifTargetPct - 10 ? 'warn' : 'critical',
+        measured: true, href: '/dispatch/consignments',
+        how: 'delivered by the promised day with everything ordered gone ÷ deliveries somebody confirmed; still in transit counts neither way',
+        chart: { kind: 'dots', dots: landed.slice(0, 14).map((r) => r.onTime && r.inFull) },
+      }
+      : nothing('otif', 'Nothing delivered yet', 'needs a consignment somebody has confirmed as delivered'),
+
+    notes.length > 0
+      ? {
+        key: 'orderToDock', label: METRIC_LABEL.orderToDock, value: `${dock.value} days`,
+        sub: `mean over ${plural(notes.length, 'dispatch note')}`,
+        tone: 'neutral', measured: true, href: '/dispatch/notes',
+        how: 'mean(day the note was raised − day the order was taken), over every note',
+      }
+      : nothing('orderToDock', 'Nothing dispatched yet', 'needs a dispatch note against an order'),
+
+    orders.length > 0
+      ? {
+        key: 'pastPromise', label: METRIC_LABEL.pastPromise, value: money(past.value as number),
+        sub: overdueN === 0 ? 'every open order is inside its promise' : `${plural(overdueN, 'order')} past the promised day`,
+        tone: overdueN === 0 ? 'good' : 'critical',
+        measured: true, href: '/dispatch/orders',
+        how: 'Σ order value × the share still to go, over open orders whose promised day has passed',
+      }
+      : nothing('pastPromise', 'No order on the book', 'needs a customer order'),
+
+    (ws.fgMoves ?? []).length > 0
+      ? unpriced === onShelf.length && onShelf.length > 0
+        ? {
+          key: 'fgValue', label: METRIC_LABEL.fgValue, value: `${shelfUnits} pcs`,
+          sub: 'no cost to make on these products, so no value', tone: 'neutral', measured: true, href: '/production/products',
+          how: 'Σ finished stock of each product — put in what one costs to make and this becomes rupees',
+        }
+        : {
+          key: 'fgValue', label: METRIC_LABEL.fgValue, value: money(shelfValue),
+          sub: `${shelfUnits} pieces of ${plural(onShelf.length, 'product')}${unpriced ? ` · ${unpriced} with no cost` : ''}`,
+          tone: 'neutral', measured: true, href: '/production/products',
+          how: 'Σ (output booked − dispatched + counted) × cost to make one, per product',
+        }
+      : nothing('fgValue', 'Nothing made yet', 'needs output booked on a job, or finished stock counted'),
+
+    billed.length > 0
+      ? {
+        key: 'freightUnit', label: METRIC_LABEL.freightUnit, value: `₹${freight.value}`,
+        sub: `over ${plural(billed.length, 'consignment')} with a freight bill`,
+        tone: 'neutral', measured: true, href: '/dispatch/consignments',
+        how: 'Σ freight billed ÷ Σ pieces on those consignments’ notes',
+      }
+      : nothing('freightUnit', 'No freight recorded', 'needs a consignment with its freight put in, or a carrier rate'),
+
+    landedMonth.length > 0
+      ? {
+        key: 'carrierLate', label: METRIC_LABEL.carrierLate, value: pct((lateMonth.length / landedMonth.length) * 100),
+        sub: `${lateMonth.length} of ${plural(landedMonth.length, 'delivery')} this month`,
+        tone: lateMonth.length === 0 ? 'good' : lateMonth.length / landedMonth.length <= 0.1 ? 'warn' : 'critical',
+        measured: true, href: '/dispatch/consignments?view=carriers',
+        how: 'deliveries this month that landed after the promised day ÷ deliveries confirmed this month',
+        chart: { kind: 'pips', on: lateMonth.length, of: landedMonth.length },
+      }
+      : nothing('carrierLate', 'Nothing delivered this month', 'needs a delivery confirmed this month'),
+
+    out.length > 0
+      ? outUnpriced && (outValue.value as number) === 0
+        ? {
+          key: 'dispatchedMonth', label: METRIC_LABEL.dispatchedMonth, value: `${outUnits} pcs`,
+          sub: `on ${plural(out.length, 'note')} · no cost to make, so no value`, tone: 'neutral', measured: true, href: '/dispatch/notes',
+          how: 'Σ pieces on this month’s dispatch notes',
+        }
+        : {
+          key: 'dispatchedMonth', label: METRIC_LABEL.dispatchedMonth, value: money(outValue.value as number),
+          sub: `${outUnits} pieces on ${plural(out.length, 'note')}${outUnpriced ? ' · some with no cost' : ''}`,
+          tone: 'neutral', measured: true, href: '/dispatch/notes',
+          how: 'Σ (pieces × cost to make one) over this month’s dispatch notes',
+        }
+      : nothing('dispatchedMonth', 'Nothing out this month', 'needs a dispatch note raised this month'),
+  ]
+}
+
 /** Every figure a desk offers, in its own order. */
 export function stageMetrics(ws: Workspace, today: string, stage: MetricStage = 'sourcing'): Metric[] {
   // the floor's figures run the whole Line watch, so only the floor's dashboard pays for them
-  const all = stage === 'production' ? productionMetrics(ws, today, nothingOf) : metricsFor(ws, today)
+  const all = stage === 'production' ? productionMetrics(ws, today, nothingOf)
+    : stage === 'dispatch' ? dispatchMetrics(ws, today, nothingOf)
+      : metricsFor(ws, today)
   return STAGE_METRICS[stage]
     .filter((k) => ws.cutting || !NEEDS_CUTTING.includes(k))
     .map((k) => all.find((m) => m.key === k)!).filter(Boolean)

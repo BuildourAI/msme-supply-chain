@@ -33,5 +33,5 @@ function PageBody() {
 }
 
 export default function Page() {
-  return <StageGate later="Dispatch and logistics"><PageBody /></StageGate>
+  return <StageGate sample="the delivery challan on each dispatch note" shows="the worked example’s dispatch documents"><PageBody /></StageGate>
 }

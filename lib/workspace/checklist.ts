@@ -14,6 +14,8 @@ import { quotedItems, unquotedItems } from './bundle'
 import { coveredItems } from './checks'
 import { jobworkers } from './jobwork'
 import { jobWord, openJobs } from './jobs'
+import { companyState } from './gst'
+import { dispatchRulesOf } from './customers'
 import { floorOf, isPlanned, unplannedJobs } from './plan'
 import { productsWanting } from './products'
 import { unplacedLots } from './racks'
@@ -41,6 +43,8 @@ export type StepId =
   | 'racks' | 'jobs' | 'storeRules'
   /* the floor's */
   | 'products' | 'plan' | 'floorRules'
+  /* the shipping bay's */
+  | 'customers' | 'carriers' | 'firstOrder' | 'dispatchRules'
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
@@ -253,12 +257,62 @@ export const PRODUCTION_STEPS: Step[] = [
   },
 ]
 
+/**
+ * Setting up the shipping bay.
+ *
+ * Products are the floor's own step object — what you make is what you ship.
+ * The rest are the bay's: who it goes to, who carries it, the first order,
+ * and the rules a dispatch is checked against.
+ */
+export const DISPATCH_STEPS: Step[] = [
+  PRODUCTS_STEP,
+  {
+    id: 'customers',
+    title: 'Your customers',
+    why: 'Who you sell to, with a GSTIN where they have one — the delivery challan and the e-way bill both want it, and their state is read off it.',
+    cta: 'Add your customers',
+    done: (ws) => (ws.customers ?? []).length > 0,
+    summary: (ws) => plural((ws.customers ?? []).length, 'customer'),
+  },
+  {
+    id: 'carriers',
+    title: 'Who carries it',
+    why: 'The transporters you use, and your own vehicle if you have one. Every consignment names one, so a carrier who is always late shows up as a number.',
+    cta: 'Add your carriers',
+    done: (ws) => (ws.carriers ?? []).length > 0,
+    summary: (ws) => plural((ws.carriers ?? []).length, 'carrier'),
+  },
+  {
+    id: 'firstOrder',
+    title: 'Your first order',
+    why: 'A customer, a promised date, the products and the rate — and the style making it, so a promise at risk shows before the customer rings.',
+    cta: 'Take an order',
+    done: (ws) => (ws.customerOrders ?? []).length > 0,
+    summary: (ws) => {
+      const open = (ws.customerOrders ?? []).filter((o) => o.state === 'open').length
+      return `${plural((ws.customerOrders ?? []).length, 'order')}${open ? ` · ${open} open` : ''}`
+    },
+  },
+  {
+    id: 'dispatchRules',
+    title: 'Dispatch rules',
+    why: 'Your own state, for place of supply; when a consignment needs an e-way bill; the on-time target; how long a new order is promised for.',
+    cta: 'Set the dispatch rules',
+    done: (ws) => ws.drafts['dispatch.rules.agreed'] === true,
+    summary: (ws) => {
+      const r = dispatchRulesOf(ws)
+      return `${companyState(ws) ?? 'state not set'} · e-way bill from ₹${r.ewayThreshold.toLocaleString('en-IN')} · on time ${r.otifTargetPct}%`
+    },
+  },
+]
+
 /** The set-up list for a stage. A stage with none of its own gets sourcing's. */
 export const stepsFor = (stage: StageId | null | undefined): Step[] =>
   stage === 'inbound' ? INBOUND_STEPS
     : stage === 'inventory' ? INVENTORY_STEPS
       : stage === 'production' ? PRODUCTION_STEPS
-        : SOURCING_STEPS
+        : stage === 'dispatch' ? DISPATCH_STEPS
+          : SOURCING_STEPS
 
 export interface Progress {
   steps: { step: Step; done: boolean }[]
@@ -282,4 +336,4 @@ export function progressOf(ws: Workspace, steps: Step[] = SOURCING_STEPS): Progr
 }
 
 export const stepById = (id: StepId): Step =>
-  [...SOURCING_STEPS, ...INBOUND_STEPS, ...INVENTORY_STEPS, ...PRODUCTION_STEPS].find((s) => s.id === id)!
+  [...SOURCING_STEPS, ...INBOUND_STEPS, ...INVENTORY_STEPS, ...PRODUCTION_STEPS, ...DISPATCH_STEPS].find((s) => s.id === id)!

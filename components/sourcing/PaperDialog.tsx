@@ -32,6 +32,13 @@ export interface Paper {
   fileName: string
   sendable: Sendable
   render: () => Promise<Blob>
+  /**
+   * Where the addressee's phone and email live, when that is not the supplier
+   * book — a customer keeps their own on their record, and a number typed in
+   * here is saved back there.
+   */
+  contact?: { phone?: string; email?: string }
+  saveContact?: (field: 'phone' | 'email', value: string) => void
 }
 
 export function PaperDialog({ open, onClose, title, sub, papers, sentTo, onSent }: {
@@ -86,7 +93,7 @@ export function PaperDialog({ open, onClose, title, sub, papers, sentTo, onSent 
 
   if (!open || !workspace || !paper) return null
   const ws = workspace
-  const contact = paper.vendor ? ws.vendorContact[paper.vendor.id] : undefined
+  const contact = paper.saveContact ? paper.contact : paper.vendor ? ws.vendorContact[paper.vendor.id] : undefined
 
   const record = (via: SendEntry['via']) => {
     if (paper.vendor) onSent(paper.vendor.id, via)
@@ -94,6 +101,11 @@ export function PaperDialog({ open, onClose, title, sub, papers, sentTo, onSent 
 
   const saveContact = () => {
     if (!paper.vendor || !askContact) return
+    if (paper.saveContact) {
+      paper.saveContact(askContact, draft.trim())
+      setAskContact(null); setDraft('')
+      return
+    }
     const id = paper.vendor.id
     update((w) => ({
       ...w,

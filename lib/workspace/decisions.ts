@@ -76,6 +76,11 @@ export type Act =
   | 'plan'          // give a job its product, quantity and dates, or re-plan it
   | 'output'        // book what came off a job
   | 'resume'        // the floor started again on a halted job
+  /* the shipping bay's — see `dispatch-decisions.ts` */
+  | 'dispatch'      // raise a dispatch note against an order
+  | 'book'          // give a dispatch note its carrier and docket
+  | 'delivered'     // the customer has it: when, and who said so
+  | 'receive'       // a customer's return is back at the gate
 
 export type DecisionKind =
   | 'at-risk' | 'late' | 'unsourced'
@@ -92,6 +97,9 @@ export type DecisionKind =
   | 'remnant-aged' | 'remnant-covers' | 'cut-below-plan'
   /* the floor's */
   | 'job-halted' | 'job-will-halt' | 'job-at-risk' | 'job-behind' | 'job-late' | 'no-plan' | 'no-bom'
+  /* the shipping bay's */
+  | 'order-late' | 'order-at-risk' | 'order-short-stock' | 'order-no-style'
+  | 'note-no-carrier' | 'note-eway' | 'delivery-due' | 'carrier-late' | 'return-overdue'
 
 export interface Decision {
   /** stable across renders, so a list key is not an index */
@@ -127,6 +135,10 @@ export interface Decision {
     jobId?: string
     productId?: string
     haltId?: string
+    noteId?: string
+    consignmentId?: string
+    rmaId?: string
+    carrierId?: string
     lossId?: string
     cutId?: string
   }

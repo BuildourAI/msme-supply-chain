@@ -74,7 +74,5 @@ export const NEEDS: Record<string, Need> = {
 
 export const needFor = (path: string): Need | null => NEEDS[path] ?? null
 
-/** The stages whose set-up comes after sourcing, inbound and the store. */
-export const LATER_STAGES: Record<string, string> = {
-  dispatch: 'Dispatch & logistics',
-}
+/** Stages whose set-up is still to come. Every stage is open now; a new one would be named here. */
+export const LATER_STAGES: Record<string, string> = {}
