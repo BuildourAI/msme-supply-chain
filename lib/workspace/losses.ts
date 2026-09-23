@@ -55,6 +55,7 @@ export function writeOff(ws: Workspace, w: WriteOff): [Workspace, string] {
     sourceRef: rejected && lot.receiptId ? lot.receiptId : id,
     recoveryRate: scrapRateOf(ws, lot.itemId),
     actor: w.actor,
+    note: w.note.trim(),
   }
   return [{ ...moved, losses: [...(moved.losses ?? []), loss] }, id]
 }

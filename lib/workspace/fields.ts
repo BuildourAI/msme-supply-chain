@@ -225,6 +225,31 @@ export const BUILTIN: Record<SheetEntity, BuiltinColumn[]> = {
     { key: 'doc', label: 'Document', derived: true },
     { key: 'actor', label: 'By', derived: true },
   ],
+  /*
+   * A job is typed in or opened from the set-up step; a slip is a record of
+   * material that moved, so neither imports. Both carry columns for
+   * arranging, custom fields — a buyer, a season — and export.
+   */
+  job: [
+    { key: 'no', label: 'No.', identity: true, derived: true },
+    { key: 'name', label: 'What it is', derived: true },
+    { key: 'customer', label: 'For', derived: true },
+    { key: 'opened', label: 'Opened', derived: true },
+    { key: 'state', label: 'State', derived: true },
+    { key: 'materials', label: 'Material used', derived: true },
+    { key: 'consumption', label: 'Worth', derived: true },
+    { key: 'wasted', label: 'Wasted', derived: true },
+  ],
+  issue: [
+    { key: 'no', label: 'Slip', identity: true, derived: true },
+    { key: 'on', label: 'Date', derived: true },
+    { key: 'kind', label: 'Out or back', derived: true },
+    { key: 'job', label: 'Job', derived: true },
+    { key: 'item', label: 'Material', derived: true },
+    { key: 'qty', label: 'Quantity', derived: true },
+    { key: 'lots', label: 'Lots', derived: true },
+    { key: 'takenBy', label: 'Taken by', derived: true },
+  ],
 }
 
 export const EMPTY_VIEW: TableView = { order: [], hidden: [], labels: {} }
@@ -242,6 +267,8 @@ export const EMPTY_VIEWS: Record<SheetEntity, TableView> = {
   lot: EMPTY_VIEW,
   count: EMPTY_VIEW,
   move: EMPTY_VIEW,
+  job: EMPTY_VIEW,
+  issue: EMPTY_VIEW,
 }
 
 /**
@@ -524,6 +551,8 @@ export function pruneCustom(ws: Workspace): Workspace {
     ...ws.stockLots.map((l) => l.id),
     ...(ws.counts ?? []).map((c) => c.id),
     ...(ws.moves ?? []).map((m) => m.id),
+    ...(ws.jobs ?? []).map((j) => j.id),
+    ...(ws.issues ?? []).map((s) => s.id),
   ])
   const custom: Record<string, Record<string, string>> = {}
   for (const [id, row] of Object.entries(ws.custom ?? {})) {

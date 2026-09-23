@@ -19,6 +19,7 @@ import { openCount } from './decisions'
 import { inboundOpenCount } from './inbound-decisions'
 import { inventoryOpenCount } from './inventory-decisions'
 import { openVariances } from './counting'
+import { jobWordCap, openJobs } from './jobs'
 import { lotRows } from './ledger'
 import { unplacedLots } from './racks'
 import { challansOut } from './jobwork'
@@ -198,6 +199,8 @@ export function inventoryNav(ws: Workspace, today = ''): NavRow[] {
       badge: count(inventoryOpenCount(ws, today)),
     },
     { label: 'Stock ledger', href: '/inventory/ledger', icon: 'boxes', badge: count(due) },
+    // the owner's own word — Styles, Jobs, Orders — with how many are open
+    { label: jobWordCap(ws).many, href: '/inventory/issues', icon: 'factory', badge: count(openJobs(ws).length) },
     { label: 'Racks', href: '/inventory/racks', icon: 'columns', badge: count(unplacedLots(ws).length), tucked: true },
   ]
 }

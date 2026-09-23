@@ -30,7 +30,7 @@ const NOUN: Record<SheetEntity, string> = {
   supplier: 'suppliers', material: 'materials', rfq: 'requests',
   quote: 'quotes', order: 'orders',
   check: 'checks', receipt: 'receipts', challan: 'challans',
-  rack: 'racks', lot: 'lots', count: 'counts', move: 'movements',
+  rack: 'racks', lot: 'lots', count: 'counts', move: 'movements', job: 'jobs', issue: 'issue slips',
 }
 
 /** Columns an import can fill. Worked-out ones are not offered — they are sums. */

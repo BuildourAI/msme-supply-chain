@@ -77,7 +77,7 @@ export function recount(ws: Workspace, r: Recount): [Workspace, string] {
       id: lossId, on: r.on, itemId: lot.itemId, lotId: lot.id, qty: -diff,
       cause: 'count_shortage', source: 'count', sourceRef: id,
       // missing is missing: nothing to sell
-      recoveryRate: 0, actor: r.counter,
+      recoveryRate: 0, actor: r.counter, note: count.note,
     }
     w = { ...w2, losses: [...(w2.losses ?? []), loss] }
   }

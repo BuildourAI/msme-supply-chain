@@ -460,7 +460,8 @@ export interface IssueSlip {
 }
 
 export type WsCut = CutRecord & { jobId?: string; rack?: string }
-export type WsLoss = LossRecord & { jobId?: string }
+/** A loss, the job it happened on, and what the person recording it said. */
+export type WsLoss = LossRecord & { jobId?: string; note?: string }
 
 /* --------------------------------------------- fields the owner invents -- */
 
@@ -492,7 +493,7 @@ export type SheetEntity =
   /** the inbound desk's three lists */
   | 'check' | 'receipt' | 'challan'
   /** the store's */
-  | 'rack' | 'lot' | 'count' | 'move'
+  | 'rack' | 'lot' | 'count' | 'move' | 'job' | 'issue'
 
 export interface FieldDef {
   id: string
