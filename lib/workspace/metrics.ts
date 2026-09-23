@@ -36,6 +36,7 @@ import { dispatchRulesOf } from './customers'
 import { asNote, asOrderRow } from './dispatch-domain'
 import { asFg, fgOnHand, productOf } from './products'
 import { orderRows } from './sales'
+import { returnRate } from './returns'
 import type { Workspace } from './types'
 
 /* -------------------------------------------------------------- the shape -- */
@@ -102,6 +103,8 @@ export type MetricKey =
   | 'lineRunsFor' | 'jobsStopping' | 'attainment' | 'firstPass' | 'floorDays' | 'rmToFg' | 'haltDays'
   /* the bay's */
   | 'otif' | 'orderToDock' | 'pastPromise' | 'fgValue' | 'freightUnit' | 'carrierLate' | 'dispatchedMonth'
+  /* only once a return has been agreed */
+  | 'returnRate'
 
 /** The desks that have a dashboard of figures. */
 export type MetricStage = 'sourcing' | 'inbound' | 'inventory' | 'production' | 'dispatch'
@@ -122,11 +125,14 @@ export const STAGE_METRICS: Record<MetricStage, MetricKey[]> = {
   inbound: ['qcHeld', 'inspectedOnTime', 'defects', 'onTime', 'unacked', 'atJobworkers', 'lead'],
   inventory: ['stockValue', 'unconfirmed', 'accuracy', 'heldStock', 'netLoss', 'scrap', 'dio', 'remnants'],
   production: ['lineRunsFor', 'jobsStopping', 'attainment', 'firstPass', 'floorDays', 'rmToFg', 'haltDays'],
-  dispatch: ['otif', 'orderToDock', 'pastPromise', 'fgValue', 'freightUnit', 'carrierLate', 'dispatchedMonth'],
+  dispatch: ['otif', 'orderToDock', 'pastPromise', 'fgValue', 'freightUnit', 'carrierLate', 'dispatchedMonth', 'returnRate'],
 }
 
 /** Figures that belong to a switch in the store rules, and are not offered with it off. */
 const NEEDS_CUTTING: MetricKey[] = ['remnants']
+
+/** A return rate is not offered to a bay that has never agreed a return — nought would read as a verdict. */
+const NEEDS_RETURNS: MetricKey[] = ['returnRate']
 
 /**
  * What a new owner sees before they have chosen.
@@ -156,7 +162,7 @@ export const DEFAULTS_FOR: Record<MetricStage, MetricKey[]> = {
   inbound: INBOUND_PICKS,
   inventory: INVENTORY_PICKS,
   production: ['lineRunsFor', 'jobsStopping', 'attainment', 'firstPass', 'floorDays', 'haltDays'],
-  dispatch: ['otif', 'orderToDock', 'pastPromise', 'fgValue', 'freightUnit', 'dispatchedMonth'],
+  dispatch: ['otif', 'orderToDock', 'pastPromise', 'fgValue', 'freightUnit', 'dispatchedMonth', 'returnRate'],
 }
 
 export const METRIC_LABEL: Record<MetricKey, string> = {
@@ -195,6 +201,7 @@ export const METRIC_LABEL: Record<MetricKey, string> = {
   freightUnit: 'Freight per unit',
   carrierLate: 'Delivered late',
   dispatchedMonth: 'Dispatched this month',
+  returnRate: 'Returned',
 }
 
 /** One line each, for the dialog where the owner picks. */
@@ -234,6 +241,7 @@ export const METRIC_WHY: Record<MetricKey, string> = {
   freightUnit: 'What the carriers billed, per piece shipped — the figure a creeping surcharge shows up in.',
   carrierLate: 'Of this month’s confirmed deliveries, the share that landed after the day the customer was given.',
   dispatchedMonth: 'What left the building this month, at what it cost to make.',
+  returnRate: 'Of every piece shipped, the share customers were agreed to send back — counted when agreed, not when it arrives.',
 }
 
 /* ------------------------------------------------------------- the maths -- */
@@ -1037,7 +1045,7 @@ function dispatchMetrics(
           key: 'fgValue', label: METRIC_LABEL.fgValue, value: money(shelfValue),
           sub: `${shelfUnits} pieces of ${plural(onShelf.length, 'product')}${unpriced ? ` · ${unpriced} with no cost` : ''}`,
           tone: 'neutral', measured: true, href: '/production/products',
-          how: 'Σ (output booked − dispatched + counted) × cost to make one, per product',
+          how: 'Σ (output booked + counted + returned fit to sell − dispatched) × cost to make one, per product',
         }
       : nothing('fgValue', 'Nothing made yet', 'needs output booked on a job, or finished stock counted'),
 
@@ -1075,6 +1083,22 @@ function dispatchMetrics(
           how: 'Σ (pieces × cost to make one) over this month’s dispatch notes',
         }
       : nothing('dispatchedMonth', 'Nothing out this month', 'needs a dispatch note raised this month'),
+
+    (ws.rmas ?? []).length > 0
+      ? (() => {
+        const rate = returnRate(ws).value as number
+        const back = (ws.rmas ?? []).reduce((a, r) => a + r.qty, 0)
+        const shipped = notes.reduce((a, n) => a + n.lines.reduce((b, l) => b + l.qty, 0), 0)
+        const open = (ws.rmas ?? []).filter((r) => r.state === 'authorised').length
+        return {
+          key: 'returnRate' as const, label: METRIC_LABEL.returnRate, value: pct(rate),
+          sub: `${back} of ${shipped} pieces shipped${open ? ` · ${plural(open, 'return')} still to come back` : ''}`,
+          tone: (rate <= 1 ? 'good' : rate <= 3 ? 'warn' : 'critical') as MetricTone,
+          measured: true, href: '/dispatch/returns',
+          how: 'Σ pieces agreed to come back ÷ Σ pieces on dispatch notes — counted on authorisations, so one nobody chased still shows',
+        }
+      })()
+      : nothing('returnRate', 'No return agreed', 'needs a return authorised against a dispatch note'),
   ]
 }
 
@@ -1086,6 +1110,7 @@ export function stageMetrics(ws: Workspace, today: string, stage: MetricStage = 
       : metricsFor(ws, today)
   return STAGE_METRICS[stage]
     .filter((k) => ws.cutting || !NEEDS_CUTTING.includes(k))
+    .filter((k) => (ws.rmas ?? []).length > 0 || !NEEDS_RETURNS.includes(k))
     .map((k) => all.find((m) => m.key === k)!).filter(Boolean)
 }
 

@@ -19,6 +19,7 @@ import { jobWord } from './jobs'
 import { WATCH_WORD } from './linewatch'
 import { fgOnHand, productOf } from './products'
 import { orderOf, orderRows, type OrderRow } from './sales'
+import { returnRows } from './returns'
 import type { Workspace } from './types'
 
 const money = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`
@@ -28,6 +29,7 @@ export const shortNotedKey = (orderId: string) => `dispatch.shortNoted.${orderId
 export const noCarrierKey = (noteId: string) => `dispatch.noCarrier.${noteId}`
 export const ewayKey = (noteId: string) => `dispatch.eway.${noteId}`
 export const carrierKey = (carrierId: string, month: string) => `dispatch.carrier.${carrierId}.${month}`
+export const returnKey = (rmaId: string) => `dispatch.return.${rmaId}`
 
 /** A carrier is worth a word when two deliveries this month were late, or a third of them. */
 const carrierIsLate = (delivered: number, late: number) => late >= 2 || (delivered >= 3 && late / delivered > 1 / 3)
@@ -223,6 +225,24 @@ export function dispatchDecisionsFor(ws: Workspace, today: string): Decision[] {
       weight: 20 + c.late,
     })
   }
+  /* A return the customer agreed to send back, past the day it was due. */
+  for (const r of returnRows(ws, today).filter((x) => x.overdue)) {
+    if (ws.drafts[returnKey(r.rma.id)]) continue
+    const late = daysBetween(r.rma.dueBy, today)
+    out.push({
+      id: `return-overdue:${r.rma.id}`,
+      band: 'costs',
+      kind: 'return-overdue',
+      title: `${r.rma.no} from ${r.customer?.name ?? 'a customer'} was due back ${shortDate(r.rma.dueBy)}`,
+      detail: `${r.rma.qty} ${r.product?.name ?? 'pieces'} against ${r.note?.no ?? 'a dispatch note'} — ${r.rma.reason}. Agreed by ${r.rma.owner}; ${late} day${late === 1 ? '' : 's'} past the date they were given.`,
+      act: 'receive',
+      actLabel: 'Book it in',
+      alt: { act: 'keep', label: 'Noted' },
+      href: '/dispatch/returns',
+      refs: { rmaId: r.rma.id },
+      weight: 30 + late,
+    })
+  }
   return sortDecisions(out)
 }
 
@@ -231,6 +251,7 @@ export function noteDispatch(ws: Workspace, d: Decision, today: string): Workspa
   const set = (k: string, v: unknown): Workspace => ({ ...ws, drafts: { ...ws.drafts, [k]: v } })
   if (d.kind === 'note-no-carrier' && d.refs.noteId) return set(noCarrierKey(d.refs.noteId), true)
   if (d.kind === 'note-eway' && d.refs.noteId) return set(ewayKey(d.refs.noteId), true)
+  if (d.kind === 'return-overdue' && d.refs.rmaId) return set(returnKey(d.refs.rmaId), true)
   if (d.kind === 'carrier-late' && d.refs.carrierId) {
     const c = carriersThisMonth(ws, today).find((x) => x.carrier.id === d.refs.carrierId)
     return c ? set(carrierKey(c.carrier.id, today.slice(0, 7)), c.late) : ws

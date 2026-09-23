@@ -7,6 +7,9 @@ import { useDispatch } from '@/components/dispatch/store'
 import { Note } from '@/components/ui/Note'
 import { longDate, num } from '@/lib/domain/format'
 import { StageGate } from '@/components/onboard/StageGate'
+import { useWorkspace } from '@/components/workspace/store'
+import { DeskOnly } from '@/components/sourcing/DeskOnly'
+import { Returns } from '@/components/dispatch/desk/Returns'
 
 function PageBody() {
   const { rmaRows, rmaRate, today } = useDispatch()
@@ -34,6 +37,11 @@ function PageBody() {
   )
 }
 
+/** One route, two companies: the sample keeps its returns; the owner gets their own. */
 export default function Page() {
-  return <StageGate sample="Returns" shows="returns authorised and booked back in the worked example"><PageBody /></StageGate>
+  const { mode, ready } = useWorkspace()
+  if (!ready) return <div className="min-h-[50vh]" aria-hidden />
+  return mode === 'mine'
+    ? <DeskOnly><Returns /></DeskOnly>
+    : <StageGate sample="Returns"><PageBody /></StageGate>
 }

@@ -375,11 +375,13 @@ export const BUILTIN: Record<SheetEntity, BuiltinColumn[]> = {
   rma: [
     { key: 'no', label: 'Return', identity: true, derived: true },
     { key: 'customer', label: 'Customer', derived: true },
+    { key: 'against', label: 'Against', derived: true },
     { key: 'product', label: 'Product', derived: true },
     { key: 'qty', label: 'Qty', derived: true },
     { key: 'reason', label: 'Why', derived: true },
     { key: 'due', label: 'Due back', derived: true },
     { key: 'state', label: 'State', derived: true },
+    { key: 'value', label: 'Value at cost', derived: true },
   ],
 }
 

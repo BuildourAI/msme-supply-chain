@@ -8,6 +8,7 @@ import { Tiles } from '@/components/sourcing/Tiles'
 import { MetricPicker } from '@/components/sourcing/MetricPicker'
 import { BookCarrierDialog, DeliveryDocument, NoteForm } from '@/components/dispatch/desk/NoteDialogs'
 import { ChaseDialog, DeliveredDialog } from '@/components/dispatch/desk/ConsignmentDialogs'
+import { ReceiveReturnDialog } from '@/components/dispatch/desk/ReturnDialogs'
 import { useWorkspace } from '@/components/workspace/store'
 import { onTheRoad } from '@/lib/workspace/consignments'
 import { type Act, type Band, type Decision } from '@/lib/workspace/decisions'
@@ -39,6 +40,7 @@ function Dashboard() {
   const [booking, setBooking] = useState<string | null>(null)
   const [delivering, setDelivering] = useState<string | null>(null)
   const [chasing, setChasing] = useState<string | null>(null)
+  const [receiving, setReceiving] = useState<string | null>(null)
 
   if (!workspace) return null
   const ws = workspace
@@ -69,6 +71,7 @@ function Dashboard() {
     const { orderId, lineId, noteId, consignmentId } = d.refs
     if (kind === 'delivered' && consignmentId) { setDelivering(consignmentId); return }
     if (kind === 'chase' && consignmentId) { setChasing(consignmentId); return }
+    if (kind === 'receive' && d.refs.rmaId) { setReceiving(d.refs.rmaId); return }
     if (kind === 'dispatch') { setNoting(orderId ?? null); return }
     if (kind === 'book' && noteId) { setBooking(noteId); return }
     if (kind === 'plan' && orderId && lineId) { update((w) => openJobForOrder(w, orderId, lineId, today)[0]); return }
@@ -117,6 +120,7 @@ function Dashboard() {
       <BookCarrierDialog noteId={booking} onClose={() => setBooking(null)} />
       <DeliveredDialog consignmentId={delivering} onClose={() => setDelivering(null)} />
       <ChaseDialog consignmentId={chasing} onClose={() => setChasing(null)} />
+      <ReceiveReturnDialog rmaId={receiving} onClose={() => setReceiving(null)} />
     </div>
   )
 }

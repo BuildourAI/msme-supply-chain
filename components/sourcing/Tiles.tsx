@@ -57,6 +57,7 @@ const ICON: Record<MetricKey, IconName> = {
   freightUnit: 'truck',
   carrierLate: 'truck',
   dispatchedMonth: 'arrow-right',
+  returnRate: 'undo',
 }
 
 /*

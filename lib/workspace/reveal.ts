@@ -26,6 +26,7 @@ import { productsWanting } from './products'
 import { orderRows } from './sales'
 import { unbooked } from './dispatch-notes'
 import { overdueInTransit } from './consignments'
+import { overdueReturns } from './returns'
 import { dispatchOpenCount } from './dispatch-decisions'
 import { cutRows, offcutRows } from './cutting'
 import { openJobs } from './jobs'
@@ -272,6 +273,7 @@ export function dispatchNav(ws: Workspace, today = ''): NavRow[] {
     { label: 'Order book', href: '/dispatch/orders', icon: 'doc', badge: count(late) },
     { label: 'Dispatch notes', href: '/dispatch/notes', icon: 'truck', badge: count(unbooked(ws).length) },
     { label: 'Consignments', href: '/dispatch/consignments', icon: 'clock', badge: count(today ? overdueInTransit(ws, today) : 0) },
+    { label: 'Returns', href: '/dispatch/returns', icon: 'undo', badge: count(overdueReturns(ws, today).length) },
     { label: 'Customers', href: '/dispatch/customers', icon: 'star', tucked: true },
     { label: 'Carriers', href: '/dispatch/carriers', icon: 'share', tucked: true },
   ]
