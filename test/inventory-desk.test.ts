@@ -115,16 +115,16 @@ describe('the store\'s rail', () => {
 
   it('keeps racks under More, and badges only work waiting', () => {
     const rows = inventoryNav(set(), TODAY)
-    expect(rows.map((r) => r.label)).toEqual(['Dashboard', 'Stock ledger', 'Jobs', 'Wastage & loss', 'Racks'])
+    expect(rows.map((r) => r.label)).toEqual(['Dashboard', 'Stock ledger', 'In-house', 'Wastage & loss', 'Racks'])
     expect(rows.filter((r) => r.tucked).map((r) => r.label)).toEqual(['Racks'])
     expect(rows.every((r) => r.badge === undefined)).toBe(true)
     expect(navFor('inventory', set(), TODAY)).toEqual(rows)
   })
 
-  it('names the jobs row in the owner\'s own word, and badges the open ones', () => {
+  it('calls the jobs row In-house whatever the owner\'s word, and badges the open ones', () => {
     let ws = setJobNumbering(set(), { word: 'style', prefix: 'ST' })
     ;[ws] = addJob(ws, { no: 'ST-1', openedOn: TODAY })
-    expect(inventoryNav(ws, TODAY).find((r) => r.href === '/inventory/issues')).toMatchObject({ label: 'Styles', badge: '1' })
+    expect(inventoryNav(ws, TODAY).find((r) => r.href === '/inventory/issues')).toMatchObject({ label: 'In-house', badge: '1' })
   })
 
   it('badges the ledger with lots past their counting date', () => {

@@ -23,9 +23,11 @@ function Count({ n }: { n: number }) {
 }
 
 /**
- * What left the store, and for what.
+ * In-house: what left the store for your own floor, and for what.
  *
- * The owner's word for it — styles, jobs or orders — is the title. Two views:
+ * Called In-house so it is never taken for Inbound's Jobwork, which is
+ * material sent out to somebody else. Inside, the owner's word for the thing
+ * itself — styles, jobs or orders — names the tab and every number. Two views:
  * each job with what it has used, and every slip that moved material, out or
  * back. A slip is the only way material leaves the store for the floor, so a
  * job's consumption here is a sum of slips rather than a figure somebody keeps.
@@ -118,7 +120,7 @@ export function Issues() {
   return (
     <>
       <ListPage
-        title={word.many} noun={word.one.toLowerCase()} rows={jobs}
+        title="In-house" noun={word.one.toLowerCase()} rows={jobs}
         search={(r) => `${r.job.no} ${r.job.name ?? ''} ${r.job.customer ?? ''} ${r.materials.map((m) => m.name).join(' ')} ${jobKit.searchText(r)}`}
         filter={{
           label: 'Open and closed',

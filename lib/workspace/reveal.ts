@@ -20,7 +20,7 @@ import { inboundOpenCount } from './inbound-decisions'
 import { inventoryOpenCount } from './inventory-decisions'
 import { openVariances } from './counting'
 import { cutRows, offcutRows } from './cutting'
-import { jobWordCap, openJobs } from './jobs'
+import { openJobs } from './jobs'
 import { lotRows } from './ledger'
 import { unsoldPast } from './losses'
 import { unplacedLots } from './racks'
@@ -201,8 +201,12 @@ export function inventoryNav(ws: Workspace, today = ''): NavRow[] {
       badge: count(inventoryOpenCount(ws, today)),
     },
     { label: 'Stock ledger', href: '/inventory/ledger', icon: 'boxes', badge: count(due) },
-    // the owner's own word — Styles, Jobs, Orders — with how many are open
-    { label: jobWordCap(ws).many, href: '/inventory/issues', icon: 'factory', badge: count(openJobs(ws).length) },
+    /*
+     * Work done on your own floor, against a style, job or order number, with
+     * how many are open. Called In-house whatever the owner's word, so it is
+     * never read as Inbound's Jobwork, which is work sent out on a challan.
+     */
+    { label: 'In-house', href: '/inventory/issues', icon: 'factory', badge: count(openJobs(ws).length) },
     /*
      * Only in a store that cuts. Remnants past their age, and cuts well below
      * plan nobody has looked at. Switched off, the row goes and every record
