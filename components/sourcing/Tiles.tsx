@@ -47,6 +47,9 @@ const ICON: Record<MetricKey, IconName> = {
   jobsStopping: 'alert',
   attainment: 'activity',
   firstPass: 'check',
+  floorDays: 'clock',
+  rmToFg: 'arrow-right',
+  haltDays: 'alert',
 }
 
 /*

@@ -1,16 +1,27 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ListPage } from '@/components/ui/ListPage'
 import { DataTable, StatePill } from '@/components/ui/DataTable'
+import { Icon } from '@/components/ui/icons'
+import { Tabs } from '@/components/ui/Tabs'
+import { ConfirmDelete } from '@/components/sourcing/ConfirmDelete'
 import { useWorkspace } from '@/components/workspace/store'
 import { IssueForm } from '@/components/inventory/desk/IssueDialogs'
 import { num, shortDate } from '@/lib/domain/format'
 import { jobWordCap } from '@/lib/workspace/jobs'
 import {
-  WATCH_TONE, WATCH_WORD, lineRunsFor, lineWatch, stoppingThisWeek, type JobWatch,
+  HALT_WORD, WATCH_TONE, WATCH_WORD, lineRunsFor, lineWatch, stoppingThisWeek, type JobWatch,
 } from '@/lib/workspace/linewatch'
 import { floorOf, weekOf } from '@/lib/workspace/plan'
+import { haltRows, haltsByCause, removeHalt, type HaltRow } from '@/lib/workspace/halts'
+import { HaltForm, ResumeDialog } from './HaltDialogs'
 import { NeedsDialog, OutputForm, PlanForm } from './PlanDialogs'
+
+type View = 'week' | 'halts'
+
+function Count({ n }: { n: number }) {
+  return n > 0 ? <span className="mono rounded-full bg-surface-3 px-1.5 text-[10.5px] leading-[17px] text-ink-3">{n}</span> : null
+}
 
 const BAR: Record<string, string> = {
   critical: 'bg-critical-soft border-critical/40 text-critical',
@@ -31,16 +42,28 @@ const dayName = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString
  * it), book what came off, or plan it again.
  */
 export function LineWatch() {
-  const { workspace, today } = useWorkspace()
+  const { workspace, update, today } = useWorkspace()
+  const [view, setView] = useState<View>('week')
+  const [halting, setHalting] = useState<{ jobId?: string } | null>(null)
+  const [resuming, setResuming] = useState<string | null>(null)
+  const [unhalting, setUnhalting] = useState<HaltRow | null>(null)
   const [needsOf, setNeedsOf] = useState<string | null>(null)
   const [issuing, setIssuing] = useState<{ jobId: string; itemId?: string } | null>(null)
   const [booking, setBooking] = useState<{ jobId?: string } | null>(null)
   const [planning, setPlanning] = useState<string | null | undefined>(undefined)
 
+  useEffect(() => {
+    // the halt-days figure links here with ?view=halts
+    if (new URLSearchParams(window.location.search).get('view') === 'halts') setView('halts')
+  }, [])
+
   if (!workspace) return null
   const ws = workspace
   const word = jobWordCap(ws)
   const watch = lineWatch(ws, today)
+  const halts = haltRows(ws, today)
+  const month = today.slice(0, 7)
+  const causes = haltsByCause(ws, month, today)
   const week = weekOf(today, floorOf(ws))
   const thisWeek = watch.filter((w) => w.inWeek)
   const stopping = stoppingThisWeek(watch)
@@ -59,6 +82,12 @@ export function LineWatch() {
           of: (w) => w.status,
         }}
         action={{ label: `Plan a ${word.one.toLowerCase()}`, icon: 'calendar', onClick: () => setPlanning(null) }}
+        tools={watch.length > 0 ? (
+          <button type="button" onClick={() => setHalting({})}
+            className="press inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-[13px] font-medium hover:bg-surface-2">
+            <Icon name="alert" className="size-3.5" /> Record a halt
+          </button>
+        ) : undefined}
         empty={{
           line: `Nothing planned. Give an open ${word.one.toLowerCase()} its product, how many and when, and Line watch says whether the store can feed it — before the floor finds out.`,
           cta: `Plan a ${word.one.toLowerCase()}`,
@@ -66,8 +95,55 @@ export function LineWatch() {
         {(shown) => {
           const ids = new Set(shown.map((w) => w.job.id))
           const grid = thisWeek.filter((w) => ids.has(w.job.id))
+          const shownHalts = halts.filter((h) => ids.has(h.halt.jobId))
           return (
             <div className="space-y-4">
+              <Tabs<View> label="This week or halts" value={view} onChange={setView}
+                items={[
+                  { id: 'week', label: 'This week', badge: <Count n={stopping.filter((w) => ids.has(w.job.id)).length} /> },
+                  { id: 'halts', label: 'Halts', badge: <Count n={shownHalts.filter((h) => h.open).length} /> },
+                ]} />
+              {view === 'halts' && (
+                <>
+                  {causes.length > 0 && (
+                    <ul className="flex flex-wrap gap-2" aria-label="Days halted this month, by cause">
+                      {causes.map((c) => (
+                        <li key={c.cause} className="rounded-lg border border-line bg-surface px-3 py-2 text-[12.5px]">
+                          <span className="font-semibold text-ink">{HALT_WORD[c.cause]}</span>{' '}
+                          <span className="text-ink-2">{c.days} day{c.days === 1 ? '' : 's'} · {c.halts} halt{c.halts === 1 ? '' : 's'}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {shownHalts.length === 0
+                    ? <p className="rounded-xl border border-line bg-surface px-6 py-10 text-center text-[13px] text-ink-2">
+                      No halts recorded. When the floor stops on a job — a machine, no operators, the power — record it here, and say when it started again.
+                    </p>
+                    : <DataTable rows={shownHalts} keyOf={(h) => h.halt.id}
+                      columns={[
+                        { key: 'on', head: 'Stopped', cell: (h) => shortDate(h.halt.on) },
+                        {
+                          key: 'job', head: word.one,
+                          cell: (h) => <span><span className="mono font-semibold text-ink">{h.job?.no}</span> <span className="text-ink-3">{h.product?.name}</span></span>,
+                        },
+                        { key: 'cause', head: 'Why', cell: (h) => <span className="text-ink">{HALT_WORD[h.halt.cause]}</span> },
+                        { key: 'note', head: 'What happened', cell: (h) => <span className="text-ink-2">{h.halt.note ?? ''}</span> },
+                        {
+                          key: 'resumed', head: 'Resumed',
+                          cell: (h) => (h.open ? <StatePill label="Still halted" tone="critical" /> : shortDate(h.halt.resumedOn!)),
+                        },
+                        { key: 'days', head: 'Days down', align: 'right', cell: (h) => h.days },
+                      ]}
+                      extra={{
+                        icon: 'check',
+                        label: (h) => (h.open ? `${h.job?.no ?? 'It'} has resumed` : 'Already resumed'),
+                        onClick: (h) => { if (h.open) setResuming(h.halt.id) },
+                      }}
+                      onDelete={(h) => setUnhalting(h)}
+                      deleteLabel={(h) => `Take back the halt on ${h.job?.no ?? ''} from ${shortDate(h.halt.on)}`} />}
+                </>
+              )}
+              {view === 'week' && (<>
               <p className="text-[12.5px] text-ink-3">
                 {runs && Number.isFinite(runs.days.value)
                   ? <>The line runs for <strong className="num text-ink">{num(runs.days.value, 1)} days</strong> on {runs.item.name}, the tightest material. </>
@@ -147,6 +223,7 @@ export function LineWatch() {
                 }}
                 onEdit={(w) => setPlanning(w.job.id)}
                 editLabel={(w) => `Re-plan ${w.job.no}`} />
+              </>)}
             </div>
           )
         }}
@@ -157,6 +234,16 @@ export function LineWatch() {
       <IssueForm open={issuing !== null} preset={issuing ?? undefined} onClose={() => setIssuing(null)} />
       <OutputForm open={booking !== null} preset={booking ?? undefined} onClose={() => setBooking(null)} />
       <PlanForm jobId={planning} onClose={() => setPlanning(undefined)} />
+      <HaltForm open={halting !== null} preset={halting ?? undefined} onClose={() => setHalting(null)} />
+      <ResumeDialog haltId={resuming} onClose={() => setResuming(null)} />
+      <ConfirmDelete
+        open={unhalting !== null}
+        what={unhalting ? `the halt on ${unhalting.job?.no ?? ''}` : ''}
+        impact={{ losses: [], clean: true }}
+        blocked={null}
+        onClose={() => setUnhalting(null)}
+        onConfirm={() => { if (unhalting) update((w) => removeHalt(w, unhalting.halt.id)) }}
+      />
     </>
   )
 }

@@ -245,6 +245,8 @@ export function productionNav(ws: Workspace, today = ''): NavRow[] {
     },
     { label: 'Line watch', href: '/production/line-watch', icon: 'eye', badge: count(today ? stoppingThisWeek(lineWatch(ws, today)).length : 0) },
     { label: 'Plan vs actual', href: '/production/plan', icon: 'calendar', badge: count(pace) },
+    // a reading, not a queue: nothing on it goes down when somebody acts
+    { label: 'Turnaround', href: '/production/turnaround', icon: 'clock' },
     { label: 'Products', href: '/production/products', icon: 'boxes', badge: count(productsWanting(ws).length), tucked: true },
   ]
 }

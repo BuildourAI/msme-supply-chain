@@ -26,7 +26,9 @@ import { buildRows } from '@/lib/domain/derive'
 import { bundleFor } from './bundle'
 import { closedReceipts, openReceipts, receiptsFor } from './receipts'
 import { expired } from './sourcing'
-import { lineRunsFor, lineWatch, stoppingThisWeek } from './linewatch'
+import { HALT_WORD, lineRunsFor, lineWatch, stoppingThisWeek } from './linewatch'
+import { haltsByCause } from './halts'
+import { meanTurnaround } from './turnaround'
 import { jobPlanRows } from './plan'
 import type { Workspace } from './types'
 
@@ -91,7 +93,7 @@ export type MetricKey =
   /* only with cutting switched on */
   | 'remnants'
   /* the floor's */
-  | 'lineRunsFor' | 'jobsStopping' | 'attainment' | 'firstPass'
+  | 'lineRunsFor' | 'jobsStopping' | 'attainment' | 'firstPass' | 'floorDays' | 'rmToFg' | 'haltDays'
 
 /** The desks that have a dashboard of figures. */
 export type MetricStage = 'sourcing' | 'inbound' | 'inventory' | 'production' | 'dispatch'
@@ -111,7 +113,7 @@ export const STAGE_METRICS: Record<MetricStage, MetricKey[]> = {
   ],
   inbound: ['qcHeld', 'inspectedOnTime', 'defects', 'onTime', 'unacked', 'atJobworkers', 'lead'],
   inventory: ['stockValue', 'unconfirmed', 'accuracy', 'heldStock', 'netLoss', 'scrap', 'dio', 'remnants'],
-  production: ['lineRunsFor', 'jobsStopping', 'attainment', 'firstPass'],
+  production: ['lineRunsFor', 'jobsStopping', 'attainment', 'firstPass', 'floorDays', 'rmToFg', 'haltDays'],
   dispatch: [],
 }
 
@@ -145,7 +147,7 @@ export const DEFAULTS_FOR: Record<MetricStage, MetricKey[]> = {
   sourcing: DEFAULT_PICKS,
   inbound: INBOUND_PICKS,
   inventory: INVENTORY_PICKS,
-  production: ['lineRunsFor', 'jobsStopping', 'attainment', 'firstPass'],
+  production: ['lineRunsFor', 'jobsStopping', 'attainment', 'firstPass', 'floorDays', 'haltDays'],
   dispatch: [],
 }
 
@@ -175,6 +177,9 @@ export const METRIC_LABEL: Record<MetricKey, string> = {
   jobsStopping: 'Jobs stopping this week',
   attainment: 'Plan attainment',
   firstPass: 'Right first time',
+  floorDays: 'Days on the floor',
+  rmToFg: 'Raw material to finished',
+  haltDays: 'Days halted',
 }
 
 /** One line each, for the dialog where the owner picks. */
@@ -204,6 +209,9 @@ export const METRIC_WHY: Record<MetricKey, string> = {
   jobsStopping: 'This week’s jobs that are halted, will halt for want of material, or are at risk.',
   attainment: 'Good pieces made against what the plan said should be made by today, over the jobs running now.',
   firstPass: 'Of every piece off the floor this month, the share that was good first time.',
+  floorDays: 'How long a job takes from its first issue of material to its last output — over jobs closed in the last 90 days.',
+  rmToFg: 'From the day material came onto the book to the day the finished product came off the floor — shelf time and floor time added.',
+  haltDays: 'Working days jobs stood still this month, and the cause that cost most.',
 }
 
 /* ------------------------------------------------------------- the maths -- */
@@ -842,6 +850,9 @@ function productionMetrics(
   const good = booked.reduce((a, o) => a + o.good, 0)
   const bad = booked.reduce((a, o) => a + o.rejected, 0)
   const pct1 = (n: number) => `${Math.round(n * 10) / 10}%`
+  const turn = meanTurnaround(ws, today)
+  const causes = haltsByCause(ws, month, today)
+  const downDays = causes.reduce((a, c) => a + c.days, 0)
 
   return [
     runs && Number.isFinite(runs.days.value)
@@ -887,6 +898,35 @@ function productionMetrics(
         chart: { kind: 'split', good, bad },
       }
       : nothing('firstPass', 'Nothing booked this month', 'needs output booked on a job'),
+
+    turn.floor !== null
+      ? {
+        key: 'floorDays', label: METRIC_LABEL.floorDays, value: `${turn.floor} days`,
+        sub: `mean over ${turn.jobs} job${turn.jobs === 1 ? '' : 's'} closed in 90 days${turn.jobs > 1 && turn.slowest ? ` · slowest ${turn.slowest.job.no}` : ''}`,
+        tone: 'neutral', measured: true, href: '/production/turnaround',
+        how: 'mean(last output − first issue) over jobs closed in the last 90 days',
+      }
+      : nothing('floorDays', 'No job closed yet', 'needs a job with material issued, output booked, and closed'),
+
+    turn.total !== null
+      ? {
+        key: 'rmToFg', label: METRIC_LABEL.rmToFg, value: `${turn.total} days`,
+        sub: turn.wait !== null ? `${turn.wait} on the shelf + ${turn.floor} on the floor` : 'shelf and floor time',
+        tone: 'neutral', measured: true, href: '/production/turnaround',
+        how: 'mean(last output − the day the oldest lot it drew came onto the book), over jobs closed in 90 days',
+      }
+      : nothing('rmToFg', 'No job closed yet', 'needs a closed job whose material came in through the gate or a count'),
+
+    (ws.halts ?? []).length > 0
+      ? {
+        key: 'haltDays', label: METRIC_LABEL.haltDays, value: `${downDays} day${downDays === 1 ? '' : 's'}`,
+        sub: causes[0] ? `this month · most for ${HALT_WORD[causes[0].cause].toLowerCase()}` : 'this month',
+        tone: downDays === 0 ? 'good' : downDays <= 2 ? 'warn' : 'critical',
+        measured: true, href: '/production/line-watch?view=halts',
+        how: 'Σ working days from each halt to the day before it resumed, the part that fell in this month',
+        chart: causes.length > 1 ? { kind: 'stack', parts: causes.map((c) => Math.round((c.days / Math.max(1, downDays)) * 1000) / 10) } : undefined,
+      }
+      : nothing('haltDays', 'No halt recorded', 'a halt is recorded when the floor stops on a job'),
   ]
 }
 

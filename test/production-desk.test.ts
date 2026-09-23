@@ -76,7 +76,7 @@ describe('the floor’s set-up', () => {
     expect(BUILT).toContain('production')
     expect(STAGE_HOME.production).toBe('/production/dashboard')
     const rows = productionNav(base(), TODAY)
-    expect(rows.map((r) => r.label)).toEqual(['Dashboard', 'Line watch', 'Plan vs actual', 'Products'])
+    expect(rows.map((r) => r.label)).toEqual(['Dashboard', 'Line watch', 'Plan vs actual', 'Turnaround', 'Products'])
     expect(rows.filter((r) => r.tucked).map((r) => r.label)).toEqual(['Products'])
     // two styles open, neither planned
     expect(rows.find((r) => r.label === 'Plan vs actual')?.badge).toBe('2')
@@ -298,6 +298,7 @@ describe('the queue and the figures', () => {
   it('offers the floor’s figures, measured once there is something to measure', () => {
     expect(pickedMetrics(base(), TODAY, 'production').map((m) => [m.key, m.measured])).toEqual([
       ['lineRunsFor', true], ['jobsStopping', false], ['attainment', false], ['firstPass', false],
+      ['floorDays', false], ['haltDays', false],
     ])
     let ws = plan(base(), 'JB-001', 200, '2026-09-21', '2026-09-26', 40)
     ;[ws] = bookOutput(ws, { jobId: 'JB-001', on: '2026-09-22', good: 96, rejected: 4, reason: 'Stain or mark', actor: '' }, TODAY)

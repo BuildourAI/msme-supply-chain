@@ -6,6 +6,7 @@ import { Queue } from '@/components/sourcing/Queue'
 import { Tiles } from '@/components/sourcing/Tiles'
 import { MetricPicker } from '@/components/sourcing/MetricPicker'
 import { OutputForm, PlanForm } from '@/components/production/desk/PlanDialogs'
+import { ResumeDialog } from '@/components/production/desk/HaltDialogs'
 import { useWorkspace } from '@/components/workspace/store'
 import { type Act, type Band, type Decision } from '@/lib/workspace/decisions'
 import { inFlight } from '@/lib/workspace/flight'
@@ -31,6 +32,7 @@ function Dashboard() {
   const [opened, setOpened] = useState<Set<Band>>(new Set())
   const [planning, setPlanning] = useState<string | null | undefined>(undefined)
   const [booking, setBooking] = useState<{ jobId?: string } | null>(null)
+  const [resuming, setResuming] = useState<string | null>(null)
 
   if (!workspace) return null
   const ws = workspace
@@ -42,6 +44,7 @@ function Dashboard() {
     const { jobId } = d.refs
     if (kind === 'plan') { setPlanning(jobId ?? null); return }
     if (kind === 'output') { setBooking({ jobId }); return }
+    if (kind === 'resume' && d.refs.haltId) { setResuming(d.refs.haltId); return }
     if (kind === 'keep') { update((w) => noteProduction(w, d, today)); return }
     if (kind === 'close' && jobId) { update((w) => closeJob(w, jobId, today)) }
   }
@@ -79,6 +82,7 @@ function Dashboard() {
       <MetricPicker open={picking} onClose={() => setPicking(false)} stage="production" />
       <PlanForm jobId={planning} onClose={() => setPlanning(undefined)} />
       <OutputForm open={booking !== null} preset={booking ?? undefined} onClose={() => setBooking(null)} />
+      <ResumeDialog haltId={resuming} onClose={() => setResuming(null)} />
     </div>
   )
 }
