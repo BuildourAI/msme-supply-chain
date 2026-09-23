@@ -18,7 +18,7 @@
  */
 import type { Item, Vendor } from '@/lib/domain/types'
 import { atJobworkersValue, qcHeld, unackedExposure } from './inbound'
-import { openReceipts, receiptsFor } from './receipts'
+import { closedReceipts, openReceipts, receiptsFor } from './receipts'
 import { expired } from './sourcing'
 import type { Workspace } from './types'
 
@@ -253,7 +253,9 @@ const days = (from: string, to: string) =>
 export function defectPct(
   ws: Workspace,
 ): { pct: number; of: number; good: number; bad: number } | null {
-  const rs = ws.receipts ?? []
+  // inspected purchases only: an open receipt has had nothing rejected YET,
+  // and a jobwork return measures a jobworker, not a supplier
+  const rs = closedReceipts(ws).filter((r) => Boolean(r.orderId))
   if (rs.length === 0) return null
   const qty = rs.reduce((a, r) => a + r.qty, 0)
   if (qty <= 0) return null

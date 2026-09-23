@@ -22,11 +22,15 @@
  *    derivation cites; it enters no arithmetic.
  */
 import {
-  challanAccounting, quantityGap, unacknowledgedExposure, valueAt, valueHeldInQc,
+  challanAccounting, failedChecks, inspectionComplete, isRejectionSpike, issuableFrom,
+  qcAgeDays, qcState, quantityGap, rejectionPct, unacknowledgedExposure, valueAt, valueHeldInQc,
+  type QcState,
 } from '@/lib/domain/inbound'
-import type { Derived, Grn, JobworkChallan, PoSync } from '@/lib/domain/types'
+import type {
+  CheckResult, Derived, Grn, Item, JobworkChallan, PoSync, SpecCheck, Vendor,
+} from '@/lib/domain/types'
 import { checksFor } from './checks'
-import { openReceipts } from './receipts'
+import { isOpen, measuredRejectionPct, openReceipts } from './receipts'
 import type { Challan, GoodsReceipt, PurchaseOrder, Workspace } from './types'
 
 const uomOf = (ws: Workspace, itemId: string) => ws.items.find((i) => i.id === itemId)?.uom ?? ''
@@ -149,4 +153,96 @@ export function atJobworkersValue(ws: Workspace, today: string): number {
       return valueAt(acc.atVendor.value, c.rate, jc.uom, 'At the jobworker').value
     })
     .reduce((a, b) => a + b, 0)
+}
+
+/* ------------------------------------------------------ the gate, as rows -- */
+
+/**
+ * One receipt, with everything the gate needs to say about it.
+ *
+ * Age, whether it is past the window, the day it could be issued, what it is
+ * worth standing there, and — once somebody is inspecting — whether the
+ * inspection is complete, which checks have failed, and whether this
+ * delivery's rejection is a spike against the supplier's own record. Every one
+ * of those is the domain's function, over the owner's record.
+ */
+export interface ReceiptRow {
+  receipt: GoodsReceipt
+  item?: Item
+  vendor?: Vendor
+  order?: PurchaseOrder
+  challan?: Challan
+  /** "PO-1", "JW-1", or nothing */
+  against: string
+  checks: SpecCheck[]
+  results: CheckResult[]
+  age: Derived
+  state: QcState
+  issuable: Derived<string>
+  value: Derived
+  complete: boolean
+  failed: SpecCheck[]
+  /** the supplier's rejection rate before this receipt; null with nothing to go on */
+  trailingPct: number | null
+}
+
+export function receiptRow(ws: Workspace, r: GoodsReceipt, today: string): ReceiptRow {
+  const checks = checksFor(ws, r.itemId)
+  const results = r.results ?? []
+  const order = r.orderId ? ws.orders.find((o) => o.id === r.orderId) : undefined
+  const challan = r.challanId ? (ws.challans ?? []).find((c) => c.id === r.challanId) : undefined
+  const age = qcAgeDays(r.receivedOn, isOpen(r) ? today : (r.closedAt ?? today))
+  /*
+   * A receipt with no checks written is never at rest: nobody can inspect it
+   * against anything, so it reads "at the limit" from the day it arrives
+   * until somebody closes it unchecked — the sample company's rule.
+   */
+  const state = checks.length === 0 && age.value <= ws.policy.qcOverdueDays && isOpen(r)
+    ? 'at_limit' : qcState(age.value, ws.policy)
+  return {
+    receipt: r,
+    item: ws.items.find((i) => i.id === r.itemId),
+    vendor: ws.vendors.find((v) => v.id === r.vendorId),
+    order,
+    challan,
+    against: order?.no ?? challan?.no ?? '',
+    checks,
+    results,
+    age,
+    state,
+    issuable: issuableFrom(r.receivedOn, ws.policy),
+    value: valueHeldInQc([toGrn(ws, r)]),
+    complete: inspectionComplete(checks, results),
+    failed: failedChecks(checks, results),
+    trailingPct: r.orderId ? measuredRejectionPct(ws, r.vendorId, r.itemId, r.id) : null,
+  }
+}
+
+/** Open receipts first, oldest waiting at the top; then everything closed, newest first. */
+export function receiptRows(ws: Workspace, today: string): ReceiptRow[] {
+  const all = (ws.receipts ?? []).map((r) => receiptRow(ws, r, today))
+  const open = all.filter((x) => isOpen(x.receipt))
+    .sort((a, b) => a.receipt.receivedOn.localeCompare(b.receipt.receivedOn))
+  const closed = all.filter((x) => !isOpen(x.receipt))
+    .sort((a, b) => (b.receipt.closedAt ?? b.receipt.receivedOn).localeCompare(a.receipt.closedAt ?? a.receipt.receivedOn)
+      || b.receipt.id.localeCompare(a.receipt.id))
+  return [...open, ...closed]
+}
+
+/**
+ * Whether a closed receipt's rejection was out of line with the supplier's
+ * own record — a pattern, not a bad batch. Against the record BEFORE it, so a
+ * delivery cannot raise its own bar. The domain's rule and the owner's multiple.
+ */
+export function spikeOf(ws: Workspace, r: GoodsReceipt): { spike: boolean; thisPct: number; trailingPct: number } {
+  const thisPct = rejectionPct(r.rejected, r.qty).value
+  /*
+   * No record is not a clean record. The domain rule treats a supplier who
+   * has never had anything rejected as one whose first rejection is a spike —
+   * right when there IS a clean history, wrong for the first delivery ever,
+   * which has nothing to be out of line with.
+   */
+  const before = r.orderId ? measuredRejectionPct(ws, r.vendorId, r.itemId, r.id) : null
+  if (before === null) return { spike: false, thisPct, trailingPct: 0 }
+  return { spike: !isOpen(r) && isRejectionSpike(thisPct, before, ws.policy), thisPct, trailingPct: before }
 }

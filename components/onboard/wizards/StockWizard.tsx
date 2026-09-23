@@ -4,7 +4,7 @@ import { Wizard, type WizardStep } from '@/components/ui/Wizard'
 import { Field, NumberInput } from '@/components/ui/Field'
 import { useWorkspace } from '@/components/workspace/store'
 import { money, num as fmt } from '@/lib/domain/format'
-import type { StockLot } from '@/lib/domain/types'
+import { applyCount, type Counted } from '@/lib/workspace/count'
 
 /**
  * Counting what is on the shelf, one material per screen.
@@ -117,33 +117,19 @@ export function StockWizard({ open, onClose }: { open: boolean; onClose: () => v
   })
 
   const save = () => {
-    const lots: StockLot[] = []
-    let n = ws.stockLots.length
+    // every material with anything typed; a blank one is skipped, not zeroed
+    const counts: Record<string, Counted> = {}
     for (const it of ws.items) {
       const g = parse(good[it.id] ?? '')
       const h = parse(held[it.id] ?? '')
-      if (Number.isFinite(g) && g >= 0 && (good[it.id] ?? '').trim() !== '') {
-        n += 1
-        lots.push({
-          id: `LOT-${String(n).padStart(3, '0')}`, itemId: it.id,
-          batchNo: `OPENING-${today}`, qty: g, usability: 'usable',
-        })
-      }
-      if (Number.isFinite(h) && h > 0) {
-        n += 1
-        lots.push({
-          id: `LOT-${String(n).padStart(3, '0')}`, itemId: it.id,
-          batchNo: `OPENING-HOLD-${today}`, qty: h, usability: 'qc_hold',
-          usabilityReason: (why[it.id] ?? '').trim() || 'Held back at the opening count',
-        })
+      if (!Number.isFinite(g) && !Number.isFinite(h)) continue
+      counts[it.id] = {
+        good: Number.isFinite(g) ? g : undefined,
+        held: Number.isFinite(h) ? h : undefined,
+        why: why[it.id],
       }
     }
-    // A recount replaces the opening position rather than adding to it, so
-    // running this step twice does not double the stock.
-    update((w) => ({
-      ...w,
-      stockLots: [...w.stockLots.filter((l) => !l.batchNo.startsWith('OPENING')), ...lots],
-    }))
+    update((w) => applyCount(w, today, counts))
     onClose()
   }
 

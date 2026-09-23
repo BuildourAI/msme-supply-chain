@@ -1,11 +1,14 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Icon } from '@/components/ui/icons'
 import { DeskOnly } from '@/components/sourcing/DeskOnly'
 import { Queue } from '@/components/sourcing/Queue'
 import { Tiles } from '@/components/sourcing/Tiles'
 import { MetricPicker } from '@/components/sourcing/MetricPicker'
 import { ReceiveForm } from '@/components/sourcing/ReceiveForm'
+import { GrnDocument } from '@/components/inbound/desk/GrnDocument'
+import { InspectForm } from '@/components/inbound/desk/InspectForm'
+import { isOpen } from '@/lib/workspace/receipts'
 import { useWorkspace } from '@/components/workspace/store'
 import { type Act, type Band, type Decision } from '@/lib/workspace/decisions'
 import { inFlight } from '@/lib/workspace/flight'
@@ -31,10 +34,22 @@ export default function Page() {
 }
 
 function Dashboard() {
-  const { workspace, today } = useWorkspace()
+  const { workspace, update, today } = useWorkspace()
   const [picking, setPicking] = useState(false)
   const [receiving, setReceiving] = useState<PurchaseOrder | null>(null)
+  const [pending, setPending] = useState<string | null>(null)
+  const [inspecting, setInspecting] = useState<string | null>(null)
+  const [papering, setPapering] = useState<string | null>(null)
   const [opened, setOpened] = useState<Set<Band>>(new Set())
+
+  // what just arrived goes straight on to its inspection
+  useEffect(() => {
+    if (!pending || !workspace) return
+    const made = (workspace.receipts ?? [])
+      .filter((r) => r.orderId === pending && isOpen(r))
+      .sort((a, b) => b.id.localeCompare(a.id))[0]
+    if (made) { setInspecting(made.id); setPending(null) }
+  }, [pending, workspace])
 
   if (!workspace) return null
   const ws = workspace
@@ -44,12 +59,21 @@ function Dashboard() {
   const metrics = pickedMetrics(ws, today, 'inbound')
 
   const act = (d: Decision, kind: Act) => {
-    const { orderNo } = d.refs
+    const { orderNo, receiptId } = d.refs
     if (kind === 'arrive' && orderNo) {
       // a receipt is a line's, so the form opens on the first line still to come
       const line = ws.orders.find((o) => o.no === orderNo && o.state !== 'delivered'
         && o.state !== 'cancelled')
       if (line) setReceiving(line)
+      return
+    }
+    if (kind === 'inspect' && receiptId) {
+      setInspecting(receiptId)
+      return
+    }
+    if (kind === 'keep' && receiptId) {
+      // "noted" on a rejection spike: a real answer, and it sticks
+      update((w) => ({ ...w, drafts: { ...w.drafts, [`inbound.spikeNoted.${receiptId}`]: true } }))
     }
   }
 
@@ -84,7 +108,11 @@ function Dashboard() {
       )}
 
       <MetricPicker open={picking} onClose={() => setPicking(false)} stage="inbound" />
-      <ReceiveForm open={receiving !== null} order={receiving} onClose={() => setReceiving(null)} />
+      <ReceiveForm open={receiving !== null} order={receiving} onClose={() => setReceiving(null)}
+        onArrived={(orderId) => setPending(orderId)} />
+      <InspectForm receiptId={inspecting} onClose={() => setInspecting(null)}
+        onClosed={(id) => setPapering(id)} />
+      <GrnDocument open={papering !== null} receiptId={papering} onClose={() => setPapering(null)} />
     </div>
   )
 }

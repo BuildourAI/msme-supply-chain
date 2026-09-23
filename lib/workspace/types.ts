@@ -310,6 +310,8 @@ export interface GoodsReceipt {
    * can fail with nothing rejected, but only against a reason in writing.
    */
   deviationReason?: string
+  /** why some was rejected when no check failed — a rejection always has a reason */
+  rejectReason?: string
   /** who inspected it — the signed-in name, for the trail */
   inspector?: string
   closedAt?: string

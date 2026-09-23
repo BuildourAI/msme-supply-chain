@@ -11,8 +11,11 @@
  *
  * Pure. Later phases add kinds to the same list rather than new screens.
  */
+import { num } from '@/lib/domain/format'
 import { orderGroups, orderRows } from './sourcing'
 import { sortDecisions, type Decision } from './decisions'
+import { receiptRow, spikeOf } from './inbound'
+import { awaitingArrival, closedReceipts, openReceipts } from './receipts'
 import type { Workspace } from './types'
 
 const daysBetween = (from: string, to: string) =>
@@ -32,6 +35,8 @@ export function inboundDecisionsFor(ws: Workspace, today: string): Decision[] {
   for (const g of orderGroups(orderRows(ws))) {
     const out_ = g.state === 'confirmed' || g.state === 'shipped'
     if (!out_ || g.expectedOn > today) continue
+    // all of it is at the gate already — the question now is inspection
+    if (!awaitingArrival(ws, g.rows.map((r) => r.order))) continue
     const late = daysBetween(g.expectedOn, today)
     out.push({
       id: `to-receive:${g.no}`,
@@ -46,6 +51,60 @@ export function inboundDecisionsFor(ws: Workspace, today: string): Decision[] {
       href: '/inbound/receiving',
       refs: { orderNo: g.no, vendorId: g.vendor?.id },
       weight: 75 + late,
+    })
+  }
+
+  /*
+   * At the gate, waiting on inspection. Past the window it is the worst band:
+   * material that has been paid for is standing where nobody can issue it,
+   * and a line may be about to stop for want of what is sitting by the door.
+   */
+  for (const r of openReceipts(ws)) {
+    const row = receiptRow(ws, r, today)
+    const what = `${num(r.qty, 3)} ${row.item?.uom ?? ''}`.trim()
+    const days = row.age.value
+    const overdue = row.state === 'overdue'
+    out.push({
+      id: `${overdue ? 'qc-overdue' : 'at-gate'}:${r.id}`,
+      band: overdue ? 'stops' : 'unfinished',
+      kind: overdue ? 'qc-overdue' : 'at-gate',
+      title: `${row.item?.name ?? 'Unknown material'} · ${row.vendor?.name ?? 'Unknown supplier'}`,
+      detail: overdue
+        ? `${what} past the QC window — ${days} days at the gate, not usable`
+        : days === 0 ? `${what} arrived today — not usable until inspected`
+          : `${what} at the gate ${days} day${days === 1 ? '' : 's'} — not usable until inspected`,
+      act: 'inspect',
+      actLabel: row.checks.length === 0 ? 'Close it' : 'Inspect',
+      href: '/inbound/receiving',
+      refs: { receiptId: r.id, vendorId: r.vendorId, itemId: r.itemId },
+      weight: (overdue ? 600 : 100) + days,
+    })
+  }
+
+  /*
+   * A delivery rejected well beyond the supplier's own record. One bad batch
+   * happens; this is the multiple the owner set for "a pattern". Asked once:
+   * "noted" is a real answer and it sticks.
+   */
+  for (const r of closedReceipts(ws)) {
+    if (!r.closedAt || daysBetween(r.closedAt, today) > 30) continue
+    if (ws.drafts[`inbound.spikeNoted.${r.id}`] === true) continue
+    const s_ = spikeOf(ws, r)
+    if (!s_.spike) continue
+    const item = ws.items.find((i) => i.id === r.itemId)
+    const vendor = ws.vendors.find((v) => v.id === r.vendorId)
+    out.push({
+      id: `spike:${r.id}`,
+      band: 'costs',
+      kind: 'spike',
+      title: `${vendor?.name ?? 'Unknown supplier'} · ${item?.name ?? 'Unknown material'}`,
+      detail: `${num(s_.thisPct, 1)}% rejected on ${r.id}, against ${num(s_.trailingPct, 1)}% before it`,
+      act: 'open',
+      actLabel: 'Look at it',
+      alt: { act: 'keep', label: 'Noted' },
+      href: '/inbound/receiving',
+      refs: { receiptId: r.id, vendorId: r.vendorId, itemId: r.itemId },
+      weight: 200 + Math.round(s_.thisPct),
     })
   }
 

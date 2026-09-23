@@ -11,7 +11,8 @@ import { DEFAULT_POLICY } from '@/lib/domain/policy'
 import * as S from '@/lib/seed/sourcing'
 import { longDate } from '@/lib/domain/format'
 import { useWorkspace } from '@/components/workspace/store'
-import { ComingNext } from '@/components/inbound/desk/ComingNext'
+import { DeskOnly } from '@/components/sourcing/DeskOnly'
+import { Receiving } from '@/components/inbound/desk/Receiving'
 
 const seed: SeedBundle = {
   today: S.TODAY_SOURCING, items: S.items, vendors: S.vendors, vendorItems: S.vendorItems,
@@ -59,7 +60,6 @@ export default function Page() {
   const { mode, ready } = useWorkspace()
   if (!ready) return <div className="min-h-[50vh]" aria-hidden />
   return mode === 'mine'
-    ? <ComingNext title="Receiving" icon="tray"
-        line="Goods arriving, inspected against each material's checks, and closed into stock — with a goods receipt you can download and send. It lands next." />
+    ? <DeskOnly><Receiving /></DeskOnly>
     : <PageBody />
 }

@@ -23,6 +23,7 @@
  * is how the result reads back.
  */
 import type { Vendor } from '@/lib/domain/types'
+import { awaitingArrival } from './receipts'
 import { orderGroups, orderRows } from './sourcing'
 import type { Workspace } from './types'
 
@@ -64,6 +65,8 @@ export function inFlight(ws: Workspace, today: string): Berth[] {
   for (const g of orderGroups(orderRows(ws))) {
     if (g.state !== 'confirmed' && g.state !== 'shipped') continue
     if (g.expectedOn <= today) continue
+    // arrived early and waiting at the gate is no longer on its way
+    if (!awaitingArrival(ws, g.rows.map((r) => r.order))) continue
 
     const live = g.rows.filter((r) => r.order.state !== 'cancelled')
     if (live.length === 0) continue

@@ -14,6 +14,7 @@
  * `unquotedItems` names the rest so a screen can say plainly what is missing.
  */
 import * as S from '@/lib/seed/sourcing'
+import { purchaseReceipts } from './receipts'
 import type { SeedBundle } from '@/lib/domain/derive'
 import type { Item } from '@/lib/domain/types'
 import type { Workspace } from './types'
@@ -64,7 +65,9 @@ export function bundleFor(ws: Workspace, today: string): SeedBundle {
     vendorItems: ws.vendorItems,
     stockLots: ws.stockLots,
     poLines: [],
-    receipts: (ws.receipts ?? []).map((r) => ({
+    // purchases only: a jobwork return measures a jobworker's turnaround, and
+    // must not move a supplier's lead time on a delivery they never made
+    receipts: purchaseReceipts(ws).map((r) => ({
       id: r.id,
       vendorId: r.vendorId,
       itemId: r.itemId,

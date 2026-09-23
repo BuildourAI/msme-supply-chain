@@ -100,9 +100,18 @@ describe('recording what turned up', () => {
     expect(lot.usability).toBe('usable')
   })
 
-  it('and nothing at all when none of it was usable', () => {
+  it('and nothing usable when none of it was — but the rejected quantity is kept, not lost', () => {
+    /*
+     * This used to write nothing at all, and the ten rejected pieces simply
+     * vanished. §11: non-usable stock is always displayed and never counted
+     * as cover — which it can only be if it is recorded somewhere.
+     */
     const ws = arrive(base(), { qty: 10, rejected: 10 })
-    expect(ws.stockLots).toEqual([])
+    expect(ws.stockLots.filter((l) => l.usability === 'usable')).toEqual([])
+    const held = ws.stockLots.filter((l) => l.usability !== 'usable')
+    expect(held).toHaveLength(1)
+    expect(held[0].qty).toBe(10)
+    expect(held[0].usabilityReason).toBeTruthy()
   })
 
   it('closes the order only when all of it has come', () => {

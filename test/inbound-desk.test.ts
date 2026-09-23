@@ -22,6 +22,14 @@ import { removeItem, removeVendor } from '@/lib/workspace/sourcing'
 import { parseStored } from '@/lib/workspace/storage'
 import { SCHEMA, type Workspace } from '@/lib/workspace/types'
 import { applyImport, importable, planImport } from '@/lib/sheet/import'
+import {
+  arrive, closeBlockedBy, closeReceipt, markCheck, measuredRejectionPct, outstandingOn,
+  recordReceipt, removeReceipt,
+} from '@/lib/workspace/receipts'
+import { qcHeld } from '@/lib/workspace/inbound'
+import { defectPct } from '@/lib/workspace/metrics'
+import { applyCount } from '@/lib/workspace/count'
+import { buildGrn, grnFileName, grnSendableFor } from '@/lib/paper/grn'
 import type { Item, Vendor, VendorItem } from '@/lib/domain/types'
 
 const TODAY = '2026-09-20'
@@ -339,5 +347,221 @@ describe('a workspace saved before the gate existed', () => {
       }],
     }
     expect(removeVendor(ws, 'VN-002').challans).toEqual([])
+  })
+})
+
+/* ================================================================= the gate */
+
+describe('goods at the gate', () => {
+  const po = (over: Partial<Workspace['orders'][0]> = {}): Workspace['orders'][0] => ({
+    id: 'PO-001', no: 'PO-1', vendorId: 'VN-001', itemId: 'IT-001', qty: 100, unitPrice: 82,
+    orderedOn: '2026-09-10', expectedOn: '2026-09-18', state: 'confirmed', ...over,
+  })
+  const withOrder = (): Workspace => {
+    const [ws] = addCheck({ ...set(), orders: [po()] }, gauge())
+    return ws
+  }
+  const at = (ws: Workspace, qty = 100, on = '2026-09-17'): [Workspace, string] =>
+    arrive(ws, { order: ws.orders[0], qty, receivedOn: on })
+  const usable = (ws: Workspace) => ws.stockLots
+    .filter((l) => l.itemId === 'IT-001' && l.usability === 'usable').reduce((a, l) => a + l.qty, 0)
+
+  it('arrives OPEN: counted as arrived, not as stock, and the order does not move', () => {
+    const [ws, id] = at(withOrder(), 100, '2026-09-19')
+    const r = ws.receipts.find((x) => x.id === id)!
+    expect(r).toMatchObject({ status: 'open', accepted: 0, rejected: 0, orderedOn: '2026-09-10' })
+    expect(ws.stockLots).toEqual([])
+    expect(ws.orders[0].state).toBe('confirmed')
+    expect(outstandingOn(ws, ws.orders[0])).toBe(0)
+    // the lorry arrived when it arrived: quoted seven days, took nine, and the
+    // lead time is measured from the arrival, not from whenever it is inspected
+    expect(ws.vendorItems[0].trailingLeadTimeDays).toBe(9)
+  })
+
+  it('will not close on a partial inspection, an over-rejection, or an unexplained exception', () => {
+    let [ws, id] = at(withOrder())
+    const r = () => ws.receipts.find((x) => x.id === id)!
+    expect(closeBlockedBy(ws, r(), 0)).toMatch(/has to be answered/)
+
+    ws = markCheck(ws, id, { checkId: checksFor(ws, 'IT-001')[0].id, outcome: 'fail', measured: 1.4 })
+    expect(closeBlockedBy(ws, r(), 101)).toMatch(/more than arrived/)
+    // a failure with nothing rejected: allowed, but only with a reason
+    expect(closeBlockedBy(ws, r(), 0)).toMatch(/say why it is being accepted/)
+    expect(closeBlockedBy(ws, r(), 0, 'Customer accepts 1.4 mm on this job')).toBeNull()
+    // and a close that should not happen does not happen
+    expect(closeReceipt(ws, id, { rejected: 0, inspector: 'S. Kale', closedAt: TODAY })).toBe(ws)
+  })
+
+  it('closes into a usable lot AND a non-usable one, in the failed check\'s bucket, with its reason', () => {
+    let [ws, id] = at(withOrder())
+    ws = markCheck(ws, id, { checkId: checksFor(ws, 'IT-001')[0].id, outcome: 'fail', measured: 1.4 })
+    ws = closeReceipt(ws, id, { rejected: 4, inspector: 'S. Kale', closedAt: TODAY })
+    const lots = ws.stockLots.filter((l) => l.itemId === 'IT-001')
+    expect(lots.find((l) => l.id === `LOT-${id}`)).toMatchObject({ qty: 96, usability: 'usable' })
+    expect(lots.find((l) => l.id === `LOT-${id}-NU`)).toMatchObject({
+      qty: 4, usability: 'damaged', usabilityReason: 'Out of gauge',
+    })
+    const r = ws.receipts.find((x) => x.id === id)!
+    expect(r).toMatchObject({ status: 'closed', accepted: 96, rejected: 4, inspector: 'S. Kale', closedAt: TODAY })
+    expect(r.failedCheckIds).toEqual([checksFor(ws, 'IT-001')[0].id])
+    expect(ws.orders[0].state).toBe('delivered')
+  })
+
+  it('moves the last purchase price to what this order paid, and back if it is taken back', () => {
+    let [ws, id] = at(withOrder())
+    ws = markCheck(ws, id, { checkId: checksFor(ws, 'IT-001')[0].id, outcome: 'pass', measured: 1.2 })
+    ws = closeReceipt(ws, id, { rejected: 0, inspector: 'S. Kale', closedAt: TODAY })
+    expect(ws.items[0].lastPurchaseRate).toBe(82)
+    const back = removeReceipt(ws, id)
+    expect(back.items[0].lastPurchaseRate).toBe(80)
+    expect(back.stockLots).toEqual([])
+    expect(back.orders[0].state).toBe('confirmed')
+  })
+
+  it('closes a material with no checks unchecked, and says so', () => {
+    const ws0: Workspace = { ...set(), orders: [po({ itemId: 'IT-002' })] }
+    const [ws, id] = arrive(ws0, { order: ws0.orders[0], qty: 50, receivedOn: '2026-09-17' })
+    const done = closeReceipt(ws, id, { rejected: 0, inspector: 'S. Kale', closedAt: TODAY })
+    expect(done.receipts.find((r) => r.id === id)!.noSpec).toBe(true)
+  })
+
+  it('does not call a delivery clean, or rejected, until it is inspected', () => {
+    let [ws, id] = at(withOrder())
+    expect(measuredRejectionPct(ws, 'VN-001', 'IT-001')).toBeNull()
+    expect(defectPct(ws)).toBeNull()
+    ws = markCheck(ws, id, { checkId: checksFor(ws, 'IT-001')[0].id, outcome: 'fail', measured: 1.4 })
+    ws = closeReceipt(ws, id, { rejected: 10, inspector: 'S. Kale', closedAt: TODAY })
+    expect(measuredRejectionPct(ws, 'VN-001', 'IT-001')).toBe(10)
+    // and a delivery is judged against the record before it, not including it
+    expect(measuredRejectionPct(ws, 'VN-001', 'IT-001', id)).toBeNull()
+  })
+
+  it('stops calling an order late, or on its way, once all of it is at the gate', () => {
+    const late = withOrder()
+    expect(decisionsFor(late, TODAY).map((d) => d.kind)).toContain('late')
+    const [ws] = at(late)
+    expect(decisionsFor(ws, TODAY).map((d) => d.kind)).not.toContain('late')
+    expect(inboundDecisionsFor(ws, TODAY).map((d) => d.kind)).not.toContain('to-receive')
+    // and the gate asks for the inspection instead
+    expect(inboundDecisionsFor(ws, TODAY).map((d) => d.kind)).toEqual(['at-gate'])
+  })
+
+  it('raises a receipt left uninspected past the window in the worst band', () => {
+    const [ws] = at(withOrder(), 100, '2026-09-14')   // six days before TODAY, window is three
+    const d = inboundDecisionsFor(ws, TODAY)
+    expect(d.map((x) => [x.kind, x.band])).toEqual([['qc-overdue', 'stops']])
+    expect(d[0].detail).toMatch(/past the QC window/)
+  })
+
+  it('values what stands at the gate at the last purchase price', () => {
+    const [ws] = at(withOrder(), 50)
+    expect(qcHeld(ws).value).toBe(50 * 80)
+  })
+
+  it('raises a rejection well beyond the supplier\'s own record as a pattern', () => {
+    // a clean history first, then a delivery with a fifth of it turned back
+    let ws: Workspace = { ...withOrder(), orders: [po(), po({ id: 'PO-002', no: 'PO-2', expectedOn: '2026-09-19' })] }
+    let id: string
+    ;[ws, id] = arrive(ws, { order: ws.orders[0], qty: 100, receivedOn: '2026-09-15' })
+    ws = markCheck(ws, id, { checkId: checksFor(ws, 'IT-001')[0].id, outcome: 'pass', measured: 1.2 })
+    ws = closeReceipt(ws, id, { rejected: 2, reason: 'Two sheets bent in the lorry', inspector: 'S. Kale', closedAt: '2026-09-15' })
+    ;[ws, id] = arrive(ws, { order: ws.orders[1], qty: 100, receivedOn: '2026-09-18' })
+    ws = markCheck(ws, id, { checkId: checksFor(ws, 'IT-001')[0].id, outcome: 'fail', measured: 1.4 })
+    ws = closeReceipt(ws, id, { rejected: 20, inspector: 'S. Kale', closedAt: '2026-09-18' })
+    const spike = inboundDecisionsFor(ws, TODAY).find((d) => d.kind === 'spike')!
+    expect(spike.band).toBe('costs')
+    expect(spike.detail).toMatch(/20% rejected/)
+    // "noted" sticks
+    const noted = { ...ws, drafts: { ...ws.drafts, [`inbound.spikeNoted.${id}`]: true } }
+    expect(inboundDecisionsFor(noted, TODAY).some((d) => d.kind === 'spike')).toBe(false)
+  })
+
+  it('does not call the first rejection from a supplier a pattern — there is nothing to compare it to', () => {
+    let [ws, id] = at(withOrder())
+    ws = markCheck(ws, id, { checkId: checksFor(ws, 'IT-001')[0].id, outcome: 'fail', measured: 1.4 })
+    ws = closeReceipt(ws, id, { rejected: 4, inspector: 'S. Kale', closedAt: TODAY })
+    expect(inboundDecisionsFor(ws, TODAY).some((d) => d.kind === 'spike')).toBe(false)
+  })
+
+  it('keeps a half-done inspection, mark by mark', () => {
+    let [ws, id] = at(withOrder())
+    const check = checksFor(ws, 'IT-001')[0].id
+    ws = markCheck(ws, id, { checkId: check, outcome: 'pass', measured: 1.2 })
+    ws = markCheck(ws, id, { checkId: check, outcome: 'fail', measured: 1.3 })
+    expect(ws.receipts.find((r) => r.id === id)!.results).toEqual([{ checkId: check, outcome: 'fail', measured: 1.3 }])
+  })
+})
+
+/* ================================================================= the GRN */
+
+describe('the goods receipt note', () => {
+  it('exists only for a closed receipt — an open one has no verdict to print', () => {
+    const ws0: Workspace = { ...set(), orders: [{
+      id: 'PO-001', no: 'PO-1', vendorId: 'VN-001', itemId: 'IT-001', qty: 100, unitPrice: 80,
+      orderedOn: '2026-09-10', expectedOn: '2026-09-18', state: 'confirmed',
+    }] }
+    let [ws] = addCheck(ws0, gauge())
+    ;[ws] = addCheck(ws, gauge({ label: 'Mill certificate', kind: 'document', failBucket: 'qc_hold', failReason: 'No certificate' }))
+    let id: string
+    ;[ws, id] = arrive(ws, { order: ws.orders[0], qty: 100, receivedOn: '2026-09-17' })
+    expect(buildGrn(ws, id)).toBeNull()
+
+    const [thick, cert] = checksFor(ws, 'IT-001').sort((a, b) => a.label.localeCompare(b.label)).reverse()
+    ws = markCheck(ws, id, { checkId: thick.id, outcome: 'fail', measured: 1.32 })
+    ws = markCheck(ws, id, { checkId: cert.id, outcome: 'pass' })
+    ws = closeReceipt(ws, id, { rejected: 4, inspector: 'S. Kale', closedAt: TODAY })
+
+    const doc = buildGrn(ws, id)!
+    expect(doc.against).toBe('Order PO-1')
+    expect(doc.received).toBe('100 kg')
+    expect(doc.accepted).toBe('96 kg')
+    expect(doc.rejected).toBe('4 kg')
+    expect(doc.checks.map((c) => [c.label, c.result])).toEqual(
+      expect.arrayContaining([['Thickness', 'Fail'], ['Mill certificate', 'Pass']]))
+    expect(doc.checks.find((c) => c.label === 'Thickness')!.reading).toBe('1.32 mm')
+    expect(doc.rejectedBecause).toBe('Out of gauge')
+    expect(doc.inspector).toBe('S. Kale')
+
+    // the message a phone will actually send carries all of it
+    const msg = grnSendableFor(doc).message
+    expect(msg).toMatch(/rejected 4 kg/)
+    expect(msg).toMatch(/Rejected because: Out of gauge/)
+    expect(msg).toMatch(/Thickness 1\.32 mm \(needed 1\.15 – 1\.25 mm\)/)
+    expect(grnFileName(doc)).toBe('GRN-GR-001-Shah-Metals.pdf')
+  })
+})
+
+/* ================================================================ recounting */
+
+describe('a recount after goods have arrived', () => {
+  it('writes the difference, so arrivals are not counted twice', () => {
+    const ws0: Workspace = { ...set(), orders: [{
+      id: 'PO-001', no: 'PO-1', vendorId: 'VN-001', itemId: 'IT-001', qty: 40, unitPrice: 80,
+      orderedOn: '2026-09-10', expectedOn: '2026-09-18', state: 'confirmed',
+    }] }
+    let ws = applyCount(ws0, '2026-09-11', { 'IT-001': { good: 120 } })
+    ws = recordReceipt(ws, { order: ws.orders[0], qty: 40, accepted: 40, rejected: 0, receivedOn: '2026-09-17' })
+    const onHand = (w: Workspace) => w.stockLots
+      .filter((l) => l.itemId === 'IT-001' && l.usability === 'usable').reduce((a, l) => a + l.qty, 0)
+    expect(onHand(ws)).toBe(160)
+    // the physical count agrees with the book: nothing changes
+    expect(onHand(applyCount(ws, TODAY, { 'IT-001': { good: 160 } }))).toBe(160)
+    // five short on the shelf: a correction of minus five, as its own lot
+    const short = applyCount(ws, TODAY, { 'IT-001': { good: 155 } })
+    expect(onHand(short)).toBe(155)
+    expect(short.stockLots.find((l) => l.batchNo === `COUNT-${TODAY}`)!.qty).toBe(-5)
+  })
+
+  it('still replaces the opening count when nothing else has moved it', () => {
+    let ws = applyCount(set(), '2026-09-11', { 'IT-001': { good: 120 } })
+    ws = applyCount(ws, TODAY, { 'IT-001': { good: 110 } })
+    expect(ws.stockLots.filter((l) => l.itemId === 'IT-001')).toHaveLength(1)
+    expect(ws.stockLots[0].qty).toBe(110)
+  })
+
+  it('leaves a material nobody typed a figure for exactly as it was', () => {
+    let ws = applyCount(set(), '2026-09-11', { 'IT-001': { good: 120 }, 'IT-002': { good: 30 } })
+    ws = applyCount(ws, TODAY, { 'IT-001': { good: 100 } })
+    expect(ws.stockLots.find((l) => l.itemId === 'IT-002')!.qty).toBe(30)
   })
 })

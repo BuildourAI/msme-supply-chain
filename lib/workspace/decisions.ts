@@ -22,6 +22,7 @@ import type { DerivedRow } from '@/lib/domain/derive'
 import { needsDecision } from '@/lib/domain/derive'
 import { orderGroups, orderRows, quoteRows, unorderedLines, expired } from './sourcing'
 import { flipSignature, flippingItems, sourcing } from './metrics'
+import { awaitingArrival } from './receipts'
 import type { Workspace } from './types'
 
 /**
@@ -167,6 +168,8 @@ function stops(ws: Workspace, today: string, rows: DerivedRow[]): Decision[] {
   for (const g of orderGroups(orderRows(ws))) {
     const open = g.state !== 'delivered' && g.state !== 'cancelled'
     if (!open || g.expectedOn >= today) continue
+    // everything on it is at the gate: not late any more, waiting on inspection
+    if (!awaitingArrival(ws, g.rows.map((r) => r.order))) continue
     const late = daysBetween(g.expectedOn, today)
     out.push({
       id: `late:${g.no}`,
