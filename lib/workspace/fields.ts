@@ -199,6 +199,32 @@ export const BUILTIN: Record<SheetEntity, BuiltinColumn[]> = {
     { key: 'value', label: 'Value', derived: true },
     { key: 'docs', label: 'Documents', derived: true },
   ],
+  /*
+   * A count is filled in on the count sheet — downloaded, walked, brought
+   * back — rather than imported here, so the person closing the sheet sees
+   * every difference before it is written. These are for arranging and export.
+   */
+  count: [
+    { key: 'on', label: 'Counted on', identity: true, derived: true },
+    { key: 'rack', label: 'Rack', derived: true },
+    { key: 'item', label: 'Material', derived: true },
+    { key: 'lot', label: 'Lot', derived: true },
+    { key: 'book', label: 'Book', derived: true },
+    { key: 'counted', label: 'Counted', derived: true },
+    { key: 'variance', label: 'Difference', derived: true },
+    { key: 'tolerance', label: 'Against tolerance', derived: true },
+    { key: 'counter', label: 'Counted by', derived: true },
+    { key: 'note', label: 'Note', derived: true },
+  ],
+  move: [
+    { key: 'on', label: 'Date', identity: true, derived: true },
+    { key: 'what', label: 'What happened', derived: true },
+    { key: 'item', label: 'Material', derived: true },
+    { key: 'lot', label: 'Lot', derived: true },
+    { key: 'qty', label: 'Moved', derived: true },
+    { key: 'doc', label: 'Document', derived: true },
+    { key: 'actor', label: 'By', derived: true },
+  ],
 }
 
 export const EMPTY_VIEW: TableView = { order: [], hidden: [], labels: {} }
@@ -214,6 +240,8 @@ export const EMPTY_VIEWS: Record<SheetEntity, TableView> = {
   challan: EMPTY_VIEW,
   rack: EMPTY_VIEW,
   lot: EMPTY_VIEW,
+  count: EMPTY_VIEW,
+  move: EMPTY_VIEW,
 }
 
 /**
@@ -494,6 +522,8 @@ export function pruneCustom(ws: Workspace): Workspace {
     ...(ws.challans ?? []).map((c) => c.id),
     ...(ws.racks ?? []).map((r) => r.id),
     ...ws.stockLots.map((l) => l.id),
+    ...(ws.counts ?? []).map((c) => c.id),
+    ...(ws.moves ?? []).map((m) => m.id),
   ])
   const custom: Record<string, Record<string, string>> = {}
   for (const [id, row] of Object.entries(ws.custom ?? {})) {

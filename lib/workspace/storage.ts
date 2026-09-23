@@ -366,6 +366,8 @@ function migrate(raw: Partial<Workspace>): Workspace {
       challan: view(views.challan),
       rack: view(views.rack),
       lot: view(views.lot),
+      count: view(views.count),
+      move: view(views.move),
     },
     vendorContact: map(raw.vendorContact),
     /*

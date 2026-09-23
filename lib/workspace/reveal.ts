@@ -18,6 +18,7 @@ import { uncheckedItems } from './checks'
 import { openCount } from './decisions'
 import { inboundOpenCount } from './inbound-decisions'
 import { inventoryOpenCount } from './inventory-decisions'
+import { openVariances } from './counting'
 import { lotRows } from './ledger'
 import { unplacedLots } from './racks'
 import { challansOut } from './jobwork'
@@ -187,7 +188,8 @@ export function inboundNav(ws: Workspace, today = ''): NavRow[] {
  * when somebody does it — lots past their counting date, lots on no rack.
  */
 export function inventoryNav(ws: Workspace, today = ''): NavRow[] {
-  const due = today ? lotRows(ws, today).filter((r) => r.due).length : 0
+  // lots past their counting date, and counts outside tolerance nobody has looked at
+  const due = (today ? lotRows(ws, today).filter((r) => r.due).length : 0) + openVariances(ws).length
   return [
     {
       label: 'Dashboard',

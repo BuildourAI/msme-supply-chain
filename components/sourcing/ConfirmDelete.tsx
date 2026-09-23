@@ -13,15 +13,33 @@ import type { DeleteImpact } from '@/lib/workspace/sourcing'
  * It asks once. A second confirmation is a way of moving the blame rather than
  * preventing the mistake.
  */
-export function ConfirmDelete({ open, onClose, onConfirm, what, impact }: {
+export function ConfirmDelete({ open, onClose, onConfirm, what, impact, blocked }: {
   open: boolean
   onClose: () => void
   onConfirm: () => void
   /** what is being removed, named — "Shah Metals", not "this supplier" */
   what: string
   impact: DeleteImpact
+  /**
+   * Why it cannot go at all, when something since depends on it. Said, with
+   * no Delete button — a button that silently did nothing would be worse.
+   */
+  blocked?: string | null
 }) {
   if (!open) return null
+  if (blocked) {
+    return (
+      <Dialog open onClose={onClose} title={`${what} cannot be deleted`}>
+        <p className="px-4 py-4 text-[13px] leading-relaxed text-ink-2">{blocked}</p>
+        <footer className="flex items-center justify-end border-t border-line-soft px-4 py-3">
+          <button type="button" onClick={onClose}
+            className="press rounded-lg border border-line bg-surface px-3.5 py-2 text-[13px] font-medium hover:bg-surface-2">
+            Close
+          </button>
+        </footer>
+      </Dialog>
+    )
+  }
   return (
     <Dialog open onClose={onClose} title={`Delete ${what}?`}>
       <div className="space-y-3 px-4 py-4">

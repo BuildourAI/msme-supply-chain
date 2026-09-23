@@ -12,7 +12,7 @@
  * So "why is the book 40 short?" always has an answer, and it is on a list.
  */
 import { daysSinceConfirmed, isStale, lastConfirmed, MOVEMENT_LABEL, valueAt } from '@/lib/domain/inventory'
-import type { Derived, Item, ItemClass, MovementKind } from '@/lib/domain/types'
+import type { Derived, Item, ItemClass, MovementKind, Usability } from '@/lib/domain/types'
 import { issueId } from './defaults'
 import type {
   Challan, GoodsReceipt, Rack, StockMove, WsCount, WsLot, Workspace,
@@ -351,6 +351,10 @@ export interface TrailEntry {
   kind: MovementKind | 'transfer'
 }
 
+export const STATE_WORD: Record<Usability, string> = {
+  usable: 'Usable', qc_hold: 'On hold', damaged: 'Damaged', expired: 'Expired',
+}
+
 const rackName = (ws: Workspace, id?: string) =>
   (id ? (ws.racks ?? []).find((r) => r.id === id)?.name : undefined) ?? 'no rack'
 
@@ -374,8 +378,12 @@ export function trail(ws: Workspace, lotId: string): TrailEntry[] {
     rows.push({
       on: t.on, order: t.id,
       entry: {
-        on: t.on, what: `Moved ${rackName(ws, t.from)} → ${rackName(ws, t.to)}`, doc: t.id,
-        actor: t.actor, kind: 'transfer',
+        on: t.on,
+        what: t.state
+          ? (t.state.to === 'usable' ? `Released — ${STATE_WORD[t.state.from].toLowerCase()} no longer`
+            : `Put ${STATE_WORD[t.state.to].toLowerCase()}`)
+          : `Moved ${rackName(ws, t.from)} → ${rackName(ws, t.to)}`,
+        doc: t.id, actor: t.actor, note: t.state?.note, kind: 'transfer',
       },
     })
   }

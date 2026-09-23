@@ -11,7 +11,7 @@ import { useWorkspace } from '@/components/workspace/store'
 import { money, num, shortDate } from '@/lib/domain/format'
 import type { QcState } from '@/lib/domain/inbound'
 import { receiptRows, spikeOf, type ReceiptRow } from '@/lib/workspace/inbound'
-import { isOpen, removeReceipt } from '@/lib/workspace/receipts'
+import { isOpen, removeReceipt, removeReceiptProblem } from '@/lib/workspace/receipts'
 import { GrnDocument } from './GrnDocument'
 import { InspectForm } from './InspectForm'
 
@@ -200,6 +200,7 @@ export function Receiving() {
               `its place in ${deleting.vendor?.name ?? 'the supplier'}’s lead time and rejection record`],
         } : { losses: [], clean: true }}
         onClose={() => setDeleting(null)}
+        blocked={deleting ? removeReceiptProblem(ws, deleting.receipt.id) : null}
         onConfirm={() => { if (deleting) update((w) => removeReceipt(w, deleting.receipt.id)) }}
       />
     </>

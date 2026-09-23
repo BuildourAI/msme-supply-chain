@@ -64,6 +64,10 @@ export type Act =
   | 'chase'         // text for a person to send a supplier or jobworker
   | 'return'        // material came back from a jobworker
   | 'close-challan' // settle a challan, and write off what never came back
+  /* the store's — see `inventory-decisions.ts` */
+  | 'count'         // count a lot, or walk a rack
+  | 'write-off'     // take held stock off the book, with a reason
+  | 'release'       // held stock is fine after all
 
 export type DecisionKind =
   | 'at-risk' | 'late' | 'unsourced'
@@ -74,7 +78,7 @@ export type DecisionKind =
   | 'not-told' | 'awaiting-ack' | 'churn' | 'lands-late'
   | 'challan-overdue' | 'challan-unaccounted' | 'over-ceiling'
   /* the store's — see `inventory-decisions.ts` */
-  | 'count-due' | 'no-rack' | 'negative-stock'
+  | 'count-due' | 'no-rack' | 'negative-stock' | 'count-variance' | 'held-long'
 
 export interface Decision {
   /** stable across renders, so a list key is not an index */

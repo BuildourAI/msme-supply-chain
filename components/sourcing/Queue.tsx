@@ -121,6 +121,8 @@ const KIND: Record<DecisionKind, IconName> = {
   'count-due': 'hash',
   'no-rack': 'columns',
   'negative-stock': 'alert',
+  'count-variance': 'scale',
+  'held-long': 'tray',
 }
 
 export function Queue({ rows, berths, onAct, showAll, onShowAll, clear }: {

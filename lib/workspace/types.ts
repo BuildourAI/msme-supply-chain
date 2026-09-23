@@ -17,7 +17,7 @@
 import type { Policy } from '@/lib/domain/policy'
 import type {
   CheckResult, CutRecord, CycleCount, Item, LossRecord, PoRevision, SpecCheck, StockLot,
-  StockMovement, Uom, Vendor, VendorItem,
+  StockMovement, Uom, Usability, Vendor, VendorItem,
 } from '@/lib/domain/types'
 import type { SupplierDoc, VendorAlias } from '@/lib/intake/types'
 
@@ -409,12 +409,18 @@ export type WsLot = StockLot & {
 /** A line in the journal. The domain's movement, and the job it was for. */
 export type StockMove = StockMovement & { jobId?: string }
 
-/** A lot moved from one rack to another. No quantity changes, so no movement. */
+/**
+ * A lot moved from one rack to another, or put on hold and released. No
+ * quantity changes, so neither is a movement — but both are on the lot's
+ * trail, dated and named.
+ */
 export interface Transfer {
   id: string
   lotId: string
   from?: string
   to?: string
+  /** a change of state rather than of place */
+  state?: { from: Usability; to: Usability; note?: string }
   on: string
   actor: string
 }
@@ -486,7 +492,7 @@ export type SheetEntity =
   /** the inbound desk's three lists */
   | 'check' | 'receipt' | 'challan'
   /** the store's */
-  | 'rack' | 'lot'
+  | 'rack' | 'lot' | 'count' | 'move'
 
 export interface FieldDef {
   id: string

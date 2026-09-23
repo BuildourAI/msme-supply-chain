@@ -577,7 +577,9 @@ function storeMetrics(
   const dueValue = due.reduce((a, r) => a + r.value.value, 0)
 
   const clsOf = (itemId: string): ItemClass => ws.items.find((i) => i.id === itemId)?.itemClass ?? 'C'
-  const counts = [...(ws.counts ?? [])].sort((a, b) => a.on.localeCompare(b.on) || a.id.localeCompare(b.id))
+  // a lot found on a count had no book to be right or wrong against, so it is not judged
+  const counts = [...(ws.counts ?? [])].filter((c) => c.bookQty !== 0)
+    .sort((a, b) => a.on.localeCompare(b.on) || a.id.localeCompare(b.id))
   const acc = recordAccuracy(counts.map((count) => ({ count, cls: clsOf(count.itemId) })), ws.policy)
 
   return [

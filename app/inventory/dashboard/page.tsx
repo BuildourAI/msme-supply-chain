@@ -10,6 +10,8 @@ import { type Act, type Band, type Decision } from '@/lib/workspace/decisions'
 import { inFlight } from '@/lib/workspace/flight'
 import { inventoryDecisionsFor } from '@/lib/workspace/inventory-decisions'
 import { pickedMetrics } from '@/lib/workspace/metrics'
+import { varianceNotedKey } from '@/lib/workspace/counting'
+import { CountDialog, CountSheetDialog, LotStateDialog } from '@/components/inventory/desk/LedgerDialogs'
 
 /**
  * The store's morning.
@@ -25,9 +27,12 @@ export default function Page() {
 }
 
 function Dashboard() {
-  const { workspace, today } = useWorkspace()
+  const { workspace, update, today } = useWorkspace()
   const [picking, setPicking] = useState(false)
   const [opened, setOpened] = useState<Set<Band>>(new Set())
+  const [counting, setCounting] = useState<string | null>(null)
+  const [walking, setWalking] = useState<{ rackId?: string; itemId?: string } | null>(null)
+  const [stating, setStating] = useState<{ lotId: string; mode: 'release' | 'write-off' } | null>(null)
 
   if (!workspace) return null
   const ws = workspace
@@ -36,8 +41,21 @@ function Dashboard() {
   const berths = inFlight(ws, today)
   const metrics = pickedMetrics(ws, today, 'inventory')
 
-  // every card the store raises today needs the ledger, so each one opens it
-  const act = (_d: Decision, _kind: Act) => {}
+  const act = (d: Decision, kind: Act) => {
+    const { rackId, itemId, lotId, countId } = d.refs
+    if (kind === 'count') {
+      // a variance is one lot counted again; a rack or a material is a walk
+      if (d.kind === 'count-variance' && lotId) setCounting(lotId)
+      else if (rackId) setWalking({ rackId })
+      else if (itemId) setWalking({ itemId })
+      return
+    }
+    if (kind === 'keep' && countId) {
+      update((w) => ({ ...w, drafts: { ...w.drafts, [varianceNotedKey(countId)]: true } }))
+      return
+    }
+    if ((kind === 'write-off' || kind === 'release') && lotId) setStating({ lotId, mode: kind })
+  }
 
   return (
     <div className="anim-page mx-auto w-full max-w-[72rem]">
@@ -70,6 +88,9 @@ function Dashboard() {
       )}
 
       <MetricPicker open={picking} onClose={() => setPicking(false)} stage="inventory" />
+      <CountDialog lotId={counting} onClose={() => setCounting(null)} />
+      <CountSheetDialog scope={walking} onClose={() => setWalking(null)} />
+      <LotStateDialog lotId={stating?.lotId ?? null} mode={stating?.mode ?? 'release'} onClose={() => setStating(null)} />
     </div>
   )
 }

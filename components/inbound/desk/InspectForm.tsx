@@ -11,6 +11,7 @@ import type { CheckOutcome, SpecCheck } from '@/lib/domain/types'
 import { BUCKET_LABEL, KIND_LABEL } from '@/lib/workspace/checks'
 import { receiptRow } from '@/lib/workspace/inbound'
 import { closeBlockedBy, closeReceipt, markCheck } from '@/lib/workspace/receipts'
+import { RackSelect } from '@/components/inventory/desk/RackSelect'
 
 /**
  * Working down the checks on one receipt, and closing it.
@@ -40,8 +41,14 @@ export function InspectForm({ receiptId, onClose, onClosed }: {
   const [rejected, setRejected] = useState('0')
   const [reason, setReason] = useState('')
   const [tried, setTried] = useState(false)
+  const [rack, setRack] = useState('')
 
-  useEffect(() => { setRejected('0'); setReason(''); setTried(false) }, [receiptId])
+  useEffect(() => {
+    setRejected('0'); setReason(''); setTried(false)
+    // where this material already sits is where the new lot most likely goes
+    const r = (workspace?.receipts ?? []).find((x) => x.id === receiptId)
+    setRack(workspace?.stockLots.find((l) => l.itemId === r?.itemId && l.rack && l.qty > 0)?.rack ?? '')
+  }, [receiptId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!receiptId || !workspace) return null
   const r = (workspace.receipts ?? []).find((x) => x.id === receiptId)
@@ -68,6 +75,7 @@ export function InspectForm({ receiptId, onClose, onClosed }: {
       reason,
       inspector: session.actor,
       closedAt: today,
+      rack: rack || undefined,
     }))
     onClose()
     onClosed?.(r.id)
@@ -130,6 +138,18 @@ export function InspectForm({ receiptId, onClose, onClosed }: {
             </p>
           )}
         </div>
+
+        {(workspace.racks ?? []).length > 0 && (
+          <div className="rounded-md border border-line bg-surface-2 p-3">
+            <label htmlFor="in-rack" className="block text-[12.5px] font-medium">Which rack does it go on?</label>
+            <p className="mt-0.5 text-[11.5px] text-ink-3">
+              What is accepted lands on this rack in the store&apos;s book; anything turned back is held beside it.
+            </p>
+            <div className="mt-2 max-w-xs">
+              <RackSelect id="in-rack" value={rack} onChange={setRack} none="Not on a rack yet" />
+            </div>
+          </div>
+        )}
 
         {asksReason && (
           <div className="rounded-md border border-warn/40 bg-warn-soft p-3">
