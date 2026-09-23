@@ -2,7 +2,11 @@
 import { useState } from 'react'
 import { Icon } from '@/components/ui/icons'
 import { useWorkspace } from '@/components/workspace/store'
-import { SOURCING_STEPS, progressOf, type StepId } from '@/lib/workspace/checklist'
+import { progressOf, stepsFor, type StepId } from '@/lib/workspace/checklist'
+import { STAGE_TILES, type StageId } from '@/lib/workspace/reveal'
+import { ChecksWizard } from './wizards/ChecksWizard'
+import { GateRulesWizard } from './wizards/GateRulesWizard'
+import { JobworkerWizard } from './wizards/JobworkerWizard'
 import { MaterialWizard } from './wizards/MaterialWizard'
 import { SupplierWizard } from './wizards/SupplierWizard'
 import { StockWizard } from './wizards/StockWizard'
@@ -10,7 +14,7 @@ import { RulesWizard } from './wizards/RulesWizard'
 import { TeamWizard } from './wizards/TeamWizard'
 
 /**
- * Setting up sourcing, as five steps that go green.
+ * Setting up a stage, as five steps that go green.
  *
  * The shape is taken straight from what works: a numbered list, one live
  * button, and a tick that arrives the moment the underlying data does. The tick
@@ -20,19 +24,27 @@ import { TeamWizard } from './wizards/TeamWizard'
  *
  * Only the next step gets a primary button. Five buttons of equal weight is a
  * menu; one is an instruction.
+ *
+ * One component for every stage: the stage picks the list, and the list is
+ * data in `checklist.ts`. The steps two stages share are the same objects, so
+ * adding a material from the inbound card ticks it on the sourcing one too.
  */
-export function Checklist({ compact = false }: { compact?: boolean }) {
+export function Checklist({ compact = false, stage = 'sourcing' }: {
+  compact?: boolean
+  stage?: StageId
+}) {
   const { workspace } = useWorkspace()
   const [openStep, setOpenStep] = useState<StepId | null>(null)
 
   if (!workspace) return null
-  const p = progressOf(workspace)
+  const p = progressOf(workspace, stepsFor(stage))
+  const name = (STAGE_TILES.find((t) => t.id === stage)?.label ?? 'Sourcing').toLowerCase()
 
   if (compact) {
     return (
       <div className="rounded-lg bg-accent-tint p-2.5">
         <p className="flex items-baseline gap-1.5 text-[12px] font-bold leading-tight">
-          Setting up sourcing
+          Setting up {name}
           <span className="mono ml-auto text-[10.5px] font-normal text-ink-3">
             {p.doneCount} of {p.total}
           </span>
@@ -63,7 +75,7 @@ export function Checklist({ compact = false }: { compact?: boolean }) {
       <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line-soft px-4 py-3">
         <div className="min-w-0">
           <h2 className="text-[15px] font-bold leading-tight tracking-tight">
-            {p.complete ? 'Your sourcing is set up' : 'Set up your sourcing'}
+            {p.complete ? `Your ${name} is set up` : `Set up your ${name}`}
           </h2>
           <p className="mt-0.5 text-[12px] leading-snug text-ink-2">
             {p.complete
@@ -128,6 +140,9 @@ function Wizards({ open, onClose }: { open: StepId | null; onClose: () => void }
       <SupplierWizard open={open === 'suppliers'} onClose={onClose} />
       <StockWizard open={open === 'stock'} onClose={onClose} />
       <RulesWizard open={open === 'rules'} onClose={onClose} />
+      <ChecksWizard open={open === 'checks'} onClose={onClose} />
+      <JobworkerWizard open={open === 'jobworkers'} onClose={onClose} />
+      <GateRulesWizard open={open === 'gateRules'} onClose={onClose} />
     </>
   )
 }

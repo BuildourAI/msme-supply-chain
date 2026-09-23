@@ -17,7 +17,8 @@
  * the rejection rate, landed cost — it is read, not reimplemented.
  */
 import type { Item, Vendor } from '@/lib/domain/types'
-import { receiptsFor } from './receipts'
+import { atJobworkersValue, qcHeld, unackedExposure } from './inbound'
+import { openReceipts, receiptsFor } from './receipts'
 import { expired } from './sourcing'
 import type { Workspace } from './types'
 
@@ -75,6 +76,27 @@ export interface Metric {
 export type MetricKey =
   | 'onTime' | 'lead' | 'defects' | 'flip' | 'stale'
   | 'singleSource' | 'concentration' | 'priceMoves' | 'outstanding'
+  /* the gate's */
+  | 'qcHeld' | 'inspectedOnTime' | 'atJobworkers' | 'unacked'
+
+/** The desks that have a dashboard of figures. */
+export type MetricStage = 'sourcing' | 'inbound'
+
+/**
+ * Which figures belong to which desk, in the order each shows them.
+ *
+ * Three appear on both, because both desks care: whether deliveries land on
+ * time, how much of what lands is rejected, and which supplier's delivery time
+ * cannot be planned around. They are the same figure on both screens, worked
+ * out once.
+ */
+export const STAGE_METRICS: Record<MetricStage, MetricKey[]> = {
+  sourcing: [
+    'onTime', 'lead', 'defects', 'flip', 'stale',
+    'singleSource', 'concentration', 'priceMoves', 'outstanding',
+  ],
+  inbound: ['qcHeld', 'inspectedOnTime', 'defects', 'onTime', 'unacked', 'atJobworkers', 'lead'],
+}
 
 /**
  * What a new owner sees before they have chosen.
@@ -87,6 +109,16 @@ export const DEFAULT_PICKS: MetricKey[] = [
   'onTime', 'lead', 'defects', 'flip', 'stale', 'outstanding',
 ]
 
+/** The gate's six, before anybody has chosen. The spread of lead times is sourcing's to watch. */
+export const INBOUND_PICKS: MetricKey[] = [
+  'qcHeld', 'inspectedOnTime', 'defects', 'onTime', 'unacked', 'atJobworkers',
+]
+
+export const DEFAULTS_FOR: Record<MetricStage, MetricKey[]> = {
+  sourcing: DEFAULT_PICKS,
+  inbound: INBOUND_PICKS,
+}
+
 export const METRIC_LABEL: Record<MetricKey, string> = {
   onTime: 'On-time delivery',
   lead: 'Least predictable',
@@ -97,6 +129,10 @@ export const METRIC_LABEL: Record<MetricKey, string> = {
   concentration: 'Largest supplier',
   priceMoves: 'Price moves',
   outstanding: 'Still out',
+  qcHeld: 'Held at the gate',
+  inspectedOnTime: 'Inspected in time',
+  atJobworkers: 'At jobworkers',
+  unacked: 'Not yet confirmed',
 }
 
 /** One line each, for the dialog where the owner picks. */
@@ -110,6 +146,10 @@ export const METRIC_WHY: Record<MetricKey, string> = {
   concentration: 'How much of your ordering sits with one supplier.',
   priceMoves: 'Rates that changed, and by how much.',
   outstanding: 'Money on orders placed and not yet delivered.',
+  qcHeld: 'Material that has arrived and cannot be used until somebody inspects it.',
+  inspectedOnTime: 'How often a receipt is inspected within the days your gate rules allow.',
+  atJobworkers: 'Your material in sheds you do not control. Never counted as stock you can use.',
+  unacked: 'Changes to orders that the supplier has not confirmed — money riding on hope.',
 }
 
 /* ------------------------------------------------------------- the maths -- */
@@ -483,11 +523,106 @@ export function metricsFor(ws: Workspace, today: string): Metric[] {
       }
       : nothing('outstanding', 'Nothing ordered yet',
         'needs a purchase order that is neither delivered nor called off'),
+
+    ...gateMetrics(ws, today, nothing),
   ]
 }
 
-/** The ones the owner keeps, in the order this file declares them. */
-export function pickedMetrics(ws: Workspace, today: string): Metric[] {
-  const picks = new Set<MetricKey>((ws.metricPicks ?? DEFAULT_PICKS) as MetricKey[])
-  return metricsFor(ws, today).filter((m) => picks.has(m.key))
+/**
+ * The gate's four.
+ *
+ * Each is unmeasured until the thing it measures has happened at least once —
+ * nothing at the gate ever, nothing inspected through it, no challan, no order
+ * handed over under version control — and says what it is waiting for, the
+ * same rule as every other tile.
+ */
+function gateMetrics(
+  ws: Workspace, today: string,
+  nothing: (key: MetricKey, value: string, how: string) => Metric,
+): Metric[] {
+  const receipts = ws.receipts ?? []
+  const open = openReceipts(ws)
+  const held = qcHeld(ws).value
+  const overdue = open.filter((r) => days(r.receivedOn, today) > ws.policy.qcOverdueDays).length
+
+  // inspected through the gate, not recorded as finished before it existed
+  const gated = receipts.filter((r) => r.status === 'closed' && r.closedAt)
+    .sort((a, b) => a.receivedOn.localeCompare(b.receivedOn))
+  const inTime = gated.map((r) => days(r.receivedOn, r.closedAt!) <= ws.policy.inboundQcDays)
+  const inTimePct = gated.length ? (inTime.filter(Boolean).length / gated.length) * 100 : 0
+
+  const challans = ws.challans ?? []
+  const out = challans.filter((c) => c.status === 'out')
+  const atJw = atJobworkersValue(ws, today)
+
+  const versioned = ws.orders.some((o) => (o.revisions?.length ?? 0) > 0)
+  const unacked = unackedExposure(ws).value
+
+  return [
+    receipts.length > 0
+      ? {
+        key: 'qcHeld', label: METRIC_LABEL.qcHeld, value: money(held),
+        sub: open.length === 0 ? 'nothing waiting to be inspected'
+          : `${open.length} receipt${open.length === 1 ? '' : 's'} at the gate${
+            overdue ? ` · ${overdue} past the window` : ''}`,
+        tone: open.length === 0 ? 'good' : overdue > 0 ? 'critical' : 'warn',
+        measured: true, href: '/inbound/receiving',
+        how: 'Σ qty × last purchase rate over receipts not yet inspected (§13-1 basis)',
+        chart: open.length > 0 ? { kind: 'pips', on: overdue, of: open.length } : undefined,
+      }
+      : nothing('qcHeld', 'Nothing has arrived yet',
+        'needs goods recorded at the gate'),
+
+    gated.length > 0
+      ? {
+        key: 'inspectedOnTime', label: METRIC_LABEL.inspectedOnTime, value: pct(inTimePct),
+        sub: `of ${gated.length} inspection${gated.length === 1 ? '' : 's'} · within ${
+          ws.policy.inboundQcDays} day${ws.policy.inboundQcDays === 1 ? '' : 's'}`,
+        tone: inTimePct >= 90 ? 'good' : inTimePct >= 70 ? 'warn' : 'critical',
+        measured: true, href: '/inbound/receiving',
+        how: 'receipts closed within the inspection days your gate rules allow ÷ receipts closed',
+        chart: { kind: 'dots', dots: inTime.slice(-14) },
+      }
+      : nothing('inspectedOnTime', 'Nothing inspected yet',
+        'needs a receipt inspected and closed at the gate'),
+
+    challans.length > 0
+      ? {
+        key: 'atJobworkers', label: METRIC_LABEL.atJobworkers, value: money(atJw),
+        sub: out.length === 0 ? 'nothing out at the moment'
+          : `on ${out.length} challan${out.length === 1 ? '' : 's'} out`,
+        tone: atJw > ws.policy.jobworkerExposureCeiling ? 'warn' : 'neutral',
+        measured: true, href: '/inbound/jobwork',
+        how: 'what is still physically with each jobworker × the rate it left at — never counted as cover',
+      }
+      : nothing('atJobworkers', 'Nothing sent out',
+        'needs a challan for material sent to a jobworker'),
+
+    versioned
+      ? {
+        key: 'unacked', label: METRIC_LABEL.unacked, value: money(unacked),
+        sub: unacked === 0 ? 'every change is confirmed' : 'on changes the supplier has not confirmed',
+        tone: unacked === 0 ? 'good' : 'critical',
+        measured: true, href: '/inbound/orders',
+        how: 'Σ |what we now want − what the supplier confirmed| × last purchase rate',
+      }
+      : nothing('unacked', 'No order handed over yet',
+        'needs an order handed to its supplier, so there is a version they hold'),
+  ]
+}
+
+/** Every figure a desk offers, in its own order. */
+export function stageMetrics(ws: Workspace, today: string, stage: MetricStage = 'sourcing'): Metric[] {
+  const all = metricsFor(ws, today)
+  return STAGE_METRICS[stage].map((k) => all.find((m) => m.key === k)!).filter(Boolean)
+}
+
+/** Where a desk keeps its owner's choice. Absent is "nobody has chosen yet". */
+export const picksOf = (ws: Workspace, stage: MetricStage): MetricKey[] =>
+  ((stage === 'inbound' ? ws.inboundMetricPicks : ws.metricPicks) ?? DEFAULTS_FOR[stage]) as MetricKey[]
+
+/** The ones the owner keeps, in the order the desk shows them. */
+export function pickedMetrics(ws: Workspace, today: string, stage: MetricStage = 'sourcing'): Metric[] {
+  const picks = new Set<MetricKey>(picksOf(ws, stage))
+  return stageMetrics(ws, today, stage).filter((m) => picks.has(m.key))
 }

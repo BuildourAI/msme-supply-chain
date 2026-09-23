@@ -10,7 +10,8 @@ import { DEFAULT_POLICY } from '@/lib/domain/policy'
 import { addDays, daysBetween } from '@/lib/domain/calc'
 import * as S from '@/lib/seed/sourcing'
 import { longDate, money, qtyText, shortDate } from '@/lib/domain/format'
-import { StageGate } from '@/components/onboard/StageGate'
+import { useWorkspace } from '@/components/workspace/store'
+import { ComingNext } from '@/components/inbound/desk/ComingNext'
 
 const seed: SeedBundle = {
   today: S.TODAY_SOURCING, items: S.items, vendors: S.vendors, vendorItems: S.vendorItems,
@@ -75,6 +76,16 @@ function PageBody() {
   )
 }
 
+/**
+ * One route, two companies. The sample keeps the worked example it has always
+ * had; the owner gets their own desk, which reads their workspace and nothing
+ * else.
+ */
 export default function Page() {
-  return <StageGate later="Inbound and jobwork"><PageBody /></StageGate>
+  const { mode, ready } = useWorkspace()
+  if (!ready) return <div className="min-h-[50vh]" aria-hidden />
+  return mode === 'mine'
+    ? <ComingNext title="Open orders" icon="cart"
+        line="Every open line, the versions its supplier has been told and confirmed, and the day each lands against the day the line would stop. It lands after Receiving." />
+    : <PageBody />
 }

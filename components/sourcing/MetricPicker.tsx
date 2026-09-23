@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { useWorkspace } from '@/components/workspace/store'
 import {
-  DEFAULT_PICKS, METRIC_LABEL, METRIC_WHY, metricsFor, type MetricKey,
+  DEFAULTS_FOR, METRIC_LABEL, METRIC_WHY, picksOf, stageMetrics, type MetricKey, type MetricStage,
 } from '@/lib/workspace/metrics'
 
 /**
@@ -19,17 +19,22 @@ import {
  * choice — somebody who wants the work queue and nothing else is not somebody
  * who has failed to decide.
  */
-export function MetricPicker({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function MetricPicker({ open, onClose, stage = 'sourcing' }: {
+  open: boolean
+  onClose: () => void
+  /** each desk keeps its own choice, over its own figures */
+  stage?: MetricStage
+}) {
   const { workspace, update, today } = useWorkspace()
   const [picks, setPicks] = useState<Set<MetricKey>>(new Set())
 
   useEffect(() => {
     if (!open || !workspace) return
-    setPicks(new Set((workspace.metricPicks ?? DEFAULT_PICKS) as MetricKey[]))
-  }, [open, workspace])
+    setPicks(new Set(picksOf(workspace, stage)))
+  }, [open, workspace, stage])
 
   if (!open || !workspace) return null
-  const all = metricsFor(workspace, today)
+  const all = stageMetrics(workspace, today, stage)
 
   const toggle = (key: MetricKey) => setPicks((s) => {
     const next = new Set(s)
@@ -39,7 +44,9 @@ export function MetricPicker({ open, onClose }: { open: boolean; onClose: () => 
   })
 
   const save = () => {
-    update((w) => ({ ...w, metricPicks: [...picks] }))
+    update((w) => (stage === 'inbound'
+      ? { ...w, inboundMetricPicks: [...picks] }
+      : { ...w, metricPicks: [...picks] }))
     onClose()
   }
 
@@ -75,9 +82,9 @@ export function MetricPicker({ open, onClose }: { open: boolean; onClose: () => 
       </div>
 
       <footer className="flex items-center gap-2 border-t border-line-soft px-4 py-3">
-        <button type="button" onClick={() => setPicks(new Set(DEFAULT_PICKS))}
+        <button type="button" onClick={() => setPicks(new Set(DEFAULTS_FOR[stage]))}
           className="press rounded-lg px-2.5 py-2 text-[12.5px] text-ink-3 hover:text-ink">
-          Back to the usual six
+          Back to the usual {DEFAULTS_FOR[stage].length === 6 ? 'six' : DEFAULTS_FOR[stage].length}
         </button>
         <span className="ml-auto" />
         <button type="button" onClick={onClose}

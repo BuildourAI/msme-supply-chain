@@ -11,6 +11,9 @@
  * the first step, and a checklist that opens at zero of five reads like a bill.
  */
 import { quotedItems, unquotedItems } from './bundle'
+import { coveredItems } from './checks'
+import { jobworkers } from './jobwork'
+import type { StageId } from './reveal'
 import type { Workspace } from './types'
 
 export interface Step {
@@ -26,7 +29,10 @@ export interface Step {
   summary: (ws: Workspace) => string
 }
 
-export type StepId = 'company' | 'materials' | 'suppliers' | 'stock' | 'rules'
+export type StepId =
+  | 'company' | 'materials' | 'suppliers' | 'stock' | 'rules'
+  /* inbound's own three */
+  | 'checks' | 'jobworkers' | 'gateRules'
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
@@ -83,6 +89,59 @@ export const SOURCING_STEPS: Step[] = [
   },
 ]
 
+/**
+ * Setting up the gate, as five steps.
+ *
+ * The first two are sourcing's own step objects, not copies: a receipt is of a
+ * material and from a supplier, so a company that has set up sourcing opens
+ * this list at two of five, and one that starts here is asked for its masters
+ * first. The other three are the gate's own.
+ */
+const byId = (id: StepId) => SOURCING_STEPS.find((s) => s.id === id)!
+
+export const INBOUND_STEPS: Step[] = [
+  byId('materials'),
+  byId('suppliers'),
+  {
+    id: 'checks',
+    title: 'What to check when it arrives',
+    why: 'Two or three checks per material — a reading, a certificate, a look. A receipt cannot close until each is answered, so nothing reaches the shelf unchecked.',
+    cta: 'Write your checks',
+    done: (ws) => (ws.specChecks ?? []).length > 0,
+    summary: (ws) => `${plural((ws.specChecks ?? []).length, 'check')} on ${
+      coveredItems(ws).length} of ${plural(ws.items.length, 'material')}`,
+  },
+  {
+    id: 'jobworkers',
+    title: 'Who you send material out to',
+    why: 'Galvanisers, platers, machine shops. Material with them is still yours, and never counted as stock you can use.',
+    cta: 'Add a jobworker',
+    /*
+     * "We don't send anything out" is a real answer and ticks the step. A step
+     * that could only go green by inventing a jobworker would teach people to
+     * invent one.
+     */
+    done: (ws) => jobworkers(ws).length > 0 || ws.drafts['inbound.noJobwork'] === true,
+    summary: (ws) => {
+      const n = jobworkers(ws).length
+      return n > 0 ? plural(n, 'jobworker') : 'no material sent out'
+    },
+  },
+  {
+    id: 'gateRules',
+    title: 'The gate rules',
+    why: 'How long material may wait uninspected, when a rejection is a pattern rather than a bad batch, how long a change may go unconfirmed.',
+    cta: 'Set the gate rules',
+    done: (ws) => ws.drafts['inbound.rules.agreed'] === true,
+    summary: (ws) => `inspect within ${plural(ws.policy.inboundQcDays, 'day')} · escalate at ${
+      ws.policy.qcOverdueDays}`,
+  },
+]
+
+/** The set-up list for a stage. A stage with none of its own gets sourcing's. */
+export const stepsFor = (stage: StageId | null | undefined): Step[] =>
+  stage === 'inbound' ? INBOUND_STEPS : SOURCING_STEPS
+
 export interface Progress {
   steps: { step: Step; done: boolean }[]
   doneCount: number
@@ -104,4 +163,5 @@ export function progressOf(ws: Workspace, steps: Step[] = SOURCING_STEPS): Progr
   }
 }
 
-export const stepById = (id: StepId): Step => SOURCING_STEPS.find((s) => s.id === id)!
+export const stepById = (id: StepId): Step =>
+  [...SOURCING_STEPS, ...INBOUND_STEPS].find((s) => s.id === id)!

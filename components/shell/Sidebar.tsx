@@ -8,6 +8,7 @@ import { LockDialog, type Locked } from './LockDialog'
 import { Checklist } from '@/components/onboard/Checklist'
 import { DeskNav } from './DeskNav'
 import { useWorkspace } from '@/components/workspace/store'
+import { isBuilt, stageOf } from '@/lib/workspace/reveal'
 
 const PAINKILLERS = 'Painkillers solved'
 
@@ -177,7 +178,9 @@ export function Sidebar({ drawer, onClose }: { drawer: boolean; onClose: () => v
           {/* In the owner's own company this slot carries how far through the
               set-up they are, which is the thing worth a permanent place on
               every screen until it is finished. */}
-          {mode === 'mine' ? <Checklist compact /> : (
+          {mode === 'mine' ? (
+            <Checklist compact stage={isBuilt(stageOf(pathname)) ? stageOf(pathname)! : 'sourcing'} />
+          ) : (
             <div className="rounded-lg bg-accent-tint p-2.5">
               <p className="text-[12px] font-bold leading-tight">Suggests, never sends</p>
               <p className="mt-1 text-[10.5px] leading-snug text-ink-2">

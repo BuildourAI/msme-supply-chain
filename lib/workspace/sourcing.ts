@@ -547,6 +547,13 @@ export function removeVendor(ws: Workspace, vendorId: string): Workspace {
     orders: ws.orders.filter((o) => o.vendorId !== vendorId),
     // and what arrived from them, which measures a supplier who is no longer one
     receipts: (ws.receipts ?? []).filter((r) => r.vendorId !== vendorId),
+    /*
+     * A jobworker's challans go with them. The stock movement each one wrote
+     * stays: the material physically left, and deleting who it went to does
+     * not bring it back — the same reason a receipt's stock stays when its
+     * supplier is deleted.
+     */
+    challans: (ws.challans ?? []).filter((c) => c.vendorId !== vendorId),
     rfqs: ws.rfqs.map((r) => ({ ...r, vendorIds: r.vendorIds.filter((id) => id !== vendorId) })),
     vendorType: Object.fromEntries(
       Object.entries(ws.vendorType).filter(([id]) => id !== vendorId),
@@ -571,6 +578,9 @@ export function removeItem(ws: Workspace, itemId: string): Workspace {
       .filter((q) => q.lines.length > 0),
     orders: ws.orders.filter((o) => o.itemId !== itemId),
     receipts: (ws.receipts ?? []).filter((r) => r.itemId !== itemId),
+    // what to check when it arrives, and where it went out to be worked on
+    specChecks: (ws.specChecks ?? []).filter((c) => c.itemId !== itemId),
+    challans: (ws.challans ?? []).filter((c) => c.itemId !== itemId),
     itemGroup: Object.fromEntries(
       Object.entries(ws.itemGroup).filter(([id]) => id !== itemId),
     ),

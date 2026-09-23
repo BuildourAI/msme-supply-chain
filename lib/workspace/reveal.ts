@@ -14,7 +14,11 @@
 import type { IconName } from '@/components/ui/icons'
 import { buildRows } from '@/lib/domain/derive'
 import { bundleFor } from './bundle'
+import { uncheckedItems } from './checks'
 import { openCount } from './decisions'
+import { inboundOpenCount } from './inbound-decisions'
+import { challansOut } from './jobwork'
+import { openReceipts } from './receipts'
 import { staleRates } from './sourcing'
 import type { Workspace } from './types'
 
@@ -38,8 +42,28 @@ export const STAGE_TILES = [
 
 export type StageId = typeof STAGE_TILES[number]['id']
 
-/** Sourcing is the stage being built. The rest say so on their tile. */
-export const BUILT: StageId[] = ['sourcing']
+/**
+ * The stages an owner can work in. The rest say so on their tile.
+ *
+ * Inbound is second because it is where sourcing ends: every order in the
+ * sourcing dashboard's right-hand column finishes at this gate.
+ */
+export const BUILT: StageId[] = ['sourcing', 'inbound']
+
+export const isBuilt = (s: StageId | null): s is StageId => s !== null && BUILT.includes(s)
+
+/**
+ * Where each stage's tile leads. Sourcing opens on its suppliers because a new
+ * owner's first job there is to add one; inbound opens on its dashboard,
+ * because the gate's first question is what is on its way.
+ */
+export const STAGE_HOME: Record<StageId, string> = {
+  sourcing: '/sourcing/suppliers',
+  inbound: '/inbound/dashboard',
+  inventory: '/',
+  production: '/',
+  dispatch: '/',
+}
 
 /**
  * The sourcing desk's own rows.
@@ -109,6 +133,42 @@ export function sourcingNav(ws: Workspace, today = ''): NavRow[] {
     { label: 'Purchase orders', href: '/sourcing/orders', icon: 'cart', badge: count(open) },
   ]
 }
+
+/**
+ * The inbound desk's rows: the gate, and the three things that decide what
+ * reaches it.
+ *
+ * Five rows, not eight. Suppliers and materials stay on the sourcing rail — a
+ * jobworker is a supplier of type Jobworker, and a material is the same
+ * material whichever stage you are standing in. Every badge is a number that
+ * goes down when somebody does something.
+ */
+export function inboundNav(ws: Workspace, today = ''): NavRow[] {
+  // by NUMBER: one confirmation covers every line on the document
+  const unconfirmed = new Set(
+    ws.orders
+      .filter((o) => o.revisions && (o.ackedVersion ?? 0) < o.revisions.length)
+      .map((o) => o.no),
+  ).size
+  return [
+    {
+      label: 'Dashboard',
+      href: '/inbound/dashboard',
+      icon: 'activity',
+      badge: count(inboundOpenCount(ws, today)),
+    },
+    // what is waiting to be inspected, not how much has ever arrived
+    { label: 'Receiving', href: '/inbound/receiving', icon: 'tray', badge: count(openReceipts(ws).length) },
+    // materials nobody has written a check for yet
+    { label: 'Checks', href: '/inbound/checks', icon: 'check', badge: count(uncheckedItems(ws).length) },
+    { label: 'Open orders', href: '/inbound/orders', icon: 'cart', badge: count(unconfirmed) },
+    { label: 'Jobwork', href: '/inbound/jobwork', icon: 'factory', badge: count(challansOut(ws).length) },
+  ]
+}
+
+/** The rail for the stage somebody is standing in. */
+export const navFor = (stage: StageId, ws: Workspace, today = ''): NavRow[] =>
+  stage === 'inbound' ? inboundNav(ws, today) : sourcingNav(ws, today)
 
 const count = (n: number) => (n > 0 ? String(n) : undefined)
 

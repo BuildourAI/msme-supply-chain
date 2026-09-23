@@ -104,12 +104,25 @@ const KIND: Record<DecisionKind, IconName> = {
   unordered: 'cart',
   'no-qty': 'cart',
   unsent: 'cart',
-  'to-receive': 'tray',
   'no-reply': 'doc',
+  // the gate's: a lorry is a tray at the gate, an order a cart, a jobworker a shed
+  'to-receive': 'tray',
+  'at-gate': 'tray',
+  'qc-overdue': 'clock',
+  spike: 'alert',
+  'not-told': 'cart',
+  'awaiting-ack': 'cart',
+  churn: 'cart',
+  'lands-late': 'truck',
+  'challan-overdue': 'factory',
+  'challan-unaccounted': 'factory',
+  'over-ceiling': 'cash',
 }
 
-export function Queue({ rows, berths, onAct, showAll, onShowAll }: {
+export function Queue({ rows, berths, onAct, showAll, onShowAll, clear }: {
   rows: Decision[]
+  /** what "nothing needs you" means on this desk, said plainly */
+  clear?: string
   /** orders out with a supplier and not yet due, under their supplier */
   berths: Berth[]
   onAct: (d: Decision, act: Act) => void
@@ -128,7 +141,7 @@ export function Queue({ rows, berths, onAct, showAll, onShowAll }: {
         */}
       <Column icon="clock" title="Waiting on you" count={rows.length}
         pill={rows.length > 0 ? 'bg-surface-2 text-ink-2' : 'bg-good-soft text-good'}>
-        {rows.length === 0 ? <Clear /> : (
+        {rows.length === 0 ? <Clear line={clear} /> : (
           <div className="space-y-4">
             {byBand(rows).map((g, gi) => {
               const open = showAll.has(g.band)
@@ -328,7 +341,9 @@ function Acts({ d, onAct }: { d: Decision; onAct: (d: Decision, act: Act) => voi
  * screen is FOR, and somebody who has just cleared five decisions should be
  * told they are done rather than shown an absence.
  */
-function Clear() {
+function Clear({ line = 'Every price is decided, every order is out, and nothing is late.' }: {
+  line?: string
+}) {
   return (
     <div className="anim-pop rounded-xl border border-good/30 bg-good-soft/40 px-4 py-7 text-center">
       <span aria-hidden className="relative mx-auto mb-2.5 grid size-11 place-items-center">
@@ -342,7 +357,7 @@ function Clear() {
       </span>
       <p className="text-[14.5px] font-bold">Nothing needs you</p>
       <p className="mx-auto mt-1 max-w-[30rem] text-[12.5px] leading-relaxed text-ink-2">
-        Every price is decided, every order is out, and nothing is late.
+        {line}
       </p>
     </div>
   )

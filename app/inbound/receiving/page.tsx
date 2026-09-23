@@ -10,7 +10,8 @@ import { buildRows, type SeedBundle } from '@/lib/domain/derive'
 import { DEFAULT_POLICY } from '@/lib/domain/policy'
 import * as S from '@/lib/seed/sourcing'
 import { longDate } from '@/lib/domain/format'
-import { StageGate } from '@/components/onboard/StageGate'
+import { useWorkspace } from '@/components/workspace/store'
+import { ComingNext } from '@/components/inbound/desk/ComingNext'
 
 const seed: SeedBundle = {
   today: S.TODAY_SOURCING, items: S.items, vendors: S.vendors, vendorItems: S.vendorItems,
@@ -49,6 +50,16 @@ function PageBody() {
   )
 }
 
+/**
+ * One route, two companies. The sample keeps the worked example it has always
+ * had; the owner gets their own desk, which reads their workspace and nothing
+ * else.
+ */
 export default function Page() {
-  return <StageGate later="Inbound and jobwork"><PageBody /></StageGate>
+  const { mode, ready } = useWorkspace()
+  if (!ready) return <div className="min-h-[50vh]" aria-hidden />
+  return mode === 'mine'
+    ? <ComingNext title="Receiving" icon="tray"
+        line="Goods arriving, inspected against each material's checks, and closed into stock — with a goods receipt you can download and send. It lands next." />
+    : <PageBody />
 }

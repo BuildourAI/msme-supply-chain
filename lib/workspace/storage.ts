@@ -13,11 +13,11 @@
  * set-up screen must not be the thing that breaks because of it.
  */
 import { DEFAULT_POLICY } from '@/lib/domain/policy'
-import type { Item, Vendor } from '@/lib/domain/types'
+import type { Item, SpecCheck, Vendor } from '@/lib/domain/types'
 import { highestIssued } from './defaults'
 import { SCHEMA } from './types'
 import type {
-  RateChange,
+  Challan, RateChange,
   FieldDef, GoodsReceipt, PurchaseOrder, Quote, QuoteLine, QuoteState, Rfq, SendEntry, Session,
   TableView, Workspace, WorkspaceMode,
 } from './types'
@@ -228,6 +228,8 @@ function migrate(raw: Partial<Workspace>): Workspace {
   const orders = list<PurchaseOrder>(raw.orders)
   const docs = list<SupplierDoc>(raw.docs)
   const receipts = list<GoodsReceipt>(raw.receipts)
+  const specChecks = list<SpecCheck>(raw.specChecks)
+  const challans = list<Challan>(raw.challans)
 
   /*
    * The id counter is seeded from what is actually there the first time a blob
@@ -249,6 +251,8 @@ function migrate(raw: Partial<Workspace>): Workspace {
   seed('SD', docs)
   seed('GR', receipts)
   seed('RC', list<RateChange>(raw.rateLog))
+  seed('CK', specChecks)
+  seed('JW', challans)
 
   const view = (v: Partial<TableView> | undefined): TableView => ({
     order: list<string>(v?.order),
@@ -300,6 +304,14 @@ function migrate(raw: Partial<Workspace>): Workspace {
      */
     receipts,
     /*
+     * Both empty on anything saved before the inbound stage existed, and
+     * nothing is lost. The receipts above need nothing either: one saved
+     * without a status reads as closed, which is what it was — recorded as a
+     * finished fact, before there was a gate for it to wait at.
+     */
+    specChecks,
+    challans,
+    /*
      * Empty on anything saved before rates were logged, which is honest: a
      * price that moved before there was a log is a move nobody recorded, and
      * inventing a history from the current rate would put a straight line
@@ -316,6 +328,9 @@ function migrate(raw: Partial<Workspace>): Workspace {
       // neither, which is nothing lost: there was nothing arranged to lose
       quote: view(views.quote),
       order: view(views.order),
+      check: view(views.check),
+      receipt: view(views.receipt),
+      challan: view(views.challan),
     },
     vendorContact: map(raw.vendorContact),
     /*
@@ -346,6 +361,7 @@ function migrate(raw: Partial<Workspace>): Workspace {
      */
     metricPicks: raw.metricPicks,
     reviewedFlips: map<string>(raw.reviewedFlips),
+    inboundMetricPicks: raw.inboundMetricPicks,
   }
 }
 

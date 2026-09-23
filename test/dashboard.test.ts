@@ -14,6 +14,7 @@ import {
 } from '@/lib/workspace/metrics'
 import { byBand, decisionsFor, openCount } from '@/lib/workspace/decisions'
 import { arrivesIn, flightCount, inFlight } from '@/lib/workspace/flight'
+import { inboundDecisionsFor } from '@/lib/workspace/inbound-decisions'
 import { acceptLine, draftOrderFrom, logRate } from '@/lib/workspace/sourcing'
 import { recordReceipt } from '@/lib/workspace/receipts'
 import type { Workspace } from '@/lib/workspace/types'
@@ -546,10 +547,13 @@ describe('what is on its way', () => {
     expect(decisionsFor(ws, TODAY).map((d) => d.kind)).toContain('late')
   })
 
-  it('leaves an order due today to the queue', () => {
+  it('leaves an order due today to the gate\'s queue, not the sourcing one', () => {
     const ws = at(TODAY)
     expect(inFlight(ws, TODAY)).toEqual([])
-    expect(decisionsFor(ws, TODAY).map((d) => d.kind)).toContain('to-receive')
+    // saying what came off the lorry is the gate's job; asking for it on both
+    // desks would count one delivery twice
+    expect(decisionsFor(ws, TODAY).map((d) => d.kind)).not.toContain('to-receive')
+    expect(inboundDecisionsFor(ws, TODAY).map((d) => d.kind)).toContain('to-receive')
   })
 
   it('and takes the one still coming, which the queue never mentions', () => {

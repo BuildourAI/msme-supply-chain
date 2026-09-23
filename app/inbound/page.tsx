@@ -97,5 +97,5 @@ function PageBody() {
 }
 
 export default function Page() {
-  return <StageGate later="Inbound and jobwork"><PageBody /></StageGate>
+  return <StageGate sample="the Inbound dashboard" shows="what the whole inbound stage does, system by system"><PageBody /></StageGate>
 }

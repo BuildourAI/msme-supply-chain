@@ -31,6 +31,10 @@ const ICON: Record<MetricKey, IconName> = {
   concentration: 'cash',
   priceMoves: 'cash',
   outstanding: 'cart',
+  qcHeld: 'tray',
+  inspectedOnTime: 'clock',
+  atJobworkers: 'factory',
+  unacked: 'cart',
 }
 
 /*

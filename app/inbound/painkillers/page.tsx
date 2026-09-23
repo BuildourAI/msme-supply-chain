@@ -4,5 +4,5 @@ import { StageGate } from '@/components/onboard/StageGate'
 function PageBody() { return <Painkillers stage={stageById('inbound')} /> }
 
 export default function Page() {
-  return <StageGate later="Inbound and jobwork"><PageBody /></StageGate>
+  return <StageGate sample="the Inbound dashboard" shows="the four inbound pains and what removes each"><PageBody /></StageGate>
 }

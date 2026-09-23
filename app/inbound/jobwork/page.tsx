@@ -6,7 +6,8 @@ import { JobworkRegister } from '@/components/inbound/Jobwork'
 import { useInbound } from '@/components/inbound/store'
 import { Note } from '@/components/ui/Note'
 import { lakh, longDate } from '@/lib/domain/format'
-import { StageGate } from '@/components/onboard/StageGate'
+import { useWorkspace } from '@/components/workspace/store'
+import { ComingNext } from '@/components/inbound/desk/ComingNext'
 
 function PageBody() {
   const { challanRows, jobworkTotal, today } = useInbound()
@@ -35,6 +36,16 @@ function PageBody() {
   )
 }
 
+/**
+ * One route, two companies. The sample keeps the worked example it has always
+ * had; the owner gets their own desk, which reads their workspace and nothing
+ * else.
+ */
 export default function Page() {
-  return <StageGate later="Inbound and jobwork"><PageBody /></StageGate>
+  const { mode, ready } = useWorkspace()
+  if (!ready) return <div className="min-h-[50vh]" aria-hidden />
+  return mode === 'mine'
+    ? <ComingNext title="Jobwork" icon="factory"
+        line="Challans out to jobworkers, returns back through the same gate, and a ledger of every movement. It lands after Open orders." />
+    : <PageBody />
 }

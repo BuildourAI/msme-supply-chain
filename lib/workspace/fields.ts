@@ -110,6 +110,54 @@ export const BUILTIN: Record<SheetEntity, BuiltinColumn[]> = {
     { key: 'ordered', label: 'Ordered', kind: 'date', aliases: ['ordered on', 'order date', 'po date'] },
     { key: 'expected', label: 'Expected', kind: 'date', aliases: ['expected on', 'due', 'delivery date', 'promised'] },
   ],
+  /*
+   * A check names the material it is for and says what it checks, so both are
+   * identity columns. Most factories already keep this as a sheet — the
+   * incoming-inspection list pinned by the gate — which is why it is the one
+   * inbound list that imports.
+   */
+  check: [
+    { key: 'item', label: 'Material', kind: 'text', identity: true, aliases: ['material', 'item', 'part', 'description'] },
+    { key: 'label', label: 'Check', kind: 'text', identity: true, aliases: ['check', 'parameter', 'characteristic', 'inspection', 'test'] },
+    { key: 'kind', label: 'How', kind: 'choice', aliases: ['type', 'check type', 'method'] },
+    { key: 'min', label: 'From', kind: 'number', aliases: ['min', 'minimum', 'lower limit', 'lsl', 'low'] },
+    { key: 'max', label: 'To', kind: 'number', aliases: ['max', 'maximum', 'upper limit', 'usl', 'high'] },
+    { key: 'unit', label: 'Unit', kind: 'text', aliases: ['uom', 'units', 'measured in'] },
+    { key: 'bucket', label: 'If it fails', kind: 'choice', aliases: ['on failure', 'fail bucket', 'disposition', 'goes to'] },
+    { key: 'reason', label: 'Reason', kind: 'text', aliases: ['fail reason', 'why', 'rejection reason'] },
+    { key: 'mandatory', label: 'Must be marked', kind: 'yesno', aliases: ['mandatory', 'required', 'compulsory', 'must'] },
+  ],
+  /*
+   * Receipts and challans are records of things that happened at the gate and
+   * on the road, so none of their columns is importable — a spreadsheet row
+   * saying forty kilos arrived and passed would put stock on the shelf that
+   * nobody inspected. They carry columns for arranging and exporting only.
+   */
+  receipt: [
+    { key: 'id', label: 'Receipt', identity: true, derived: true },
+    { key: 'state', label: 'Status', derived: true },
+    { key: 'vendor', label: 'From', derived: true },
+    { key: 'item', label: 'Material', derived: true },
+    { key: 'against', label: 'Against', derived: true },
+    { key: 'qty', label: 'Arrived', derived: true },
+    { key: 'accepted', label: 'Accepted', derived: true },
+    { key: 'rejected', label: 'Rejected', derived: true },
+    { key: 'failed', label: 'Checks failed', derived: true },
+    { key: 'received', label: 'Arrived on', derived: true },
+    { key: 'inspector', label: 'Inspected by', derived: true },
+  ],
+  challan: [
+    { key: 'no', label: 'Challan', identity: true, derived: true },
+    { key: 'state', label: 'Status', derived: true },
+    { key: 'vendor', label: 'Jobworker', derived: true },
+    { key: 'item', label: 'Material', derived: true },
+    { key: 'process', label: 'Process', derived: true },
+    { key: 'sent', label: 'Sent', derived: true },
+    { key: 'sentOn', label: 'Sent on', derived: true },
+    { key: 'dueBack', label: 'Due back', derived: true },
+    { key: 'back', label: 'Back', derived: true },
+    { key: 'out', label: 'Still there', derived: true },
+  ],
 }
 
 export const EMPTY_VIEW: TableView = { order: [], hidden: [], labels: {} }
@@ -120,6 +168,9 @@ export const EMPTY_VIEWS: Record<SheetEntity, TableView> = {
   rfq: EMPTY_VIEW,
   quote: EMPTY_VIEW,
   order: EMPTY_VIEW,
+  check: EMPTY_VIEW,
+  receipt: EMPTY_VIEW,
+  challan: EMPTY_VIEW,
 }
 
 /**
@@ -391,6 +442,9 @@ export function pruneCustom(ws: Workspace): Workspace {
     ...ws.quotes.map((q) => q.id),
     ...ws.quotes.flatMap((q) => q.lines.map((l) => l.id)),
     ...ws.orders.map((o) => o.id),
+    ...(ws.specChecks ?? []).map((c) => c.id),
+    ...(ws.receipts ?? []).map((r) => r.id),
+    ...(ws.challans ?? []).map((c) => c.id),
   ])
   const custom: Record<string, Record<string, string>> = {}
   for (const [id, row] of Object.entries(ws.custom ?? {})) {

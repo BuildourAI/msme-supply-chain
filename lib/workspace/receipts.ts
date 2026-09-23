@@ -23,6 +23,15 @@ import { issueId } from './defaults'
 import { rejectionCost } from './landed'
 import type { GoodsReceipt, PurchaseOrder, Workspace } from './types'
 
+/**
+ * Waiting at the gate: arrived, not yet inspected. Absent status reads as
+ * closed — a receipt recorded before there was a gate was a finished fact.
+ */
+export const isOpen = (r: GoodsReceipt): boolean => r.status === 'open'
+export const openReceipts = (ws: Workspace): GoodsReceipt[] => (ws.receipts ?? []).filter(isOpen)
+export const closedReceipts = (ws: Workspace): GoodsReceipt[] =>
+  (ws.receipts ?? []).filter((r) => !isOpen(r))
+
 /** Every receipt against one supplier-material pairing, newest last. */
 export const receiptsFor = (ws: Workspace, vendorId: string, itemId: string): GoodsReceipt[] =>
   (ws.receipts ?? [])

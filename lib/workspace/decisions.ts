@@ -53,14 +53,25 @@ export type Act =
   | 'reject'        // turn it down
   | 'draft'         // make one order from everything accepted on that quotation
   | 'paper'         // make the order's document
-  | 'receive'       // record what arrived
   | 'keep'          // looked at the cheaper supplier and staying put
   | 'close'         // close a request nobody answered
+  /* the gate's — see `inbound-decisions.ts` */
+  | 'arrive'        // goods are at the gate: say what came
+  | 'inspect'       // work down the checks and close the receipt
+  | 'notice'        // send the supplier the changed order
+  | 'ack'           // they confirmed the change
+  | 'chase'         // text for a person to send a supplier or jobworker
+  | 'return'        // material came back from a jobworker
+  | 'close-challan' // settle a challan, and write off what never came back
 
 export type DecisionKind =
   | 'at-risk' | 'late' | 'unsourced'
   | 'flip' | 'stale'
-  | 'unfiled' | 'undecided' | 'unordered' | 'no-qty' | 'unsent' | 'to-receive' | 'no-reply'
+  | 'unfiled' | 'undecided' | 'unordered' | 'no-qty' | 'unsent' | 'no-reply'
+  /* the gate's */
+  | 'to-receive' | 'at-gate' | 'qc-overdue' | 'spike'
+  | 'not-told' | 'awaiting-ack' | 'churn' | 'lands-late'
+  | 'challan-overdue' | 'challan-unaccounted' | 'over-ceiling'
 
 export interface Decision {
   /** stable across renders, so a list key is not an index */
@@ -87,12 +98,21 @@ export interface Decision {
     orderNo?: string
     docId?: string
     rfqId?: string
+    receiptId?: string
+    challanId?: string
+    orderId?: string
   }
   /** within a band, bigger first */
   weight: number
 }
 
-const BAND_ORDER: Band[] = ['stops', 'costs', 'unfinished']
+export const BAND_ORDER: Band[] = ['stops', 'costs', 'unfinished']
+
+/** Band first, then the worst within it — the one order every queue is read in. */
+export const sortDecisions = (list: Decision[]): Decision[] =>
+  [...list].sort(
+    (a, b) => BAND_ORDER.indexOf(a.band) - BAND_ORDER.indexOf(b.band) || b.weight - a.weight,
+  )
 
 /**
  * Every open decision, worst first.
@@ -104,14 +124,11 @@ const BAND_ORDER: Band[] = ['stops', 'costs', 'unfinished']
 export function decisionsFor(
   ws: Workspace, today: string, rows: DerivedRow[] = [],
 ): Decision[] {
-  const out: Decision[] = [
+  return sortDecisions([
     ...stops(ws, today, rows),
     ...costs(ws, today),
     ...unfinished(ws, today),
-  ]
-  return out.sort(
-    (a, b) => BAND_ORDER.indexOf(a.band) - BAND_ORDER.indexOf(b.band) || b.weight - a.weight,
-  )
+  ])
 }
 
 /** How many things are waiting, for the badge that has to go down. */
@@ -361,24 +378,11 @@ function unfinished(ws: Workspace, today: string): Decision[] {
     }
 
     /*
-     * Out with a supplier and due. Not late — that is the band above — but
-     * near enough that somebody should be looking out for the lorry.
+     * An order due at the gate is not here. Recording what arrived is the
+     * gate's job, on the inbound desk, and asking for it on both screens would
+     * count one lorry twice. What stays here is `late` above: chasing a
+     * supplier is a sourcing act, recording their delivery is not.
      */
-    const due = g.state === 'confirmed' || g.state === 'shipped'
-    if (due && g.expectedOn <= today) {
-      out.push({
-        id: `receive:${g.no}`,
-        band: 'unfinished',
-        kind: 'to-receive',
-        title: `${g.no} · ${g.vendor?.name ?? 'Unknown supplier'}`,
-        detail: 'due — record what arrived',
-        act: 'receive',
-        actLabel: 'Record what arrived',
-        href: '/sourcing/orders',
-        refs: { orderNo: g.no, vendorId: g.vendor?.id },
-        weight: 75,
-      })
-    }
   }
 
   /* A request sent out that nobody answered. */

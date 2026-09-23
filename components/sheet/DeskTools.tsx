@@ -6,7 +6,7 @@ import { ColumnsDialog } from './ColumnsDialog'
 import { ImportDialog } from './ImportDialog'
 import { Dialog } from '@/components/ui/Dialog'
 import { downloadCsv, toCsv } from '@/lib/sheet/csv'
-import { undoImport } from '@/lib/sheet/import'
+import { importable, undoImport } from '@/lib/sheet/import'
 import { shortDate } from '@/lib/domain/format'
 import type { SheetEntity } from '@/lib/workspace/types'
 
@@ -65,7 +65,7 @@ export function DeskTools({ entity, noun, title, rows, onUpload }: {
         */}
       {onUpload && <Tool icon="doc" label="Upload document" onClick={onUpload} />}
       <Tool icon="columns" label="Columns" onClick={() => setColumns(true)} />
-      <Tool icon="upload" label="Import" onClick={() => setImporting(true)} />
+      {importable(entity) && <Tool icon="upload" label="Import" onClick={() => setImporting(true)} />}
       {/*
         * Export is offered only once there is something to write out. An empty
         * file is not a useful answer to "where is my data", and the button

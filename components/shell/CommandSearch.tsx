@@ -5,7 +5,7 @@ import { STAGES } from '@/lib/seed/stages'
 import { Dialog } from '@/components/ui/Dialog'
 import { Icon } from '@/components/ui/icons'
 import { useWorkspace } from '@/components/workspace/store'
-import { sourcingNav } from '@/lib/workspace/reveal'
+import { BUILT, navFor, STAGE_TILES } from '@/lib/workspace/reveal'
 
 interface Dest { label: string; href: string; group: string; note?: string }
 
@@ -44,9 +44,11 @@ export function CommandSearch() {
     if (mode !== 'mine' || !workspace) return DESTS
     return [
       { label: 'All stages', href: '/', group: 'Overview' },
-      ...sourcingNav(workspace)
+      ...BUILT.flatMap((stage) => navFor(stage, workspace)
         .filter((r) => !r.later)
-        .map((r) => ({ label: r.label, href: r.href, group: 'Sourcing' })),
+        .map((r) => ({
+          label: r.label, href: r.href, group: STAGE_TILES.find((t) => t.id === stage)!.label,
+        }))),
     ]
   }, [mode, workspace])
 

@@ -23,7 +23,10 @@ import { addField, BUILTIN, setValue } from '@/lib/workspace/fields'
 import { nextNo } from '@/lib/workspace/sourcing'
 import { forgetAlias } from '@/lib/intake/alias'
 import { toIsoDate, toYesNo } from './match'
-import type { Item, StockLot, Vendor } from '@/lib/domain/types'
+import type { Item, SpecCheck, StockLot, Vendor } from '@/lib/domain/types'
+import {
+  addCheck, checkProblem, checksFor, readBucket, readCheckKind, updateCheck, type CheckInput,
+} from '@/lib/workspace/checks'
 import type {
   FieldDef, FieldKind, ImportUndo, OrderState, PurchaseOrder, QuoteLine, Rfq, SheetEntity,
   TableView, Workspace,
@@ -101,10 +104,51 @@ export interface RowPlan {
 const IDENTITY: Record<SheetEntity, string> = {
   supplier: 'name', material: 'name', rfq: 'item',
   quote: 'supplier', order: 'vendor',
+  check: 'item',
+  // never imported — see `importable` — but every list names its identity
+  receipt: 'id', challan: 'no',
 }
 
 /** The second record a row has to resolve, for the lists that name two. */
 const SECOND: Partial<Record<SheetEntity, string>> = { quote: 'item', order: 'item' }
+
+/**
+ * A check, as a sheet row describes it.
+ *
+ * Read the same way at plan time, where it is refused if the form would refuse
+ * it, and at apply time, where it is written — so the preview never promises a
+ * row the apply then quietly changes.
+ */
+function checkFromRow(itemId: string, get: (target: string) => string): CheckInput {
+  const n = (v: string) => (v === '' ? undefined : parseNumber(v) ?? undefined)
+  const min = n(get('min'))
+  const max = n(get('max'))
+  return {
+    itemId,
+    label: get('label'),
+    // no kind given: a band means a reading, anything else is somebody looking
+    kind: readCheckKind(get('kind')) ?? (min != null || max != null ? 'measure' : 'visual'),
+    min,
+    max,
+    unit: get('unit') || undefined,
+    failBucket: readBucket(get('bucket')) ?? 'qc_hold',
+    failReason: get('reason'),
+    // a check is one that must be marked unless the sheet says otherwise
+    mandatory: toYesNo(get('mandatory')) !== 'No',
+  }
+}
+
+/**
+ * The lists a sheet can fill.
+ *
+ * A receipt and a challan are records of things that happened — material at
+ * the gate, material on a lorry — and a spreadsheet row claiming either would
+ * put stock on the shelf that nobody inspected, or take it off without a
+ * challan anybody signed. They have columns to arrange and export, never to
+ * import into.
+ */
+export const importable = (entity: SheetEntity): boolean =>
+  entity !== 'receipt' && entity !== 'challan'
 
 /**
  * Whether a value fits the column it was matched to.
@@ -177,6 +221,40 @@ export function planImport(
       const field = ws.fields.find((f) => f.id === m.target)
       const why = complain(entity, m.target!, raw[String(m.column)] ?? '', field)
       if (why) return plan('skip', { reason: why })
+    }
+
+    if (!importable(entity)) {
+      return plan('skip', { reason: 'These are recorded as they happen, not imported' })
+    }
+
+    if (entity === 'check') {
+      /*
+       * A check is for a material that already exists, like a request is — a
+       * sheet row must not invent the thing it describes a test for. The label
+       * is the natural key within that material, so a second import of the
+       * same inspection sheet updates rather than doubling every check.
+       */
+      const item = findItemByName(ws, name) ?? findItemByCode(ws, name)
+      if (!item) return plan('skip', { reason: `No material called “${name}”` })
+      const label = raw[keyOf('label')] ?? ''
+      if (label === '') return plan('skip', { reason: 'No check named in this row' })
+      const kindWord = raw[keyOf('kind')] ?? ''
+      if (kindWord && !readCheckKind(kindWord)) {
+        return plan('skip', { reason: `“${kindWord}” is not a reading, a document, a look or a count` })
+      }
+      const bucketWord = raw[keyOf('bucket')] ?? ''
+      if (bucketWord && !readBucket(bucketWord)) {
+        return plan('skip', { reason: `“${bucketWord}” is not held, cannot be used, past its date or usable` })
+      }
+      const existing = checksFor(ws, item.id)
+        .find((c) => c.label.trim().toLowerCase() === label.trim().toLowerCase())
+      // the form's own refusals, so a sheet cannot write what a person could not
+      const why = checkProblem(ws, checkFromRow(item.id, (t) => raw[keyOf(t)] ?? ''), existing?.id)
+      if (why) return plan('skip', { reason: why })
+      if (!existing) return plan('new', { links: { vendorId: '', itemId: item.id } })
+      if (policy === 'skip') return plan('skip', { reason: `${item.name} already has “${label}”` })
+      if (policy === 'add') return plan('skip', { reason: `${item.name} already has “${label}” — a check is named once per material` })
+      return plan('update', { matchId: existing.id, links: { vendorId: '', itemId: item.id } })
     }
 
     if (entity === 'rfq') {
@@ -452,7 +530,22 @@ export function applyImport(
       }
       w = { ...w, orders: [...w.orders, order] }
       recordId = id
-    } else {
+    } else if (entity === 'check') {
+      // written through the form's own tidying, so an imported check comes out
+      // the same shape as a typed one — a reason always, a band only on a reading
+      const input = checkFromRow(plan.links!.itemId, (t) => (values[t] ?? '').trim())
+      if (plan.matchId) {
+        const before = (w.specChecks ?? []).find((c) => c.id === plan.matchId)
+        updated.push({ id: plan.matchId, before: { ...before } as Record<string, unknown> })
+        w = updateCheck(w, plan.matchId, input)
+        recordId = plan.matchId
+      } else {
+        const [next, id] = addCheck(w, input)
+        w = next
+        created.push(id)
+        recordId = id
+      }
+    } else if (entity === 'rfq') {
       // a request, against a material that planImport already resolved
       const [next, id] = issueId(w, 'RF')
       w = next
@@ -469,6 +562,14 @@ export function applyImport(
       }
       w = { ...w, rfqs: [...w.rfqs, rfq] }
       recordId = id
+    } else {
+      /*
+       * This used to be a bare `else` that built a request, so any list added
+       * without its own branch imported as requests. Refusing is the only safe
+       * default — `planImport` already skips these rows, so reaching here is a
+       * bug, and a loud one is better than a wrong record.
+       */
+      throw new Error(`Nothing imports into ${entity}`)
     }
 
     // finally the owner's own columns, canonicalised so one column cannot end
@@ -550,6 +651,8 @@ export function undoImport(ws: Workspace): Workspace {
       .filter((q) => q.lines.length > 0),
     orders: w.orders.filter((o) => !gone.has(o.id)
       && !gone.has(o.vendorId) && !gone.has(o.itemId)),
+    specChecks: (w.specChecks ?? []).filter((c) => !gone.has(c.id) && !gone.has(c.itemId)),
+    challans: (w.challans ?? []).filter((c) => !gone.has(c.vendorId) && !gone.has(c.itemId)),
   }
 
   for (const { id, before } of undo.updated) {
@@ -557,6 +660,11 @@ export function undoImport(ws: Workspace): Workspace {
       w = { ...w, vendors: w.vendors.map((v) => (v.id === id ? (before as unknown as Vendor) : v)) }
     } else if (undo.entity === 'material') {
       w = { ...w, items: w.items.map((i) => (i.id === id ? (before as unknown as Item) : i)) }
+    } else if (undo.entity === 'check') {
+      w = {
+        ...w,
+        specChecks: (w.specChecks ?? []).map((c) => (c.id === id ? (before as unknown as SpecCheck) : c)),
+      }
     }
   }
 

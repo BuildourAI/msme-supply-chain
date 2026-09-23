@@ -15,7 +15,9 @@
  * company's vocabulary, not a property of the material itself.
  */
 import type { Policy } from '@/lib/domain/policy'
-import type { Item, StockLot, Uom, Vendor, VendorItem } from '@/lib/domain/types'
+import type {
+  CheckResult, Item, PoRevision, SpecCheck, StockLot, Uom, Vendor, VendorItem,
+} from '@/lib/domain/types'
 import type { SupplierDoc, VendorAlias } from '@/lib/intake/types'
 
 export type PersonRole = 'owner' | 'manager' | 'stores' | 'buyer'
@@ -202,6 +204,39 @@ export interface PurchaseOrder {
    * again after accepting two more prices would re-order the first three.
    */
   quoteLineId?: string
+  /**
+   * Every version of the line the supplier has been, or might have been, told.
+   *
+   * Absent until the order is handed over: a draft is on your desk, and an
+   * edit to something nobody else has seen is not a change. The first hand-over
+   * writes version 1, and from then on `qty` and `expectedOn` above are OUR
+   * truth — what we now want — while the supplier's truth is whichever version
+   * they confirmed. The two differ exactly when a change has not landed, which
+   * is the whole of INB-02.
+   *
+   * The domain's own `PoRevision`, not a copy of it, so the sample's order
+   * change arithmetic runs on this unchanged.
+   */
+  revisions?: PoRevision[]
+  /** the highest version the supplier has been sent */
+  notifiedVersion?: number
+  /**
+   * The highest version they confirmed back. The only quantity cover may use:
+   * an internal change does not improve anybody's stock position until the
+   * supplier has agreed to make it.
+   */
+  ackedVersion?: number
+  notifiedOn?: string
+  ackedOn?: string
+  /** what they confirmed with, in words — "WhatsApp from Rakesh, 14:10" */
+  ackRef?: string
+  /**
+   * A picture of the confirmation, when there is one — a screenshot, a photo of
+   * a signed copy. An id into the files kept on this device, never the bytes:
+   * the workspace is pushed whole on a timer, and an image in it would make
+   * every save carry it.
+   */
+  ackImageId?: string
 }
 
 /**
@@ -217,10 +252,17 @@ export interface PurchaseOrder {
  * other, because a delivery can be short: 100 ordered, 96 arrived, 4 of those
  * rejected. Three figures, three different things to know.
  */
+export type ReceiptStatus = 'open' | 'closed'
+
 export interface GoodsReceipt {
   id: string
-  /** the order line it came against */
-  orderId: string
+  /**
+   * The order line it came against — absent for a jobwork return, which came
+   * back against a challan, not an order.
+   */
+  orderId?: string
+  /** the challan it came back against, when it is a jobwork return */
+  challanId?: string
   vendorId: string
   itemId: string
   /** what turned up */
@@ -251,6 +293,75 @@ export interface GoodsReceipt {
    */
   expectedOn?: string
   receivedOn: string
+  /**
+   * Open while it waits at the gate, closed once somebody has inspected it.
+   *
+   * Nothing becomes usable stock until it is closed — no lot is written and the
+   * order does not move — because a lorry at the gate is not material you can
+   * issue. Absent reads as closed: every receipt recorded before the gate
+   * existed was recorded as a finished fact, and that is what it stays.
+   */
+  status?: ReceiptStatus
+  /** each check on the material's spec, marked — the domain's own shape */
+  results?: CheckResult[]
+  failedCheckIds?: string[]
+  /**
+   * Why a failed check let everything through. Override, never block: a check
+   * can fail with nothing rejected, but only against a reason in writing.
+   */
+  deviationReason?: string
+  /** who inspected it — the signed-in name, for the trail */
+  inspector?: string
+  closedAt?: string
+  /** the material had no checks written, so it closed unchecked and says so */
+  noSpec?: boolean
+  /** the version of the order the supplier had confirmed when it arrived */
+  againstVersion?: number
+  /**
+   * What the material was valued at before this receipt moved it (§13-1 values
+   * stock at the last purchase price). Kept so removing the receipt can put the
+   * valuation back rather than leave it on a price nobody paid.
+   */
+  priceBefore?: number
+}
+
+/**
+ * Material sent out to a jobworker, and everything that happened to it since.
+ *
+ * Deliberately no `returned` figure: what came back is derived from the
+ * receipts that carry this challan's id, so a return cannot be counted without
+ * passing through the same gate as a purchase. The sample company's rule,
+ * kept.
+ */
+export interface Challan {
+  id: string
+  /** what it is called on the phone — JW-1, JW-2 */
+  no: string
+  /** the jobworker, who is a supplier of type Jobworker */
+  vendorId: string
+  itemId: string
+  qtySent: number
+  sentOn: string
+  /** the day they promised it back — the latest of any extensions below */
+  dueBack: string
+  /**
+   * What should come back per unit sent. Below 1 for cutting or machining,
+   * where the difference is allowed process loss; above 1 for galvanising,
+   * which adds weight.
+   */
+  expectedYield: number
+  /** ₹ per unit when it left — last purchase price, ex-freight (§13-1) */
+  rate: number
+  /** what they are doing to it */
+  process?: string
+  note?: string
+  status: 'out' | 'closed'
+  closedOn?: string
+  closeReason?: string
+  /** what was still unaccounted for when it closed — the write-off */
+  writtenOff?: number
+  /** every time the promised date moved, kept rather than written over */
+  extensions?: { from: string; to: string; on: string; reason: string }[]
 }
 
 /* --------------------------------------------- fields the owner invents -- */
@@ -278,7 +389,10 @@ export type FieldKind = 'text' | 'number' | 'date' | 'choice' | 'yesno'
  * code, a brand or a pack size, and a list that cannot hold those is a list
  * with a spreadsheet open beside it.
  */
-export type SheetEntity = 'supplier' | 'material' | 'rfq' | 'quote' | 'order'
+export type SheetEntity =
+  | 'supplier' | 'material' | 'rfq' | 'quote' | 'order'
+  /** the inbound desk's three lists */
+  | 'check' | 'receipt' | 'challan'
 
 export interface FieldDef {
   id: string
@@ -345,8 +459,9 @@ export interface VendorContact {
  * requests by `migrate`, which is what they were.
  */
 export interface SendEntry {
-  kind: 'rfq' | 'po'
-  /** the request's id, or the order NUMBER — several lines are one document */
+  kind: 'rfq' | 'po' | 'grn'
+  /** the request's id, the order NUMBER — several lines are one document —
+   *  or the receipt's id */
   id: string
   vendorId: string
   via: 'whatsapp' | 'email' | 'share' | 'download' | 'print'
@@ -437,6 +552,14 @@ export interface Workspace {
   orders: PurchaseOrder[]
   /** and what actually turned up, which is the only thing that measures anybody */
   receipts: GoodsReceipt[]
+  /**
+   * What to check when each material arrives. The domain's own `SpecCheck`,
+   * keyed to a material by `itemId`, so the sample's inspection arithmetic —
+   * whether an inspection is complete, which checks failed — runs on it as is.
+   */
+  specChecks: SpecCheck[]
+  /** material out at jobworkers, and what came of it */
+  challans: Challan[]
   /** every time a rate moved, so "has it gone up?" has an answer */
   rateLog: RateChange[]
   /** the columns the owner invented, and what each record holds in them */
@@ -497,6 +620,13 @@ export interface Workspace {
    * supplier winning — and not merely because a week passed.
    */
   reviewedFlips?: Record<string, string>
+  /**
+   * The inbound dashboard's figures, chosen separately from sourcing's. One
+   * list for both would have every existing owner's sourcing choice decide
+   * what the gate shows — and absent here means the same as there: nobody
+   * has chosen yet.
+   */
+  inboundMetricPicks?: string[]
 }
 
 /**
@@ -508,11 +638,15 @@ export interface Workspace {
  * material, and `migrate` gathers the old flat ones back up by the document
  * they came off.
  *
+ * 6 turns the inbound stage on: checks per material, receipts that wait open
+ * at the gate until inspected, the versions of an order the supplier has been
+ * told and confirmed, and material out at jobworkers.
+ *
  * Nothing reads this number yet — it is written and kept — so what the bump
- * documents is the direction it cannot go: a build from before 5 reading a
- * workspace saved by this one finds quotes it cannot parse at all.
+ * documents is the direction it cannot go: a build from before 6 reading a
+ * workspace saved by this one would treat an uninspected receipt as stock.
  */
-export const SCHEMA = 5
+export const SCHEMA = 6
 
 /** Which company the screens are reading. The sample is never written to. */
 export type WorkspaceMode = 'sample' | 'mine'

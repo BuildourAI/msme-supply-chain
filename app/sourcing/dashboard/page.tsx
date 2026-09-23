@@ -6,7 +6,6 @@ import { Queue } from '@/components/sourcing/Queue'
 import { Tiles } from '@/components/sourcing/Tiles'
 import { MetricPicker } from '@/components/sourcing/MetricPicker'
 import { PoDocument } from '@/components/sourcing/PoDocument'
-import { ReceiveForm } from '@/components/sourcing/ReceiveForm'
 import { useWorkspace } from '@/components/workspace/store'
 import { buildRows } from '@/lib/domain/derive'
 import { bundleFor } from '@/lib/workspace/bundle'
@@ -14,7 +13,6 @@ import { decisionsFor, type Act, type Band, type Decision } from '@/lib/workspac
 import { inFlight } from '@/lib/workspace/flight'
 import { flipSignature, pickedMetrics } from '@/lib/workspace/metrics'
 import { acceptLine, draftOrderFrom, rejectLine, syncRfqStates } from '@/lib/workspace/sourcing'
-import type { PurchaseOrder } from '@/lib/workspace/types'
 
 /**
  * Where the day starts.
@@ -50,7 +48,6 @@ function Dashboard() {
   const { workspace, update, today } = useWorkspace()
   const [picking, setPicking] = useState(false)
   const [papering, setPapering] = useState<string | null>(null)
-  const [receiving, setReceiving] = useState<PurchaseOrder | null>(null)
   const [opened, setOpened] = useState<Set<Band>>(new Set())
 
   /*
@@ -92,14 +89,6 @@ function Dashboard() {
     }
     if (kind === 'paper' && orderNo) {
       setPapering(orderNo)
-      return
-    }
-    if (kind === 'receive' && orderNo) {
-      // the document is the order's, but a receipt is a line's — so the first
-      // line still outstanding is the one the form opens on
-      const line = ws.orders.find((o) => o.no === orderNo && o.state !== 'delivered'
-        && o.state !== 'cancelled')
-      if (line) setReceiving(line)
       return
     }
     if (kind === 'keep' && itemId) {
@@ -161,8 +150,6 @@ function Dashboard() {
 
       <MetricPicker open={picking} onClose={() => setPicking(false)} />
       <PoDocument open={papering !== null} no={papering} onClose={() => setPapering(null)} />
-      <ReceiveForm open={receiving !== null} order={receiving}
-        onClose={() => setReceiving(null)} />
     </div>
   )
 }

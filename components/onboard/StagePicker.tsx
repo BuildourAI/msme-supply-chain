@@ -2,12 +2,12 @@
 import Link from 'next/link'
 import { Icon } from '@/components/ui/icons'
 import { useWorkspace } from '@/components/workspace/store'
-import { progressOf } from '@/lib/workspace/checklist'
-import { BUILT, STAGE_TILES } from '@/lib/workspace/reveal'
+import { progressOf, stepsFor } from '@/lib/workspace/checklist'
+import { BUILT, STAGE_HOME, STAGE_TILES } from '@/lib/workspace/reveal'
 import { Checklist } from './Checklist'
 
 /**
- * Where an owner starts: five stages, and one of them open.
+ * Where an owner starts: five stages, and the ones that are open.
  *
  * Not a dashboard. Sixteen executive figures over a company that has entered
  * four materials would be sixteen zeroes and four charts of nothing, which is
@@ -15,14 +15,13 @@ import { Checklist } from './Checklist'
  * question on this screen is "which part of the business am I working on", and
  * that is the only question on it.
  *
- * The Sourcing tile carries the set-up progress. That is the one place the
- * checklist appears — inside the desk every screen is plain, with its own Add
+ * Each open tile carries its own set-up progress, and each stage's checklist
+ * sits underneath. Inside a desk every screen is plain, with its own Add
  * button, because somebody who is operating already knows what they came for.
  */
 export function StagePicker() {
   const { workspace } = useWorkspace()
   if (!workspace) return null
-  const p = progressOf(workspace)
 
   return (
     <div className="mx-auto w-full max-w-[64rem]">
@@ -38,6 +37,7 @@ export function StagePicker() {
       <ul className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {STAGE_TILES.map((s, i) => {
           const built = BUILT.includes(s.id)
+          const p = progressOf(workspace, stepsFor(s.id))
           const body = (
             <>
               <span aria-hidden className={`grid size-9 shrink-0 place-items-center rounded-lg ${
@@ -68,7 +68,7 @@ export function StagePicker() {
           return (
             <li key={s.id} style={{ '--i': i } as React.CSSProperties}>
               {built ? (
-                <Link href="/sourcing/suppliers"
+                <Link href={STAGE_HOME[s.id]}
                   className={`${shell} press border-line bg-surface hover:border-accent hover:bg-accent-tint/30`}>
                   {body}
                 </Link>
@@ -86,8 +86,9 @@ export function StagePicker() {
           way to change a company name, a material's units, a supplier's rate,
           a stock count or the order-sizing rules, so hiding the list once it is
           complete would stand those editors down with it. Ticked, it reads as
-          confirmation; the tile above already says the stage is ready. */}
-      <Checklist />
+          confirmation; the tile above already says the stage is ready. One per
+          open stage, in the order the material moves. */}
+      {BUILT.map((stage) => <Checklist key={stage} stage={stage} />)}
     </div>
   )
 }

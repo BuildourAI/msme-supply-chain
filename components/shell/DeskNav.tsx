@@ -4,15 +4,18 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Icon, Logo } from '@/components/ui/icons'
 import { useWorkspace } from '@/components/workspace/store'
-import { sourcingNav, stageOf, STAGE_TILES } from '@/lib/workspace/reveal'
+import { isBuilt, navFor, stageOf, STAGE_TILES } from '@/lib/workspace/reveal'
 
 /**
- * The owner's sidebar: flat, six rows, no expanding groups.
+ * The owner's sidebar: flat, a handful of rows, no expanding groups.
  *
  * The stage's own name sits at the top with a way back to the stage picker,
- * which is the only nesting there is — you are in Sourcing, and these are the
- * things Sourcing has. The old rail put five stages and thirty-four modules in
+ * which is the only nesting there is — you are in Inbound, and these are the
+ * things Inbound has. The old rail put five stages and thirty-four modules in
  * front of somebody on their first morning.
+ *
+ * A stage that is not open yet keeps the sourcing rail, so a route that says
+ * "comes after sourcing" still has somewhere to go from.
  */
 export function DeskNav({ onNavigate }: { onNavigate?: () => void }) {
   const { workspace, today } = useWorkspace()
@@ -23,13 +26,14 @@ export function DeskNav({ onNavigate }: { onNavigate?: () => void }) {
    * is recomputed when the workspace changes, not on every render of every
    * screen.
    */
+  const here = stageOf(pathname)
+  const stage = isBuilt(here) ? here : 'sourcing'
   const rows = useMemo(
-    () => (workspace ? sourcingNav(workspace, today) : []),
-    [workspace, today],
+    () => (workspace ? navFor(stage, workspace, today) : []),
+    [stage, workspace, today],
   )
   if (!workspace) return null
 
-  const stage = stageOf(pathname) ?? 'sourcing'
   const tile = STAGE_TILES.find((s) => s.id === stage)!
 
   return (
