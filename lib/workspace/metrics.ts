@@ -26,6 +26,8 @@ import { buildRows } from '@/lib/domain/derive'
 import { bundleFor } from './bundle'
 import { closedReceipts, openReceipts, receiptsFor } from './receipts'
 import { expired } from './sourcing'
+import { lineRunsFor, lineWatch, stoppingThisWeek } from './linewatch'
+import { jobPlanRows } from './plan'
 import type { Workspace } from './types'
 
 /* -------------------------------------------------------------- the shape -- */
@@ -88,9 +90,11 @@ export type MetricKey =
   | 'stockValue' | 'unconfirmed' | 'heldStock' | 'accuracy' | 'netLoss' | 'scrap' | 'dio'
   /* only with cutting switched on */
   | 'remnants'
+  /* the floor's */
+  | 'lineRunsFor' | 'jobsStopping' | 'attainment' | 'firstPass'
 
 /** The desks that have a dashboard of figures. */
-export type MetricStage = 'sourcing' | 'inbound' | 'inventory'
+export type MetricStage = 'sourcing' | 'inbound' | 'inventory' | 'production' | 'dispatch'
 
 /**
  * Which figures belong to which desk, in the order each shows them.
@@ -107,6 +111,8 @@ export const STAGE_METRICS: Record<MetricStage, MetricKey[]> = {
   ],
   inbound: ['qcHeld', 'inspectedOnTime', 'defects', 'onTime', 'unacked', 'atJobworkers', 'lead'],
   inventory: ['stockValue', 'unconfirmed', 'accuracy', 'heldStock', 'netLoss', 'scrap', 'dio', 'remnants'],
+  production: ['lineRunsFor', 'jobsStopping', 'attainment', 'firstPass'],
+  dispatch: [],
 }
 
 /** Figures that belong to a switch in the store rules, and are not offered with it off. */
@@ -139,6 +145,8 @@ export const DEFAULTS_FOR: Record<MetricStage, MetricKey[]> = {
   sourcing: DEFAULT_PICKS,
   inbound: INBOUND_PICKS,
   inventory: INVENTORY_PICKS,
+  production: ['lineRunsFor', 'jobsStopping', 'attainment', 'firstPass'],
+  dispatch: [],
 }
 
 export const METRIC_LABEL: Record<MetricKey, string> = {
@@ -163,6 +171,10 @@ export const METRIC_LABEL: Record<MetricKey, string> = {
   scrap: 'Scrap against target',
   dio: 'Days of stock',
   remnants: 'Remnants on the racks',
+  lineRunsFor: 'The line runs for',
+  jobsStopping: 'Jobs stopping this week',
+  attainment: 'Plan attainment',
+  firstPass: 'Right first time',
 }
 
 /** One line each, for the dialog where the owner picks. */
@@ -188,6 +200,10 @@ export const METRIC_WHY: Record<MetricKey, string> = {
   scrap: 'Scrap on the floor as a share of what was issued, for the material furthest over its target.',
   dio: 'How many days the usable stock would last at the rate it is used — money sitting on the shelf.',
   remnants: 'What the offcuts on the racks are worth, and how much of it is past the age a remnant gets used by.',
+  lineRunsFor: 'Days until the tightest material runs out at the rate it is used — the day the floor stops if nothing arrives.',
+  jobsStopping: 'This week’s jobs that are halted, will halt for want of material, or are at risk.',
+  attainment: 'Good pieces made against what the plan said should be made by today, over the jobs running now.',
+  firstPass: 'Of every piece off the floor this month, the share that was good first time.',
 }
 
 /* ------------------------------------------------------------- the maths -- */
@@ -438,10 +454,7 @@ export function metricsFor(ws: Workspace, today: string): Metric[] {
       .filter((id) => ws.vendorItems.filter((vi) => vi.itemId === id).length > 1),
   ).size
 
-  const nothing = (key: MetricKey, value: string, how: string): Metric => ({
-    key, label: METRIC_LABEL[key], value, sub: 'nothing to measure yet',
-    tone: 'neutral', measured: false, how,
-  })
+  const nothing = nothingOf
 
   return [
     ot
@@ -800,9 +813,87 @@ function gateMetrics(
   ]
 }
 
+const nothingOf = (key: MetricKey, value: string, how: string): Metric => ({
+  key, label: METRIC_LABEL[key], value, sub: 'nothing to measure yet',
+  tone: 'neutral', measured: false, how,
+})
+
+/**
+ * The floor's figures.
+ *
+ * The line-runs-for figure is the domain's production cover over the owner's
+ * own materials; the rest are sums over output booked and the plan on each
+ * job, so each is unmeasured until something has been booked.
+ */
+function productionMetrics(
+  ws: Workspace, today: string,
+  nothing: (key: MetricKey, value: string, how: string) => Metric,
+): Metric[] {
+  const runs = lineRunsFor(ws)
+  const watch = lineWatch(ws, today)
+  const week = watch.filter((w) => w.inWeek)
+  const stopping = stoppingThisWeek(watch)
+  const halting = stopping.filter((w) => w.status === 'halted' || w.status === 'will_halt').length
+  const running = jobPlanRows(ws, today).filter((r) => r.planned && !r.job.closedOn && r.target > 0)
+  const made = running.reduce((a, r) => a + r.made, 0)
+  const target = running.reduce((a, r) => a + r.target, 0)
+  const month = today.slice(0, 7)
+  const booked = (ws.outputs ?? []).filter((o) => o.on.slice(0, 7) === month)
+  const good = booked.reduce((a, o) => a + o.good, 0)
+  const bad = booked.reduce((a, o) => a + o.rejected, 0)
+  const pct1 = (n: number) => `${Math.round(n * 10) / 10}%`
+
+  return [
+    runs && Number.isFinite(runs.days.value)
+      ? {
+        key: 'lineRunsFor', label: METRIC_LABEL.lineRunsFor, value: `${Math.round(runs.days.value * 10) / 10} days`,
+        sub: `${runs.item.name} runs out first, at ${runs.item.floorConsumptionPerDay || runs.item.avgDailyConsumption} ${runs.item.uom} a day`,
+        tone: runs.days.value < 7 ? 'critical' : runs.days.value < 15 ? 'warn' : 'good',
+        measured: true, href: '/production/line-watch',
+        how: 'min over materials of usable stock ÷ used per day — the rate you gave for each material',
+      }
+      : nothing('lineRunsFor', 'Not enough to say', 'needs a material with stock counted and a daily use'),
+
+    week.length > 0
+      ? {
+        key: 'jobsStopping', label: METRIC_LABEL.jobsStopping, value: String(stopping.length),
+        sub: stopping.length === 0 ? `all ${week.length} of this week’s jobs will run`
+          : `${halting} will halt · ${stopping.length - halting} at risk, of ${week.length}`,
+        tone: halting > 0 ? 'critical' : stopping.length > 0 ? 'warn' : 'good',
+        measured: true, href: '/production/line-watch',
+        how: 'count of this week’s planned jobs that are halted, short of material, or at risk',
+        chart: { kind: 'pips', on: stopping.length, of: week.length },
+      }
+      : nothing('jobsStopping', 'Nothing planned this week', 'needs a style planned with dates that fall in this week'),
+
+    target > 0
+      ? {
+        key: 'attainment', label: METRIC_LABEL.attainment, value: pct1((made / target) * 100),
+        sub: `${made} made of ${target} due by today, over ${running.length} running job${running.length === 1 ? '' : 's'}`,
+        tone: made >= target * 0.95 ? 'good' : made >= target * 0.8 ? 'warn' : 'critical',
+        measured: true, href: '/production/plan',
+        how: 'Σ good pieces ÷ Σ target to date (pieces a day × working days since the start, never past the quantity)',
+        chart: { kind: 'ring', pct: Math.min(100, (made / target) * 100) },
+      }
+      : nothing('attainment', 'Nothing due yet', 'needs a planned job that has started'),
+
+    good + bad > 0
+      ? {
+        key: 'firstPass', label: METRIC_LABEL.firstPass, value: pct1((good / (good + bad)) * 100),
+        sub: `${good} good, ${bad} rejected this month`,
+        tone: bad / (good + bad) <= 0.02 ? 'good' : bad / (good + bad) <= 0.05 ? 'warn' : 'critical',
+        measured: true, href: '/production/plan',
+        how: 'good ÷ (good + rejected) over this month’s bookings',
+        chart: { kind: 'split', good, bad },
+      }
+      : nothing('firstPass', 'Nothing booked this month', 'needs output booked on a job'),
+  ]
+}
+
 /** Every figure a desk offers, in its own order. */
 export function stageMetrics(ws: Workspace, today: string, stage: MetricStage = 'sourcing'): Metric[] {
-  const all = metricsFor(ws, today)
+  // the floor's figures run the whole Line watch, so only the floor's dashboard pays for them
+  const all = stage === 'production' ? productionMetrics(ws, today, nothingOf) : metricsFor(ws, today)
   return STAGE_METRICS[stage]
     .filter((k) => ws.cutting || !NEEDS_CUTTING.includes(k))
     .map((k) => all.find((m) => m.key === k)!).filter(Boolean)
@@ -812,7 +903,9 @@ export function stageMetrics(ws: Workspace, today: string, stage: MetricStage = 
 export const picksOf = (ws: Workspace, stage: MetricStage): MetricKey[] =>
   ((stage === 'inbound' ? ws.inboundMetricPicks
     : stage === 'inventory' ? ws.inventoryMetricPicks
-      : ws.metricPicks) ?? DEFAULTS_FOR[stage]) as MetricKey[]
+      : stage === 'production' ? ws.productionMetricPicks
+        : stage === 'dispatch' ? ws.dispatchMetricPicks
+          : ws.metricPicks) ?? DEFAULTS_FOR[stage]) as MetricKey[]
 
 /** The ones the owner keeps, in the order the desk shows them. */
 export function pickedMetrics(ws: Workspace, today: string, stage: MetricStage = 'sourcing'): Metric[] {

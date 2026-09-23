@@ -46,7 +46,9 @@ export function MetricPicker({ open, onClose, stage = 'sourcing' }: {
   const save = () => {
     update((w) => (stage === 'inbound' ? { ...w, inboundMetricPicks: [...picks] }
       : stage === 'inventory' ? { ...w, inventoryMetricPicks: [...picks] }
-        : { ...w, metricPicks: [...picks] }))
+        : stage === 'production' ? { ...w, productionMetricPicks: [...picks] }
+          : stage === 'dispatch' ? { ...w, dispatchMetricPicks: [...picks] }
+            : { ...w, metricPicks: [...picks] }))
     onClose()
   }
 

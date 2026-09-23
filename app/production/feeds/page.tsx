@@ -146,5 +146,5 @@ function PageBody() {
 }
 
 export default function Page() {
-  return <StageGate later="Production material flow"><PageBody /></StageGate>
+  return <StageGate sample="Line watch" shows="which finished goods each material feeds, and which are short"><PageBody /></StageGate>
 }

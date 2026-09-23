@@ -22,7 +22,9 @@ import type {
   FieldDef, GoodsReceipt, PurchaseOrder, Quote, QuoteLine, QuoteState, Rfq, SendEntry, Session,
   TableView, Workspace, WorkspaceMode,
   IssueSlip, Job, Rack, StockMove, Transfer, WsCount, WsCut, WsLoss, WsLot,
+  CustomerOrder, DispatchNote, Halt, Output, Product, WsCarrier, WsConsignment, WsCustomer, WsRma,
 } from './types'
+import type { FgMovement } from '@/lib/domain/types'
 import type { SupplierDoc, VendorAlias } from '@/lib/intake/types'
 
 const KEY = 'msme.workspace.v1'
@@ -254,6 +256,17 @@ function migrate(raw: Partial<Workspace>): Workspace {
   const issues = list<IssueSlip>(raw.issues)
   const cuts = list<WsCut>(raw.cuts)
   const losses = list<WsLoss>(raw.losses)
+  // the floor and the shipping bay: empty before 8, and nothing derived for them
+  const products = list<Product>(raw.products)
+  const outputs = list<Output>(raw.outputs)
+  const halts = list<Halt>(raw.halts)
+  const fgMoves = list<FgMovement>(raw.fgMoves)
+  const customers = list<WsCustomer>(raw.customers)
+  const carriers = list<WsCarrier>(raw.carriers)
+  const customerOrders = list<CustomerOrder>(raw.customerOrders)
+  const dispatchNotes = list<DispatchNote>(raw.dispatchNotes)
+  const consignments = list<WsConsignment>(raw.consignments)
+  const rmas = list<WsRma>(raw.rmas)
 
   /*
    * The id counter is seeded from what is actually there the first time a blob
@@ -286,6 +299,16 @@ function migrate(raw: Partial<Workspace>): Workspace {
   seed('IS', issues)
   seed('CT', cuts)
   seed('LS', losses)
+  seed('PR', products)
+  seed('OP', outputs)
+  seed('HL', halts)
+  seed('FGM', fgMoves)
+  seed('CU', customers)
+  seed('CR', carriers)
+  seed('SO', customerOrders)
+  seed('DN', dispatchNotes)
+  seed('CN', consignments)
+  seed('RM', rmas)
 
   const view = (v: Partial<TableView> | undefined): TableView => ({
     order: list<string>(v?.order),
@@ -304,6 +327,7 @@ function migrate(raw: Partial<Workspace>): Workspace {
       makes: raw.company?.makes ?? '',
       address: raw.company?.address,
       gstin: raw.company?.gstin,
+      state: raw.company?.state,
       phone: raw.company?.phone,
       email: raw.company?.email,
     },
@@ -373,6 +397,15 @@ function migrate(raw: Partial<Workspace>): Workspace {
       loss: view(views.loss),
       cut: view(views.cut),
       offcut: view(views.offcut),
+      product: view(views.product),
+      output: view(views.output),
+      halt: view(views.halt),
+      customer: view(views.customer),
+      carrier: view(views.carrier),
+      salesOrder: view(views.salesOrder),
+      dispatchNote: view(views.dispatchNote),
+      consignment: view(views.consignment),
+      rma: view(views.rma),
     },
     vendorContact: map(raw.vendorContact),
     /*
@@ -423,6 +456,20 @@ function migrate(raw: Partial<Workspace>): Workspace {
     minRemnant: map<number>(raw.minRemnant),
     scrapRate: map<number>(raw.scrapRate),
     inventoryMetricPicks: raw.inventoryMetricPicks,
+    products,
+    outputs,
+    halts,
+    floor: raw.floor,
+    fgMoves,
+    productionMetricPicks: raw.productionMetricPicks,
+    customers,
+    carriers,
+    customerOrders,
+    dispatchNotes,
+    consignments,
+    rmas,
+    dispatchRules: raw.dispatchRules,
+    dispatchMetricPicks: raw.dispatchMetricPicks,
   }
 }
 

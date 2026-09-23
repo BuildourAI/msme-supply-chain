@@ -290,6 +290,95 @@ export const BUILTIN: Record<SheetEntity, BuiltinColumn[]> = {
     { key: 'value', label: 'Worth', derived: true },
     { key: 'from', label: 'From', derived: true },
   ],
+  /*
+   * The floor's. A product is typed with its material list, which no sheet
+   * carries in a shape worth guessing at; output and halts are records of
+   * things that happened on a day. Columns for arranging and export.
+   */
+  product: [
+    { key: 'code', label: 'Code', derived: true },
+    { key: 'name', label: 'Product', identity: true, derived: true },
+    { key: 'uom', label: 'Unit', derived: true },
+    { key: 'cost', label: 'Costs to make', derived: true },
+    { key: 'bom', label: 'Materials', derived: true },
+    { key: 'made', label: 'Made this month', derived: true },
+    { key: 'stock', label: 'In stock', derived: true },
+  ],
+  output: [
+    { key: 'on', label: 'Date', identity: true, derived: true },
+    { key: 'job', label: 'Job', derived: true },
+    { key: 'product', label: 'Product', derived: true },
+    { key: 'good', label: 'Good', derived: true },
+    { key: 'rejected', label: 'Rejected', derived: true },
+    { key: 'reason', label: 'Why rejected', derived: true },
+    { key: 'actor', label: 'Booked by', derived: true },
+  ],
+  halt: [
+    { key: 'on', label: 'Stopped', identity: true, derived: true },
+    { key: 'job', label: 'Job', derived: true },
+    { key: 'cause', label: 'Why', derived: true },
+    { key: 'note', label: 'Note', derived: true },
+    { key: 'resumed', label: 'Resumed', derived: true },
+    { key: 'days', label: 'Days down', derived: true },
+  ],
+  /* the shipping bay's */
+  customer: [
+    { key: 'name', label: 'Customer', identity: true, derived: true },
+    { key: 'gstin', label: 'GSTIN', derived: true },
+    { key: 'state', label: 'State', derived: true },
+    { key: 'shipTo', label: 'Ship to', derived: true },
+    { key: 'terms', label: 'Payment', derived: true },
+    { key: 'open', label: 'Open orders', derived: true },
+  ],
+  carrier: [
+    { key: 'name', label: 'Carrier', identity: true, derived: true },
+    { key: 'mode', label: 'How', derived: true },
+    { key: 'rate', label: 'Rate', derived: true },
+    { key: 'shipped', label: 'Shipped', derived: true },
+    { key: 'late', label: 'Late', derived: true },
+  ],
+  salesOrder: [
+    { key: 'no', label: 'Order', identity: true, derived: true },
+    { key: 'customer', label: 'Customer', derived: true },
+    { key: 'taken', label: 'Taken', derived: true },
+    { key: 'promised', label: 'Promised', derived: true },
+    { key: 'lines', label: 'What', derived: true },
+    { key: 'made', label: 'Made', derived: true },
+    { key: 'dispatched', label: 'Dispatched', derived: true },
+    { key: 'pending', label: 'Still to go', derived: true },
+    { key: 'value', label: 'Value', derived: true },
+    { key: 'status', label: 'Status', derived: true },
+  ],
+  dispatchNote: [
+    { key: 'no', label: 'Note', identity: true, derived: true },
+    { key: 'on', label: 'Date', derived: true },
+    { key: 'order', label: 'Order', derived: true },
+    { key: 'customer', label: 'Customer', derived: true },
+    { key: 'lines', label: 'What went', derived: true },
+    { key: 'weight', label: 'Weight', derived: true },
+    { key: 'carrier', label: 'Carrier', derived: true },
+    { key: 'authorised', label: 'Authorised by', derived: true },
+  ],
+  consignment: [
+    { key: 'note', label: 'Note', identity: true, derived: true },
+    { key: 'customer', label: 'Customer', derived: true },
+    { key: 'carrier', label: 'Carrier', derived: true },
+    { key: 'lr', label: 'Docket', derived: true },
+    { key: 'left', label: 'Left', derived: true },
+    { key: 'promised', label: 'Promised', derived: true },
+    { key: 'delivered', label: 'Delivered', derived: true },
+    { key: 'verdict', label: 'Verdict', derived: true },
+    { key: 'freight', label: 'Freight', derived: true },
+  ],
+  rma: [
+    { key: 'no', label: 'Return', identity: true, derived: true },
+    { key: 'customer', label: 'Customer', derived: true },
+    { key: 'product', label: 'Product', derived: true },
+    { key: 'qty', label: 'Qty', derived: true },
+    { key: 'reason', label: 'Why', derived: true },
+    { key: 'due', label: 'Due back', derived: true },
+    { key: 'state', label: 'State', derived: true },
+  ],
 }
 
 export const EMPTY_VIEW: TableView = { order: [], hidden: [], labels: {} }
@@ -312,6 +401,15 @@ export const EMPTY_VIEWS: Record<SheetEntity, TableView> = {
   loss: EMPTY_VIEW,
   cut: EMPTY_VIEW,
   offcut: EMPTY_VIEW,
+  product: EMPTY_VIEW,
+  output: EMPTY_VIEW,
+  halt: EMPTY_VIEW,
+  customer: EMPTY_VIEW,
+  carrier: EMPTY_VIEW,
+  salesOrder: EMPTY_VIEW,
+  dispatchNote: EMPTY_VIEW,
+  consignment: EMPTY_VIEW,
+  rma: EMPTY_VIEW,
 }
 
 /**
@@ -598,6 +696,15 @@ export function pruneCustom(ws: Workspace): Workspace {
     ...(ws.issues ?? []).map((s) => s.id),
     ...(ws.losses ?? []).map((l) => l.id),
     ...(ws.cuts ?? []).map((c) => c.id),
+    ...(ws.products ?? []).map((x) => x.id),
+    ...(ws.outputs ?? []).map((x) => x.id),
+    ...(ws.halts ?? []).map((x) => x.id),
+    ...(ws.customers ?? []).map((x) => x.id),
+    ...(ws.carriers ?? []).map((x) => x.id),
+    ...(ws.customerOrders ?? []).map((x) => x.id),
+    ...(ws.dispatchNotes ?? []).map((x) => x.id),
+    ...(ws.consignments ?? []).map((x) => x.id),
+    ...(ws.rmas ?? []).map((x) => x.id),
   ])
   const custom: Record<string, Record<string, string>> = {}
   for (const [id, row] of Object.entries(ws.custom ?? {})) {

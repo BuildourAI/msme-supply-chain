@@ -113,11 +113,17 @@ export function jobProblemToRemove(ws: Workspace, id: string): string | null {
   const slips = (ws.issues ?? []).filter((s) => s.jobId === id).length
   const lost = (ws.losses ?? []).filter((l) => l.jobId === id).length
   const cuts = (ws.cuts ?? []).filter((c) => c.jobId === id).length
-  if (slips + lost + cuts === 0) return null
+  const booked = (ws.outputs ?? []).filter((o) => o.jobId === id).length
+  const halts = (ws.halts ?? []).filter((h) => h.jobId === id).length
+  const ordered = (ws.customerOrders ?? []).filter((o) => o.lines.some((l) => l.jobId === id)).length
+  if (slips + lost + cuts + booked + halts + ordered === 0) return null
   const parts = [
     slips ? `${slips} slip${slips === 1 ? '' : 's'}` : '',
     cuts ? `${cuts} cut${cuts === 1 ? '' : 's'}` : '',
     lost ? `${lost} loss record${lost === 1 ? '' : 's'}` : '',
+    booked ? `${booked} output booking${booked === 1 ? '' : 's'}` : '',
+    halts ? `${halts} halt${halts === 1 ? '' : 's'}` : '',
+    ordered ? `${ordered} customer order${ordered === 1 ? '' : 's'}` : '',
   ].filter(Boolean).join(', ')
   return `Material has moved against it (${parts}). Close it instead — its record stays.`
 }

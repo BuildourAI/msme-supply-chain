@@ -128,6 +128,14 @@ const KIND: Record<DecisionKind, IconName> = {
   'remnant-aged': 'clock',
   'remnant-covers': 'cart',
   'cut-below-plan': 'scissors',
+  // the floor's
+  'job-halted': 'alert',
+  'job-will-halt': 'boxes',
+  'job-at-risk': 'clock',
+  'job-behind': 'activity',
+  'job-late': 'calendar',
+  'no-plan': 'factory',
+  'no-bom': 'doc',
 }
 
 export function Queue({ rows, berths, onAct, showAll, onShowAll, clear }: {

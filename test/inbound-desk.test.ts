@@ -117,8 +117,8 @@ describe('setting up the gate', () => {
   it('gives each stage its own list, and sourcing keeps its five', () => {
     expect(stepsFor('inbound')).toBe(INBOUND_STEPS)
     expect(stepsFor('sourcing')).toBe(SOURCING_STEPS)
-    // a stage with no list of its own still gets sourcing's
-    expect(stepsFor('production')).toBe(SOURCING_STEPS)
+    // no stage at all still gets sourcing's
+    expect(stepsFor(null)).toBe(SOURCING_STEPS)
   })
 })
 

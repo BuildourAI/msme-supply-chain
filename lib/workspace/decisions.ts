@@ -72,6 +72,10 @@ export type Act =
   | 'no-sale'       // nobody will buy it
   | 'use'           // remnant pieces into a job
   | 'scrap'         // remnant pieces off the book, by decision
+  /* the floor's — see `production-decisions.ts` */
+  | 'plan'          // give a job its product, quantity and dates, or re-plan it
+  | 'output'        // book what came off a job
+  | 'resume'        // the floor started again on a halted job
 
 export type DecisionKind =
   | 'at-risk' | 'late' | 'unsourced'
@@ -86,6 +90,8 @@ export type DecisionKind =
   | 'scrap-unsold' | 'scrap-over'
   /* only with cutting switched on */
   | 'remnant-aged' | 'remnant-covers' | 'cut-below-plan'
+  /* the floor's */
+  | 'job-halted' | 'job-will-halt' | 'job-at-risk' | 'job-behind' | 'job-late' | 'no-plan' | 'no-bom'
 
 export interface Decision {
   /** stable across renders, so a list key is not an index */
@@ -119,6 +125,8 @@ export interface Decision {
     rackId?: string
     countId?: string
     jobId?: string
+    productId?: string
+    haltId?: string
     lossId?: string
     cutId?: string
   }

@@ -13,7 +13,9 @@ import { lakh, longDate, money, num, qtyText, shortDate, STATUS_LABEL } from '@/
 import { OWNER_POLICY } from '@/lib/domain/policy'
 import { useApp } from '@/state/app-store'
 import { daysBetween } from '@/lib/domain/calc'
-import { StageGate } from '@/components/onboard/StageGate'
+import { useWorkspace } from '@/components/workspace/store'
+import { DeskOnly } from '@/components/sourcing/DeskOnly'
+import { LineWatch } from '@/components/production/desk/LineWatch'
 
 const lw = buildLineWatch()
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -485,6 +487,15 @@ function PageBody() {
   )
 }
 
+/**
+ * One route, two companies. The sample keeps its Line Watch over the §9.2
+ * fabricator; the owner gets theirs, which reads their own jobs, plan and
+ * store and nothing else.
+ */
 export default function Page() {
-  return <StageGate later="Production material flow"><PageBody /></StageGate>
+  const { mode, ready } = useWorkspace()
+  if (!ready) return <div className="min-h-[50vh]" aria-hidden />
+  return mode === 'mine'
+    ? <DeskOnly><LineWatch /></DeskOnly>
+    : <PageBody />
 }

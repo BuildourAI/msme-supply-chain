@@ -4,5 +4,5 @@ import { StageGate } from '@/components/onboard/StageGate'
 function PageBody() { return <StagePage stage={stageById('production')} /> }
 
 export default function Page() {
-  return <StageGate later="Production material flow"><PageBody /></StageGate>
+  return <StageGate sample="the Production dashboard" shows="what the whole production stage does, system by system"><PageBody /></StageGate>
 }

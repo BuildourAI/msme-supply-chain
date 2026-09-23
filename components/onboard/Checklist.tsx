@@ -9,6 +9,9 @@ import { GateRulesWizard } from './wizards/GateRulesWizard'
 import { JobsWizard } from './wizards/JobsWizard'
 import { RacksWizard } from './wizards/RacksWizard'
 import { StoreRulesWizard } from './wizards/StoreRulesWizard'
+import { FloorRulesWizard } from './wizards/FloorRulesWizard'
+import { ProductsWizard } from './wizards/ProductsWizard'
+import { PlanForm } from '@/components/production/desk/PlanDialogs'
 import { JobworkerWizard } from './wizards/JobworkerWizard'
 import { MaterialWizard } from './wizards/MaterialWizard'
 import { SupplierWizard } from './wizards/SupplierWizard'
@@ -149,6 +152,9 @@ function Wizards({ open, onClose }: { open: StepId | null; onClose: () => void }
       <RacksWizard open={open === 'racks'} onClose={onClose} />
       <JobsWizard open={open === 'jobs'} onClose={onClose} />
       <StoreRulesWizard open={open === 'storeRules'} onClose={onClose} />
+      <ProductsWizard open={open === 'products'} onClose={onClose} />
+      <PlanForm jobId={open === 'plan' ? null : undefined} onClose={onClose} />
+      <FloorRulesWizard open={open === 'floorRules'} onClose={onClose} />
     </>
   )
 }

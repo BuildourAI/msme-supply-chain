@@ -16,7 +16,7 @@
  */
 import type { Policy } from '@/lib/domain/policy'
 import type {
-  CheckResult, CutRecord, CycleCount, Item, LossRecord, PoRevision, SpecCheck, StockLot,
+  CheckResult, CutRecord, CycleCount, FgMovement, Item, LossRecord, PoRevision, SpecCheck, StockLot,
   StockMovement, Uom, Usability, Vendor, VendorItem,
 } from '@/lib/domain/types'
 import type { SupplierDoc, VendorAlias } from '@/lib/intake/types'
@@ -438,6 +438,19 @@ export interface Job {
   openedOn: string
   closedOn?: string
   note?: string
+  /*
+   * The plan, which Production adds: what it makes, how many, when, and at
+   * what pace. All optional — a style opened in the store with none of it is
+   * still a style material can be issued against; Production asks for a plan.
+   */
+  productId?: string
+  qty?: number
+  plannedStart?: string
+  plannedFinish?: string
+  /** pieces a working day — the daily target output is measured against */
+  perDay?: number
+  /** what it needs: worked out from the product's material list, and adjustable */
+  needs?: { itemId: string; qty: number }[]
 }
 
 export interface JobNumbering {
@@ -463,6 +476,182 @@ export interface IssueSlip {
 export type WsCut = CutRecord & { jobId?: string; rack?: string }
 /** A loss, the job it happened on, and what the person recording it said. */
 export type WsLoss = LossRecord & { jobId?: string; note?: string }
+
+/* -------------------------------------------------------- the floor -- */
+
+/**
+ * What the company makes, and what goes into one.
+ *
+ * Structurally the domain's finished good — code, name, unit, what one costs
+ * to make, HSN — plus the material list. `builtBy` is not stored: which jobs
+ * make it is read off the jobs, never kept twice. A quantity per unit of 0 is
+ * "not said yet", which Line watch treats as needing nothing and the Products
+ * screen flags.
+ */
+export interface Product {
+  id: string
+  code: string
+  name: string
+  uom: Uom
+  /** ₹ to make one — finished stock is valued at this, never at a selling price */
+  standardCost?: number
+  hsn?: string
+  bom: { itemId: string; qtyPerUnit: number }[]
+  note?: string
+}
+
+/** Pieces off a job on a day: the good ones go to finished stock, the rejected do not. */
+export interface Output {
+  id: string
+  jobId: string
+  on: string
+  good: number
+  rejected: number
+  /** why the rejected ones were rejected — one of the floor rules' reasons */
+  reason?: string
+  actor: string
+  note?: string
+}
+
+export type HaltCause = 'material' | 'machine' | 'manpower' | 'power' | 'quality' | 'jobworker' | 'other'
+
+/** The floor stopped on a job, why, and when it started again. */
+export interface Halt {
+  id: string
+  jobId: string
+  on: string
+  cause: HaltCause
+  note?: string
+  resumedOn?: string
+  actor: string
+}
+
+export interface FloorRules {
+  /** 0 is Sunday — the days a target is set for */
+  workingDays: number[]
+  /** behind the daily target by more than this share counts as behind */
+  behindPct: number
+  rejectReasons: string[]
+}
+
+/* ------------------------------------------------------ the shipping bay -- */
+
+export interface WsCustomer {
+  id: string
+  name: string
+  gstin?: string
+  /** read off the GSTIN when it is given; typed when it is not */
+  state?: string
+  shipTo?: string
+  phone?: string
+  email?: string
+  /** only used to work out freight from a carrier's rate */
+  distanceKm?: number
+  paymentTerms?: number
+  note?: string
+}
+
+export type CarrierMode = 'own' | 'part' | 'full' | 'courier' | 'other'
+
+export interface WsCarrier {
+  id: string
+  name: string
+  mode: CarrierMode
+  /** ₹ per kg per km, when they quote one */
+  ratePerKgKm?: number
+  phone?: string
+  note?: string
+}
+
+/** A customer's order: what, how many, at what rate, by when — and which style makes it. */
+export interface CustomerOrder {
+  id: string
+  /** SO-1, SO-2 */
+  no: string
+  customerId: string
+  takenOn: string
+  promisedDate: string
+  state: 'open' | 'cancelled'
+  note?: string
+  lines: OrderLine[]
+}
+
+export interface OrderLine {
+  /** order-scoped — SO-001/1 */
+  id: string
+  productId: string
+  qty: number
+  /** what the customer is charged per unit */
+  rate: number
+  /** the style or job making it, when one does */
+  jobId?: string
+}
+
+/** Goods out of the bay against an order — the domain's despatch note, on the owner's ids. */
+export interface DispatchNote {
+  id: string
+  /** DN-1, DN-2 */
+  no: string
+  orderId: string
+  customerId: string
+  on: string
+  lines: { productId: string; qty: number }[]
+  weightKg?: number
+  /** who let the goods out. A dispatch without a name is stock walking. */
+  authorisedBy: string
+  actor: string
+  note?: string
+}
+
+/** A note on its way with a carrier, and whether it got there. One per note at most. */
+export interface WsConsignment {
+  id: string
+  noteId: string
+  carrierId: string
+  /** the docket the carrier's own system knows it by */
+  lrNo?: string
+  /** the day the customer was told it would arrive */
+  promisedDate: string
+  deliveredOn?: string
+  /** ₹ — the carrier's bill for it */
+  freight?: number
+  /** who confirmed it arrived, and how. A date with no name is a guess. */
+  confirmedBy?: string
+  note?: string
+}
+
+/** Goods coming back from a customer. */
+export interface WsRma {
+  id: string
+  /** RMA-1 */
+  no: string
+  orderId: string
+  noteId: string
+  customerId: string
+  productId: string
+  qty: number
+  reason: string
+  raisedOn: string
+  dueBy: string
+  owner: string
+  state: 'authorised' | 'received' | 'closed'
+  receivedOn?: string
+  checkedBy?: string
+  /** of what came back: fit to sell again, and not */
+  good?: number
+  damaged?: number
+  damageNote?: string
+}
+
+export interface DispatchRules {
+  /** ₹ — a consignment worth this or more needs an e-way bill */
+  ewayThreshold: number
+  otifTargetPct: number
+  /** days from order to promise, offered on a new order */
+  promiseDays: number
+  /** days a customer is given to send a return back */
+  returnDays: number
+}
 
 /* --------------------------------------------- fields the owner invents -- */
 
@@ -495,6 +684,10 @@ export type SheetEntity =
   | 'check' | 'receipt' | 'challan'
   /** the store's */
   | 'rack' | 'lot' | 'count' | 'move' | 'job' | 'issue' | 'loss' | 'cut' | 'offcut'
+  /** the floor's */
+  | 'product' | 'output' | 'halt'
+  /** the shipping bay's */
+  | 'customer' | 'carrier' | 'salesOrder' | 'dispatchNote' | 'consignment' | 'rma'
 
 export interface FieldDef {
   id: string
@@ -561,10 +754,11 @@ export interface VendorContact {
  * requests by `migrate`, which is what they were.
  */
 export interface SendEntry {
-  kind: 'rfq' | 'po' | 'grn'
+  kind: 'rfq' | 'po' | 'grn' | 'dn'
   /** the request's id, the order NUMBER — several lines are one document —
-   *  or the receipt's id */
+   *  the receipt's id, or the dispatch note's */
   id: string
+  /** who it went to: a supplier, or for a dispatch note the customer */
   vendorId: string
   via: 'whatsapp' | 'email' | 'share' | 'download' | 'print'
   at: string
@@ -633,6 +827,8 @@ export interface Workspace {
     makes: string
     address?: string
     gstin?: string
+    /** for place of supply; read off the GSTIN when absent */
+    state?: string
     phone?: string
     email?: string
   }
@@ -757,6 +953,29 @@ export interface Workspace {
   /** ₹ per unit a scrap dealer pays, by item id; absent is dead loss */
   scrapRate: Record<string, number>
   inventoryMetricPicks?: string[]
+
+  /* ------------------------------------------------------------ the floor */
+  products: Product[]
+  outputs: Output[]
+  halts: Halt[]
+  /** absent until the floor rules are agreed; the defaults stand in */
+  floor?: FloorRules
+  /**
+   * Finished goods' journal, in the domain's own shape: output booked in,
+   * dispatch notes out, returns back. A balance is a sum of these, always.
+   */
+  fgMoves: FgMovement[]
+  productionMetricPicks?: string[]
+
+  /* ----------------------------------------------------- the shipping bay */
+  customers: WsCustomer[]
+  carriers: WsCarrier[]
+  customerOrders: CustomerOrder[]
+  dispatchNotes: DispatchNote[]
+  consignments: WsConsignment[]
+  rmas: WsRma[]
+  dispatchRules?: DispatchRules
+  dispatchMetricPicks?: string[]
 }
 
 /**
@@ -781,8 +1000,13 @@ export interface Workspace {
  * before it gets one opening movement, so the journal adds up from the first
  * load. A build from before 7 would read a remnant as cover, and would not
  * know that material sent to a jobworker left a lot rather than a new one.
+ *
+ * 8 opens the floor and the shipping bay: products and their material lists,
+ * a plan on a job, output and halts, finished goods' own journal, customers,
+ * carriers, orders, dispatch notes, consignments and returns. All empty on a
+ * workspace saved before; nothing is derived for them.
  */
-export const SCHEMA = 7
+export const SCHEMA = 8
 
 /** Which company the screens are reading. The sample is never written to. */
 export type WorkspaceMode = 'sample' | 'mine'

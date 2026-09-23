@@ -109,6 +109,8 @@ const IDENTITY: Record<SheetEntity, string> = {
   // never imported — see `importable` — but every list names its identity
   receipt: 'id', challan: 'no',
   rack: 'name', lot: 'item', count: 'on', move: 'on', job: 'no', issue: 'no', loss: 'on', cut: 'no', offcut: 'item',
+  product: 'name', output: 'on', halt: 'on', customer: 'name', carrier: 'name',
+  salesOrder: 'no', dispatchNote: 'no', consignment: 'note', rma: 'no',
 }
 
 /** The second record a row has to resolve, for the lists that name two. */
@@ -150,7 +152,8 @@ function checkFromRow(itemId: string, get: (target: string) => string): CheckInp
  * import into.
  */
 export const importable = (entity: SheetEntity): boolean =>
-  !['receipt', 'challan', 'rack', 'lot', 'count', 'move', 'job', 'issue', 'loss', 'cut', 'offcut'].includes(entity)
+  !['receipt', 'challan', 'rack', 'lot', 'count', 'move', 'job', 'issue', 'loss', 'cut', 'offcut',
+    'product', 'output', 'halt', 'customer', 'carrier', 'salesOrder', 'dispatchNote', 'consignment', 'rma'].includes(entity)
 
 /**
  * Whether a value fits the column it was matched to.

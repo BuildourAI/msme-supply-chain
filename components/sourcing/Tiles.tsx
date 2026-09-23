@@ -43,6 +43,10 @@ const ICON: Record<MetricKey, IconName> = {
   scrap: 'alert',
   dio: 'clock',
   remnants: 'scissors',
+  lineRunsFor: 'clock',
+  jobsStopping: 'alert',
+  attainment: 'activity',
+  firstPass: 'check',
 }
 
 /*

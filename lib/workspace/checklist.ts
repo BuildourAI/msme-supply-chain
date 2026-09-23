@@ -14,6 +14,8 @@ import { quotedItems, unquotedItems } from './bundle'
 import { coveredItems } from './checks'
 import { jobworkers } from './jobwork'
 import { jobWord, openJobs } from './jobs'
+import { floorOf, isPlanned, unplannedJobs } from './plan'
+import { productsWanting } from './products'
 import { unplacedLots } from './racks'
 import type { StageId } from './reveal'
 import type { Workspace } from './types'
@@ -37,6 +39,8 @@ export type StepId =
   | 'checks' | 'jobworkers' | 'gateRules'
   /* the store's own three */
   | 'racks' | 'jobs' | 'storeRules'
+  /* the floor's */
+  | 'products' | 'plan' | 'floorRules'
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
@@ -142,6 +146,34 @@ export const INBOUND_STEPS: Step[] = [
   },
 ]
 
+/** Shared by the store and the floor: a style is what material leaves against, and what the floor makes. */
+const JOBS_STEP: Step = {
+  id: 'jobs',
+  title: 'How material leaves the store',
+  why: 'Nothing leaves without a job, style or order number on the slip — so every metre is somebody’s, and what each one used is a sum, not a guess.',
+  cta: 'Set up job numbers',
+  done: (ws) => ws.jobNumbering !== undefined,
+  summary: (ws) => {
+    const w = jobWord(ws)
+    const open = openJobs(ws).length
+    return `${w.many} numbered ${ws.jobNumbering?.prefix ?? ''}-…${open ? ` · ${open} open` : ''}`
+  },
+}
+
+/** Shared by the floor and the shipping bay: what you make is what you ship. */
+export const PRODUCTS_STEP: Step = {
+  id: 'products',
+  title: 'Your products',
+  why: 'What you make, and what goes into one. A style then only needs a product and a quantity for the floor to know what it needs.',
+  cta: 'Add your products',
+  done: (ws) => (ws.products ?? []).length > 0,
+  summary: (ws) => {
+    const n = (ws.products ?? []).length
+    const want = productsWanting(ws).length
+    return want > 0 ? `${plural(n, 'product')} · ${want} without quantities` : plural(n, 'product')
+  },
+}
+
 /**
  * Setting up the store.
  *
@@ -172,18 +204,7 @@ export const INVENTORY_STEPS: Step[] = [
     },
   },
   byId('stock'),
-  {
-    id: 'jobs',
-    title: 'How material leaves the store',
-    why: 'Nothing leaves without a job, style or order number on the slip — so every metre is somebody’s, and what each one used is a sum, not a guess.',
-    cta: 'Set up job numbers',
-    done: (ws) => ws.jobNumbering !== undefined,
-    summary: (ws) => {
-      const w = jobWord(ws)
-      const open = openJobs(ws).length
-      return `${w.many} numbered ${ws.jobNumbering?.prefix ?? ''}-…${open ? ` · ${open} open` : ''}`
-    },
-  },
+  JOBS_STEP,
   {
     id: 'storeRules',
     title: 'Your store rules',
@@ -195,9 +216,49 @@ export const INVENTORY_STEPS: Step[] = [
   },
 ]
 
+/**
+ * Setting up the floor.
+ *
+ * Materials and job numbers are other stages' own step objects: the floor
+ * makes styles out of the materials sourcing buys, numbered the way the store
+ * issues against them. Its own three are what it makes, the first plan, and
+ * the rules a day's output is judged by.
+ */
+export const PRODUCTION_STEPS: Step[] = [
+  byId('materials'),
+  PRODUCTS_STEP,
+  JOBS_STEP,
+  {
+    id: 'plan',
+    title: 'This week’s plan',
+    why: 'Give a style its product, how many, when it starts and finishes. Line watch then says whether the store can feed it, before the floor finds out.',
+    cta: 'Plan a style',
+    done: (ws) => (ws.jobs ?? []).some((j) => isPlanned(j)),
+    summary: (ws) => {
+      const planned = (ws.jobs ?? []).filter((j) => !j.closedOn && isPlanned(j)).length
+      const not = unplannedJobs(ws).length
+      return `${planned} planned${not ? ` · ${not} open without a plan` : ''}`
+    },
+  },
+  {
+    id: 'floorRules',
+    title: 'Floor rules',
+    why: 'Which days are working days, how far behind the daily target counts as behind, and your reasons for rejecting a piece.',
+    cta: 'Set the floor rules',
+    done: (ws) => ws.drafts['production.rules.agreed'] === true,
+    summary: (ws) => {
+      const f = floorOf(ws)
+      return `${plural(f.workingDays.length, 'working day')} a week · behind past ${f.behindPct}%`
+    },
+  },
+]
+
 /** The set-up list for a stage. A stage with none of its own gets sourcing's. */
 export const stepsFor = (stage: StageId | null | undefined): Step[] =>
-  stage === 'inbound' ? INBOUND_STEPS : stage === 'inventory' ? INVENTORY_STEPS : SOURCING_STEPS
+  stage === 'inbound' ? INBOUND_STEPS
+    : stage === 'inventory' ? INVENTORY_STEPS
+      : stage === 'production' ? PRODUCTION_STEPS
+        : SOURCING_STEPS
 
 export interface Progress {
   steps: { step: Step; done: boolean }[]
@@ -221,4 +282,4 @@ export function progressOf(ws: Workspace, steps: Step[] = SOURCING_STEPS): Progr
 }
 
 export const stepById = (id: StepId): Step =>
-  [...SOURCING_STEPS, ...INBOUND_STEPS, ...INVENTORY_STEPS].find((s) => s.id === id)!
+  [...SOURCING_STEPS, ...INBOUND_STEPS, ...INVENTORY_STEPS, ...PRODUCTION_STEPS].find((s) => s.id === id)!
