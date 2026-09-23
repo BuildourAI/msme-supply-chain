@@ -7,7 +7,8 @@ import { useInbound } from '@/components/inbound/store'
 import { Note } from '@/components/ui/Note'
 import { lakh, longDate } from '@/lib/domain/format'
 import { useWorkspace } from '@/components/workspace/store'
-import { ComingNext } from '@/components/inbound/desk/ComingNext'
+import { Jobwork } from '@/components/inbound/desk/Jobwork'
+import { DeskOnly } from '@/components/sourcing/DeskOnly'
 
 function PageBody() {
   const { challanRows, jobworkTotal, today } = useInbound()
@@ -44,8 +45,5 @@ function PageBody() {
 export default function Page() {
   const { mode, ready } = useWorkspace()
   if (!ready) return <div className="min-h-[50vh]" aria-hidden />
-  return mode === 'mine'
-    ? <ComingNext title="Jobwork" icon="factory"
-        line="Challans out to jobworkers, returns back through the same gate, and a ledger of every movement. It lands after Open orders." />
-    : <PageBody />
+  return mode === 'mine' ? <DeskOnly><Jobwork /></DeskOnly> : <PageBody />
 }

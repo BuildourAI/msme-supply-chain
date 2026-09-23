@@ -9,7 +9,9 @@ import { ReceiveForm } from '@/components/sourcing/ReceiveForm'
 import { GrnDocument } from '@/components/inbound/desk/GrnDocument'
 import { InspectForm } from '@/components/inbound/desk/InspectForm'
 import { AckDialog } from '@/components/inbound/desk/AckDialog'
-import { ExpediteDialog } from '@/components/inbound/desk/ChaseDialog'
+import { ChaseDialog, ExpediteDialog } from '@/components/inbound/desk/ChaseDialog'
+import { CloseChallanDialog, ReturnForm } from '@/components/inbound/desk/JobworkDialogs'
+import { challanRows, type ChallanRow } from '@/lib/workspace/inbound'
 import { PoDocument } from '@/components/sourcing/PoDocument'
 import { boardLines, type BoardLine } from '@/lib/workspace/board'
 import { isOpen } from '@/lib/workspace/receipts'
@@ -48,6 +50,10 @@ function Dashboard() {
   const [noticing, setNoticing] = useState<string | null>(null)
   const [acking, setAcking] = useState<string | null>(null)
   const [chasing, setChasing] = useState<BoardLine | null>(null)
+  const [chasingChallan, setChasingChallan] = useState<ChallanRow | null>(null)
+  const [returning, setReturning] = useState<string | null>(null)
+  const [returned, setReturned] = useState<string | null>(null)
+  const [closing, setClosing] = useState<string | null>(null)
 
   // what just arrived goes straight on to its inspection
   useEffect(() => {
@@ -57,6 +63,14 @@ function Dashboard() {
       .sort((a, b) => b.id.localeCompare(a.id))[0]
     if (made) { setInspecting(made.id); setPending(null) }
   }, [pending, workspace])
+  // and so does what came back from a jobworker
+  useEffect(() => {
+    if (!returned || !workspace) return
+    const made = (workspace.receipts ?? [])
+      .filter((r) => r.challanId === returned && isOpen(r))
+      .sort((a, b) => b.id.localeCompare(a.id))[0]
+    if (made) { setInspecting(made.id); setReturned(null) }
+  }, [returned, workspace])
 
   if (!workspace) return null
   const ws = workspace
@@ -96,7 +110,16 @@ function Dashboard() {
     if (kind === 'chase' && d.refs.orderId) {
       const line = boardLines(ws, today).find((l) => l.order.id === d.refs.orderId)
       if (line) setChasing(line)
+      return
     }
+    const { challanId } = d.refs
+    if (kind === 'chase' && challanId) {
+      const row = challanRows(ws, today).find((r) => r.challan.id === challanId)
+      if (row) setChasingChallan(row)
+      return
+    }
+    if (kind === 'return' && challanId) { setReturning(challanId); return }
+    if (kind === 'close-challan' && challanId) setClosing(challanId)
   }
 
   return (
@@ -138,6 +161,15 @@ function Dashboard() {
       <PoDocument open={noticing !== null} no={noticing} onClose={() => setNoticing(null)} />
       <AckDialog no={acking} onClose={() => setAcking(null)} />
       <ExpediteDialog line={chasing} onClose={() => setChasing(null)} />
+      {chasingChallan && (
+        <ChaseDialog open onClose={() => setChasingChallan(null)}
+          title={`Chase ${chasingChallan.vendor?.name ?? 'the jobworker'} on ${chasingChallan.challan.no}`}
+          vendorId={chasingChallan.challan.vendorId}
+          subject={`Challan ${chasingChallan.challan.no} — balance with you`}
+          text={chasingChallan.chase} />
+      )}
+      <ReturnForm challanId={returning} onClose={() => setReturning(null)} onBooked={(id) => setReturned(id)} />
+      <CloseChallanDialog challanId={closing} onClose={() => setClosing(null)} />
     </div>
   )
 }

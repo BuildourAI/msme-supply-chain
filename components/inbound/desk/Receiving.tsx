@@ -242,7 +242,7 @@ function GateCard({ row, i, onInspect, onDelete }: {
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13.5px] font-bold">{row.item?.name ?? 'Unknown material'}</span>
           <span className="block truncate text-[11.5px] text-ink-2">
-            {num(r.qty, 3)} {uom} from {row.vendor?.name ?? 'Unknown supplier'}
+            {num(r.qty, 3)} {uom} {row.challan ? 'jobwork return from' : 'from'} {row.vendor?.name ?? 'Unknown supplier'}
             {row.against && <> · <span className="mono">{row.against}</span></>}
           </span>
         </span>

@@ -16,7 +16,7 @@ import { boardLines, verdictText } from './board'
 import { syncOrders } from './orders'
 import { orderGroups, orderRows } from './sourcing'
 import { sortDecisions, type Decision } from './decisions'
-import { receiptRow, spikeOf } from './inbound'
+import { challanRows, jobworkerHoldings, receiptRow, spikeOf } from './inbound'
 import { awaitingArrival, closedReceipts, openReceipts } from './receipts'
 import type { Workspace } from './types'
 
@@ -209,6 +209,65 @@ export function inboundDecisionsFor(ws: Workspace, today: string): Decision[] {
       href: '/inbound/orders',
       refs: { orderNo: l.order.no, orderId: l.order.id, vendorId: l.order.vendorId, itemId: l.order.itemId },
       weight: 700 + l.lateBy,
+    })
+  }
+
+  /*
+   * Material out at jobworkers. Past its date it is the worst band — the line
+   * may be waiting on it — and the answer is a chase, or booking in what came
+   * back. Once a challan is settling with material neither back nor explained,
+   * somebody has to close it against a reason. And a jobworker holding more
+   * than the ceiling the owner set is money sitting in somebody else's shed.
+   */
+  for (const r of challanRows(ws, today)) {
+    if (r.challan.status !== 'out') continue
+    const who = r.vendor?.name ?? 'Unknown jobworker'
+    const what = r.item?.name ?? 'Unknown material'
+    if (r.overdue) {
+      const late = r.late.value
+      const out_ = Math.round((r.challan.qtySent - r.acct.returned.value - r.acct.inQc.value) * 1000) / 1000
+      out.push({
+        id: `challan-overdue:${r.challan.id}`,
+        band: 'stops',
+        kind: 'challan-overdue',
+        title: `${r.challan.no} · ${who}`,
+        detail: `${num(out_, 3)} ${r.uom} of ${what} ${late} day${late === 1 ? '' : 's'} past the date they promised`,
+        act: 'chase',
+        actLabel: 'Chase them',
+        alt: { act: 'return', label: 'It came back' },
+        href: '/inbound/jobwork',
+        refs: { challanId: r.challan.id, vendorId: r.challan.vendorId, itemId: r.challan.itemId },
+        weight: 500 + late,
+      })
+    }
+    if (r.acct.settling && r.acct.unaccounted.value > 0 && r.atGate.length === 0) {
+      out.push({
+        id: `challan-unaccounted:${r.challan.id}`,
+        band: 'costs',
+        kind: 'challan-unaccounted',
+        title: `${r.challan.no} · ${who}`,
+        detail: `${num(r.acct.unaccounted.value, 3)} ${r.uom} of ${what} neither back nor explained — ${money(r.valueLost.value)}`,
+        act: 'close-challan',
+        actLabel: 'Settle it',
+        href: '/inbound/jobwork',
+        refs: { challanId: r.challan.id, vendorId: r.challan.vendorId, itemId: r.challan.itemId },
+        weight: 250 + Math.min(199, Math.round(r.valueLost.value / 1000)),
+      })
+    }
+  }
+  for (const h of jobworkerHoldings(ws, today)) {
+    if (!h.over) continue
+    out.push({
+      id: `over-ceiling:${h.vendor.id}`,
+      band: 'costs',
+      kind: 'over-ceiling',
+      title: h.vendor.name,
+      detail: `holding ${money(h.held.value)} of your material — the most you allow one jobworker is ${money(ws.policy.jobworkerExposureCeiling)}`,
+      act: 'open',
+      actLabel: 'Look at it',
+      href: '/inbound/jobwork',
+      refs: { vendorId: h.vendor.id },
+      weight: 180 + Math.min(99, Math.round((h.held.value - ws.policy.jobworkerExposureCeiling) / 10000)),
     })
   }
 

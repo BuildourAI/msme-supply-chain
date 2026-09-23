@@ -492,11 +492,15 @@ export function vendorImpact(ws: Workspace, vendorId: string): DeleteImpact {
   const quotes = ws.quotes.filter((q) => q.vendorId === vendorId).length
   const orders = ws.orders.filter((o) => o.vendorId === vendorId).length
   const asked = ws.rfqs.filter((r) => r.vendorIds.includes(vendorId)).length
+  const receipts = (ws.receipts ?? []).filter((r) => r.vendorId === vendorId).length
+  const challans = (ws.challans ?? []).filter((c) => c.vendorId === vendorId).length
   const losses = [
     rates && `${count(rates, 'rate')} they quoted`,
     quotes && count(quotes, 'quote'),
     orders && count(orders, 'purchase order'),
     asked && `they are on ${count(asked, 'request')}`,
+    receipts && `${count(receipts, 'goods receipt')} from them`,
+    challans && `${count(challans, 'jobwork challan')} — what they still hold stays off your shelf`,
   ].filter(Boolean) as string[]
   return { losses, clean: losses.length === 0 }
 }
@@ -509,12 +513,18 @@ export function itemImpact(ws: Workspace, itemId: string): DeleteImpact {
     (n, q) => n + q.lines.filter((l) => l.itemId === itemId).length, 0,
   )
   const orders = ws.orders.filter((o) => o.itemId === itemId).length
+  const receipts = (ws.receipts ?? []).filter((r) => r.itemId === itemId).length
+  const checks = (ws.specChecks ?? []).filter((c) => c.itemId === itemId).length
+  const challans = (ws.challans ?? []).filter((c) => c.itemId === itemId).length
   const losses = [
     rates && `${count(rates, 'supplier rate')}`,
     lots && `${count(lots, 'stock count')}`,
     rfqs && count(rfqs, 'request'),
     quotes && count(quotes, 'quoted price'),
     orders && count(orders, 'purchase order'),
+    receipts && count(receipts, 'goods receipt'),
+    checks && `${count(checks, 'check')} at the gate`,
+    challans && count(challans, 'jobwork challan'),
   ].filter(Boolean) as string[]
   return { losses, clean: losses.length === 0 }
 }

@@ -8,8 +8,11 @@
  * is for a process, and letting it into the landed-cost ranking would let a
  * galvaniser win a comparison for the steel.
  */
-import type { Vendor } from '@/lib/domain/types'
-import type { Workspace } from './types'
+import type { StockLot, Vendor } from '@/lib/domain/types'
+import { issueId } from './defaults'
+import { arrive } from './receipts'
+import { nextNo } from './sourcing'
+import type { Challan, Workspace } from './types'
 
 /** The owner's word for it, which `STARTER_CATEGORIES` has offered from the start. */
 export const JOBWORKER = 'Jobworker'
@@ -23,3 +26,254 @@ export const jobworkers = (ws: Workspace): Vendor[] =>
 /** Challans still out, for the Jobwork row's badge. */
 export const challansOut = (ws: Workspace) =>
   (ws.challans ?? []).filter((c) => c.status === 'out')
+
+/* ------------------------------------------------------------ the challan -- */
+
+const round3 = (n: number) => Math.round(n * 1000) / 1000
+
+/** Usable stock of a material right now — what can be sent out. */
+export const usableOnHand = (ws: Workspace, itemId: string): number =>
+  round3(ws.stockLots
+    .filter((l) => l.itemId === itemId && l.usability === 'usable')
+    .reduce((a, l) => a + l.qty, 0))
+
+export interface SendOut {
+  vendorId: string
+  itemId: string
+  qty: number
+  sentOn: string
+  dueBack: string
+  /** what comes back per unit sent — 0.95 for cutting, 1.04 for galvanising */
+  expectedYield: number
+  process?: string
+  note?: string
+}
+
+/** Why material cannot go out as described, or null. */
+export function sendOutProblem(ws: Workspace, s: SendOut): string | null {
+  if (!ws.vendors.some((v) => v.id === s.vendorId)) return 'Pick who it is going to.'
+  if (!ws.items.some((i) => i.id === s.itemId)) return 'Pick the material going out.'
+  if (!Number.isFinite(s.qty) || s.qty <= 0) return 'Put in how much is going out.'
+  const have = usableOnHand(ws, s.itemId)
+  if (s.qty > have) return `Only ${have} is usable on the shelf — you cannot send out more than you have.`
+  if (s.sentOn.length !== 10) return 'Put in the day it left.'
+  if (s.dueBack.length !== 10 || s.dueBack < s.sentOn) return 'Put in the day they promised it back, on or after it left.'
+  if (!Number.isFinite(s.expectedYield) || s.expectedYield <= 0 || s.expectedYield > 2) {
+    return 'Put in what should come back per 100 sent, as a percentage.'
+  }
+  return null
+}
+
+/**
+ * Material out of the gate to a jobworker.
+ *
+ * The movement out is a lot of its own — negative, usable, named for the
+ * challan and the jobworker — so every sum of the shelf falls by exactly what
+ * left, the derivation's usable figure lists it as "JW-1 → Shree Laser: −50",
+ * and taking the challan back is removing one lot. Every movement names its
+ * document. Valued at the last purchase price on the day it left (§13-1).
+ */
+export function sendOut(ws: Workspace, s: SendOut): [Workspace, string] {
+  if (sendOutProblem(ws, s)) return [ws, '']
+  const [issued, id] = issueId(ws, 'JW')
+  const no = nextNo('JW', issued.challans ?? [])
+  const vendor = issued.vendors.find((v) => v.id === s.vendorId)
+  const item = issued.items.find((i) => i.id === s.itemId)
+  const challan: Challan = {
+    id, no,
+    vendorId: s.vendorId,
+    itemId: s.itemId,
+    qtySent: s.qty,
+    sentOn: s.sentOn,
+    dueBack: s.dueBack,
+    expectedYield: s.expectedYield,
+    rate: item?.lastPurchaseRate ?? 0,
+    process: s.process?.trim() || undefined,
+    note: s.note?.trim() || undefined,
+    status: 'out',
+  }
+  const lot: StockLot = {
+    id: `LOT-${id}`, itemId: s.itemId, batchNo: `${no} → ${vendor?.name ?? 'jobworker'}`,
+    qty: -s.qty, usability: 'usable',
+  }
+  return [{
+    ...issued,
+    challans: [...(issued.challans ?? []), challan],
+    stockLots: [...issued.stockLots, lot],
+  }, id]
+}
+
+/**
+ * Material back from a jobworker — at the gate, like any delivery.
+ *
+ * It is a receipt against the challan, open until somebody inspects it, and
+ * none of it is usable until then. Nothing bypasses inspection because the
+ * material was ours to begin with.
+ */
+export function bookReturn(
+  ws: Workspace, challanId: string, r: { qty: number; receivedOn: string; note?: string },
+): [Workspace, string] {
+  const challan = (ws.challans ?? []).find((c) => c.id === challanId)
+  if (!challan || challan.status !== 'out' || !(r.qty > 0) || r.receivedOn < challan.sentOn) return [ws, '']
+  return arrive(ws, { challan, qty: r.qty, receivedOn: r.receivedOn, note: r.note })
+}
+
+/**
+ * A new return date, agreed with the jobworker.
+ *
+ * Kept as a line of its own, never written over: a re-agreed date is not an
+ * on-time return, and the jobworker's record has to keep saying so.
+ */
+export function extendDue(
+  ws: Workspace, challanId: string, e: { to: string; reason: string; on: string },
+): Workspace {
+  const c = (ws.challans ?? []).find((x) => x.id === challanId)
+  if (!c || c.status !== 'out' || e.to <= c.dueBack || e.reason.trim().length < 4) return ws
+  return {
+    ...ws,
+    challans: (ws.challans ?? []).map((x) => (x.id !== challanId ? x : {
+      ...x,
+      dueBack: e.to,
+      extensions: [...(x.extensions ?? []), { from: x.dueBack, to: e.to, on: e.on, reason: e.reason.trim() }],
+    })),
+  }
+}
+
+/**
+ * The challan settled, with a written reason.
+ *
+ * What was still unaccounted for is written off — recorded on the challan, not
+ * moved anywhere, because it already left the shelf the day it went out. A
+ * return still at the gate has to be inspected first: closing over it would
+ * write off material that is standing by the door.
+ */
+export function closeChallan(
+  ws: Workspace, challanId: string, c: { reason: string; on: string; unaccounted: number },
+): Workspace {
+  const ch = (ws.challans ?? []).find((x) => x.id === challanId)
+  if (!ch || ch.status !== 'out' || c.reason.trim().length < 4) return ws
+  if ((ws.receipts ?? []).some((r) => r.challanId === challanId && r.status === 'open')) return ws
+  return {
+    ...ws,
+    challans: (ws.challans ?? []).map((x) => (x.id !== challanId ? x : {
+      ...x, status: 'closed' as const, closedOn: c.on, closeReason: c.reason.trim(),
+      writtenOff: round3(Math.max(0, c.unaccounted)),
+    })),
+  }
+}
+
+/** Why a challan cannot be closed yet, or null. */
+export function closeChallanProblem(ws: Workspace, challanId: string, reason: string): string | null {
+  if ((ws.receipts ?? []).some((r) => r.challanId === challanId && r.status === 'open')) {
+    return 'Something from this challan is still at the gate — inspect it first.'
+  }
+  if (reason.trim().length < 4) return 'A challan closes against a written reason.'
+  return null
+}
+
+/**
+ * Taking a challan back — mis-keyed, never sent. Only while nothing has come
+ * back against it: once a return is on record, the challan is history.
+ */
+export function removeChallan(ws: Workspace, challanId: string): Workspace {
+  if ((ws.receipts ?? []).some((r) => r.challanId === challanId)) return ws
+  return {
+    ...ws,
+    challans: (ws.challans ?? []).filter((c) => c.id !== challanId),
+    stockLots: ws.stockLots.filter((l) => l.id !== `LOT-${challanId}`),
+  }
+}
+
+/* ------------------------------------------------------------- the ledger -- */
+
+export type LedgerKind = 'sent' | 'returned' | 'extended' | 'closed'
+
+export interface LedgerEntry {
+  on: string
+  kind: LedgerKind
+  /** the quantity that moved, when something did */
+  qty?: number
+  /** the document it moved on: the challan, or the receipt */
+  doc: string
+  note: string
+  /** what is still out after this line — at the jobworker, or unexplained */
+  stillOut: number
+}
+
+/**
+ * Every movement on one challan, in the order it happened.
+ *
+ * Sent; each return as it came back — "at the gate" until inspected, then
+ * what was accepted and turned back; each date re-agreed; and the close, with
+ * what it wrote off. After every line, what is still out: sent less what has
+ * come back, counted exactly as the five-way split counts it — a return at the
+ * gate in full, an inspected one by what was accepted. Rejected work is held
+ * as non-usable stock and is still owed, so the ledger and the split can never
+ * disagree about the balance. Closing settles it to nothing.
+ */
+export function challanLedger(ws: Workspace, challanId: string): LedgerEntry[] {
+  const c = (ws.challans ?? []).find((x) => x.id === challanId)
+  if (!c) return []
+  const uom = ws.items.find((i) => i.id === c.itemId)?.uom ?? ''
+  const vendor = ws.vendors.find((v) => v.id === c.vendorId)?.name ?? 'the jobworker'
+  const moves: { on: string; order: number; entry: Omit<LedgerEntry, 'stillOut'>; back: number }[] = []
+
+  moves.push({
+    on: c.sentOn, order: 0, back: 0,
+    entry: {
+      on: c.sentOn, kind: 'sent', qty: c.qtySent, doc: c.no,
+      note: `${c.qtySent} ${uom} to ${vendor}${c.process ? ` for ${c.process.toLowerCase()}` : ''}, due back ${
+        c.extensions?.[0]?.from ?? c.dueBack}`,
+    },
+  })
+  for (const r of (ws.receipts ?? []).filter((x) => x.challanId === challanId)) {
+    const open = r.status === 'open'
+    moves.push({
+      // what the five-way split counts as back: all of it while at the gate,
+      // what was accepted once inspected — rejected work is still owed
+      on: r.receivedOn, order: 1, back: open ? r.qty : r.accepted,
+      entry: {
+        on: r.receivedOn, kind: 'returned', qty: r.qty, doc: r.id,
+        note: open ? `${r.qty} ${uom} back — at the gate, not yet inspected`
+          : `${r.qty} ${uom} back — accepted ${r.accepted}${r.rejected > 0
+            ? `, rejected ${r.rejected} (held as non-usable, still owed)` : ''}`,
+      },
+    })
+  }
+  for (const e of c.extensions ?? []) {
+    moves.push({
+      on: e.on, order: 2, back: 0,
+      entry: { on: e.on, kind: 'extended', doc: c.no, note: `due back ${e.from} → ${e.to} — ${e.reason}` },
+    })
+  }
+  if (c.status === 'closed') {
+    moves.push({
+      on: c.closedOn ?? c.sentOn, order: 3, back: c.writtenOff ?? 0,
+      entry: {
+        on: c.closedOn ?? c.sentOn, kind: 'closed', qty: c.writtenOff || undefined, doc: c.no,
+        note: `closed — ${c.closeReason ?? ''}${(c.writtenOff ?? 0) > 0 ? ` · ${c.writtenOff} ${uom} written off` : ''}`,
+      },
+    })
+  }
+
+  moves.sort((a, b) => a.on.localeCompare(b.on) || a.order - b.order)
+  let out = c.qtySent
+  return moves.map((m) => {
+    if (m.entry.kind === 'returned') out = round3(out - m.back)
+    // closing settles the rest: process loss and the write-off, and nothing is out after it
+    if (m.entry.kind === 'closed') out = 0
+    return { ...m.entry, stillOut: Math.max(0, out) }
+  })
+}
+
+/** Every movement across every challan, newest first — the book, not one page of it. */
+export function registerLedger(ws: Workspace): (LedgerEntry & { challanNo: string; jobworker: string; item: string })[] {
+  return (ws.challans ?? [])
+    .flatMap((c) => challanLedger(ws, c.id).map((e) => ({
+      ...e,
+      challanNo: c.no,
+      jobworker: ws.vendors.find((v) => v.id === c.vendorId)?.name ?? 'Unknown jobworker',
+      item: ws.items.find((i) => i.id === c.itemId)?.name ?? 'Unknown material',
+    })))
+    .sort((a, b) => b.on.localeCompare(a.on))
+}

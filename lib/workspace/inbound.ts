@@ -22,9 +22,10 @@
  *    derivation cites; it enters no arithmetic.
  */
 import {
-  challanAccounting, failedChecks, inspectionComplete, isRejectionSpike, issuableFrom,
-  qcAgeDays, qcState, quantityGap, rejectionPct, unacknowledgedExposure, valueAt, valueHeldInQc,
-  type QcState,
+  actualYield, allowedLoss, challanAccounting, chaseDraft, daysLate, expectedReturn, failedChecks,
+  inspectionComplete, isRejectionSpike, issuableFrom, jobworkerExposure, qcAgeDays, qcState,
+  quantityGap, rejectionPct, unacknowledgedExposure, valueAt, valueHeldInQc,
+  type Accounting, type QcState,
 } from '@/lib/domain/inbound'
 import type {
   CheckResult, Derived, Grn, Item, JobworkChallan, PoSync, SpecCheck, Vendor,
@@ -245,4 +246,94 @@ export function spikeOf(ws: Workspace, r: GoodsReceipt): { spike: boolean; thisP
   const before = r.orderId ? measuredRejectionPct(ws, r.vendorId, r.itemId, r.id) : null
   if (before === null) return { spike: false, thisPct, trailingPct: 0 }
   return { spike: !isOpen(r) && isRejectionSpike(thisPct, before, ws.policy), thisPct, trailingPct: before }
+}
+
+/* ---------------------------------------------------- jobwork, as rows -- */
+
+/**
+ * One challan, with everything the register says about it: the five-way
+ * split, how late it is, what it is worth still out and what went missing, the
+ * yield so far and the chase note. The domain's INB-03 arithmetic, over the
+ * owner's challan — so the split sums to what was sent, always.
+ */
+export interface ChallanRow {
+  challan: Challan
+  item?: Item
+  vendor?: Vendor
+  uom: string
+  jc: JobworkChallan
+  acct: Accounting
+  expected: Derived
+  allowed: Derived
+  late: Derived
+  /** out, and past its date by more than the grace the gate rules allow */
+  overdue: boolean
+  valueOut: Derived
+  valueLost: Derived
+  yielded: Derived
+  /** returns still at the gate — the challan cannot close over them */
+  atGate: GoodsReceipt[]
+  chase: string
+}
+
+export function challanRow(ws: Workspace, c: Challan, today: string, grns = toGrns(ws)): ChallanRow {
+  const jc = toChallan(ws, c, today)
+  const acct = challanAccounting(jc, grns, ws.policy)
+  const late = daysLate(jc)
+  const back = acct.returned.value + acct.inQc.value
+  return {
+    challan: c,
+    item: ws.items.find((i) => i.id === c.itemId),
+    vendor: ws.vendors.find((v) => v.id === c.vendorId),
+    uom: jc.uom,
+    jc,
+    acct,
+    expected: expectedReturn(jc),
+    allowed: allowedLoss(jc),
+    late,
+    overdue: c.status === 'out' && late.value > ws.policy.jobworkGraceDays,
+    valueOut: valueAt(acct.atVendor.value, c.rate, jc.uom, 'Value with the jobworker'),
+    valueLost: valueAt(acct.unaccounted.value, c.rate, jc.uom, 'Value unaccounted'),
+    yielded: actualYield(jc, back),
+    atGate: (ws.receipts ?? []).filter((r) => r.challanId === c.id && isOpen(r)),
+    // everything not back, including what the process may have consumed — the
+    // jobworker has not declared any of it as scrap yet
+    chase: chaseDraft(jc, Math.round((c.qtySent - back) * 1000) / 1000, late.value),
+  }
+}
+
+/** Out first — overdue at the top — then everything closed, newest first. */
+export function challanRows(ws: Workspace, today: string): ChallanRow[] {
+  const grns = toGrns(ws)
+  const rows = (ws.challans ?? []).map((c) => challanRow(ws, c, today, grns))
+  const out = rows.filter((r) => r.challan.status === 'out')
+    .sort((a, b) => b.late.value - a.late.value || a.challan.sentOn.localeCompare(b.challan.sentOn))
+  const closed = rows.filter((r) => r.challan.status === 'closed')
+    .sort((a, b) => (b.challan.closedOn ?? '').localeCompare(a.challan.closedOn ?? ''))
+  return [...out, ...closed]
+}
+
+/** What each jobworker is holding, against the most the gate rules allow one to hold. */
+export interface JobworkerHolding {
+  vendor: Vendor
+  held: Derived
+  over: boolean
+  unaccounted: number
+}
+
+export function jobworkerHoldings(ws: Workspace, today: string): JobworkerHolding[] {
+  const rows = challanRows(ws, today)
+  const ids = [...new Set(rows.filter((r) => r.challan.status === 'out').map((r) => r.challan.vendorId))]
+  return ids.map((id) => {
+    const vendor = ws.vendors.find((v) => v.id === id) ?? { id, name: 'Unknown jobworker', paymentTermsDays: 0 }
+    const held = jobworkerExposure(vendor.name,
+      rows.map((r) => ({ challan: r.jc, balance: r.acct.atVendor.value })))
+    return {
+      vendor,
+      held,
+      over: held.value > ws.policy.jobworkerExposureCeiling,
+      unaccounted: Math.round(rows.filter((r) => r.challan.vendorId === id)
+        .reduce((a, r) => a + r.valueLost.value, 0) * 100) / 100,
+    }
+  }).sort((a, b) => b.held.value - a.held.value)
 }
