@@ -20,6 +20,10 @@ import { recordAccuracy, isCountOverTolerance } from '@/lib/domain/inventory'
 import type { Item, ItemClass, Vendor } from '@/lib/domain/types'
 import { atJobworkersValue, qcHeld, unackedExposure } from './inbound'
 import { coverLots, isPhysical, lotRows } from './ledger'
+import { netLossOf, scrapRows } from './losses'
+import { daysInventoryOutstanding } from '@/lib/domain/exec'
+import { buildRows } from '@/lib/domain/derive'
+import { bundleFor } from './bundle'
 import { closedReceipts, openReceipts, receiptsFor } from './receipts'
 import { expired } from './sourcing'
 import type { Workspace } from './types'
@@ -81,7 +85,7 @@ export type MetricKey =
   /* the gate's */
   | 'qcHeld' | 'inspectedOnTime' | 'atJobworkers' | 'unacked'
   /* the store's */
-  | 'stockValue' | 'unconfirmed' | 'heldStock' | 'accuracy'
+  | 'stockValue' | 'unconfirmed' | 'heldStock' | 'accuracy' | 'netLoss' | 'scrap' | 'dio'
 
 /** The desks that have a dashboard of figures. */
 export type MetricStage = 'sourcing' | 'inbound' | 'inventory'
@@ -100,7 +104,7 @@ export const STAGE_METRICS: Record<MetricStage, MetricKey[]> = {
     'singleSource', 'concentration', 'priceMoves', 'outstanding',
   ],
   inbound: ['qcHeld', 'inspectedOnTime', 'defects', 'onTime', 'unacked', 'atJobworkers', 'lead'],
-  inventory: ['stockValue', 'unconfirmed', 'accuracy', 'heldStock'],
+  inventory: ['stockValue', 'unconfirmed', 'accuracy', 'heldStock', 'netLoss', 'scrap', 'dio'],
 }
 
 /**
@@ -120,7 +124,7 @@ export const INBOUND_PICKS: MetricKey[] = [
 ]
 
 /** The store's, before anybody has chosen: what it is worth, and whether the book can be believed. */
-export const INVENTORY_PICKS: MetricKey[] = ['stockValue', 'unconfirmed', 'accuracy', 'heldStock']
+export const INVENTORY_PICKS: MetricKey[] = ['stockValue', 'unconfirmed', 'accuracy', 'heldStock', 'netLoss', 'scrap']
 
 export const DEFAULTS_FOR: Record<MetricStage, MetricKey[]> = {
   sourcing: DEFAULT_PICKS,
@@ -146,6 +150,9 @@ export const METRIC_LABEL: Record<MetricKey, string> = {
   unconfirmed: 'Not counted in time',
   heldStock: 'Held, not usable',
   accuracy: 'Record accuracy',
+  netLoss: 'Net loss',
+  scrap: 'Scrap against target',
+  dio: 'Days of stock',
 }
 
 /** One line each, for the dialog where the owner picks. */
@@ -167,6 +174,9 @@ export const METRIC_WHY: Record<MetricKey, string> = {
   unconfirmed: 'Stock nobody has counted within its class’s counting cadence — not wrong, unverified.',
   heldStock: 'Stock on the premises that cannot be used: on hold, damaged, expired.',
   accuracy: 'How often the book is right when somebody counts — inside the tolerance for its class.',
+  netLoss: 'What material lost this month cost, less what its scrap fetched.',
+  scrap: 'Scrap on the floor as a share of what was issued, for the material furthest over its target.',
+  dio: 'How many days the usable stock would last at the rate it is used — money sitting on the shelf.',
 }
 
 /* ------------------------------------------------------------- the maths -- */
@@ -582,6 +592,15 @@ function storeMetrics(
     .sort((a, b) => a.on.localeCompare(b.on) || a.id.localeCompare(b.id))
   const acc = recordAccuracy(counts.map((count) => ({ count, cls: clsOf(count.itemId) })), ws.policy)
 
+  const month = (today || '').slice(0, 7)
+  const monthLosses = month ? (ws.losses ?? []).filter((l) => l.on.slice(0, 7) === month) : []
+  const net = netLossOf(ws, monthLosses)
+  const gross = monthLosses.reduce((a, l) => a + l.qty * rate(l.itemId), 0)
+  const scraps = month ? scrapRows(ws, month).filter((r) => r.issued > 0) : []
+  const worst = scraps.sort((a, b) => (b.pct.value - b.target) - (a.pct.value - a.target))[0]
+  const dio = daysInventoryOutstanding(today ? buildRows(bundleFor(ws, today), ws.policy) : [])
+  const burn = ws.items.reduce((a, i) => a + i.avgDailyConsumption * i.lastPurchaseRate, 0)
+
   return [
     lots.length > 0 && value > 0
       ? {
@@ -634,6 +653,37 @@ function storeMetrics(
         chart: held.length > 0 ? { kind: 'pips', on: held.length, of: lots.length } : undefined,
       }
       : nothing('heldStock', 'Nothing counted yet', 'needs stock counted onto the book'),
+
+    monthLosses.length > 0
+      ? {
+        key: 'netLoss', label: METRIC_LABEL.netLoss, value: money(net.value),
+        sub: `this month, on ${monthLosses.length} loss record${monthLosses.length === 1 ? '' : 's'}`,
+        tone: net.value > 0 ? 'warn' : 'good', measured: true, href: '/inventory/wastage',
+        how: 'Σ qty × last purchase rate − what the scrap fetched (the estimate, until it is sold)',
+        chart: gross > 0 ? { kind: 'split', good: Math.max(0, gross - net.value), bad: net.value } : undefined,
+      }
+      : nothing('netLoss', 'No loss this month', 'a loss is recorded by a count, a write-off, wastage on a job or a jobworker'),
+
+    worst
+      ? {
+        key: 'scrap', label: METRIC_LABEL.scrap, value: pct(worst.pct.value),
+        sub: `${worst.item.name} · target ${worst.target}%`,
+        tone: worst.over ? 'critical' : worst.pct.value > worst.target ? 'warn' : 'good',
+        measured: true, href: '/inventory/wastage',
+        how: 'floor scrap ÷ material issued this month, for the material furthest over its class target',
+        chart: { kind: 'ring', pct: Math.min(100, worst.pct.value) },
+      }
+      : nothing('scrap', 'Nothing issued this month', 'needs material issued to a job, and wastage recorded against it'),
+
+    burn > 0 && value > 0
+      ? {
+        key: 'dio', label: METRIC_LABEL.dio, value: `${dio.d.value} days`,
+        sub: 'of usable stock at the rate it is used',
+        tone: dio.d.value <= 30 ? 'good' : dio.d.value <= 60 ? 'warn' : 'critical',
+        measured: true, href: '/inventory/ledger',
+        how: 'Σ usable × last price ÷ Σ daily use × last price — raw material only, remnants and held stock out',
+      }
+      : nothing('dio', 'Not enough to say', 'needs usable stock with a price, and a daily use on its material'),
   ]
 }
 

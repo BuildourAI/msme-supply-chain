@@ -21,6 +21,7 @@ import { inventoryOpenCount } from './inventory-decisions'
 import { openVariances } from './counting'
 import { jobWordCap, openJobs } from './jobs'
 import { lotRows } from './ledger'
+import { unsoldPast } from './losses'
 import { unplacedLots } from './racks'
 import { challansOut } from './jobwork'
 import { awaitingAckNos } from './orders'
@@ -201,6 +202,8 @@ export function inventoryNav(ws: Workspace, today = ''): NavRow[] {
     { label: 'Stock ledger', href: '/inventory/ledger', icon: 'boxes', badge: count(due) },
     // the owner's own word — Styles, Jobs, Orders — with how many are open
     { label: jobWordCap(ws).many, href: '/inventory/issues', icon: 'factory', badge: count(openJobs(ws).length) },
+    // scrap booked as money and never collected: the one number here that is owed to you
+    { label: 'Wastage & loss', href: '/inventory/wastage', icon: 'alert', badge: count(today ? unsoldPast(ws, today).length : 0) },
     { label: 'Racks', href: '/inventory/racks', icon: 'columns', badge: count(unplacedLots(ws).length), tucked: true },
   ]
 }

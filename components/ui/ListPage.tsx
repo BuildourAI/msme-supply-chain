@@ -94,7 +94,8 @@ export function ListPage<T>({
               : `${total} ${total === 1 ? noun : `${noun}s`}`}
           </p>
         </div>
-        <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
+        {/* may wrap: four tools and a long action do not fit a phone on one line */}
+        <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">
           {tools}
           {action && (
             <button type="button" onClick={action.onClick}

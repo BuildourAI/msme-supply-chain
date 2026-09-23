@@ -39,6 +39,9 @@ const ICON: Record<MetricKey, IconName> = {
   unconfirmed: 'hash',
   heldStock: 'tray',
   accuracy: 'check',
+  netLoss: 'cash',
+  scrap: 'alert',
+  dio: 'clock',
 }
 
 /*

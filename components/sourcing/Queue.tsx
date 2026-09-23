@@ -123,6 +123,8 @@ const KIND: Record<DecisionKind, IconName> = {
   'negative-stock': 'alert',
   'count-variance': 'scale',
   'held-long': 'tray',
+  'scrap-unsold': 'cash',
+  'scrap-over': 'alert',
 }
 
 export function Queue({ rows, berths, onAct, showAll, onShowAll, clear }: {

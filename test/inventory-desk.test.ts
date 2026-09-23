@@ -115,7 +115,7 @@ describe('the store\'s rail', () => {
 
   it('keeps racks under More, and badges only work waiting', () => {
     const rows = inventoryNav(set(), TODAY)
-    expect(rows.map((r) => r.label)).toEqual(['Dashboard', 'Stock ledger', 'Jobs', 'Racks'])
+    expect(rows.map((r) => r.label)).toEqual(['Dashboard', 'Stock ledger', 'Jobs', 'Wastage & loss', 'Racks'])
     expect(rows.filter((r) => r.tucked).map((r) => r.label)).toEqual(['Racks'])
     expect(rows.every((r) => r.badge === undefined)).toBe(true)
     expect(navFor('inventory', set(), TODAY)).toEqual(rows)
@@ -445,7 +445,7 @@ describe('the store\'s queue', () => {
 describe('the store\'s figures', () => {
   it('are unmeasured on day one, and say what they wait for', () => {
     const m = pickedMetrics(set(), TODAY, 'inventory')
-    expect(m.map((x) => x.key)).toEqual(['stockValue', 'unconfirmed', 'accuracy', 'heldStock'])
+    expect(m.map((x) => x.key)).toEqual(['stockValue', 'unconfirmed', 'accuracy', 'heldStock', 'netLoss', 'scrap'])
     expect(m.every((x) => !x.measured)).toBe(true)
   })
 

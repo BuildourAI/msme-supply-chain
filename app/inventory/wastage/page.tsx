@@ -6,7 +6,9 @@ import { LossLedger, LossSummary, ScrapVsTarget } from '@/components/inventory/W
 import { useInventory } from '@/components/inventory/store'
 import { Note } from '@/components/ui/Note'
 import { lakh, longDate } from '@/lib/domain/format'
-import { StageGate } from '@/components/onboard/StageGate'
+import { useWorkspace } from '@/components/workspace/store'
+import { DeskOnly } from '@/components/sourcing/DeskOnly'
+import { Wastage } from '@/components/inventory/desk/Wastage'
 
 function PageBody() {
   const { netLoss, scrapRows, today } = useInventory()
@@ -37,6 +39,14 @@ function PageBody() {
   )
 }
 
+/**
+ * One route, two companies. The sample keeps its worked example; the owner
+ * gets their own loss ledger, which reads their workspace and nothing else.
+ */
 export default function Page() {
-  return <StageGate sample="the loss ledger" shows="every loss by cause, net of what scrap fetched"><PageBody /></StageGate>
+  const { mode, ready } = useWorkspace()
+  if (!ready) return <div className="min-h-[50vh]" aria-hidden />
+  return mode === 'mine'
+    ? <DeskOnly><Wastage /></DeskOnly>
+    : <PageBody />
 }

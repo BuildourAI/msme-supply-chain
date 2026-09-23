@@ -370,6 +370,7 @@ function migrate(raw: Partial<Workspace>): Workspace {
       move: view(views.move),
       job: view(views.job),
       issue: view(views.issue),
+      loss: view(views.loss),
     },
     vendorContact: map(raw.vendorContact),
     /*

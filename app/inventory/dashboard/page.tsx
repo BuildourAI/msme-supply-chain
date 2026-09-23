@@ -11,6 +11,8 @@ import { inFlight } from '@/lib/workspace/flight'
 import { inventoryDecisionsFor } from '@/lib/workspace/inventory-decisions'
 import { pickedMetrics } from '@/lib/workspace/metrics'
 import { varianceNotedKey } from '@/lib/workspace/counting'
+import { noSale, scrapNotedKey } from '@/lib/workspace/losses'
+import { SellScrapDialog } from '@/components/inventory/desk/Wastage'
 import { CountDialog, CountSheetDialog, LotStateDialog } from '@/components/inventory/desk/LedgerDialogs'
 
 /**
@@ -33,6 +35,7 @@ function Dashboard() {
   const [counting, setCounting] = useState<string | null>(null)
   const [walking, setWalking] = useState<{ rackId?: string; itemId?: string } | null>(null)
   const [stating, setStating] = useState<{ lotId: string; mode: 'release' | 'write-off' } | null>(null)
+  const [selling, setSelling] = useState<string | null>(null)
 
   if (!workspace) return null
   const ws = workspace
@@ -54,7 +57,13 @@ function Dashboard() {
       update((w) => ({ ...w, drafts: { ...w.drafts, [varianceNotedKey(countId)]: true } }))
       return
     }
-    if ((kind === 'write-off' || kind === 'release') && lotId) setStating({ lotId, mode: kind })
+    if ((kind === 'write-off' || kind === 'release') && lotId) { setStating({ lotId, mode: kind }); return }
+    const { lossId } = d.refs
+    if (kind === 'sell' && lossId) { setSelling(lossId); return }
+    if (kind === 'no-sale' && lossId) { update((w) => noSale(w, lossId, today)); return }
+    if (kind === 'keep' && d.kind === 'scrap-over' && itemId) {
+      update((w) => ({ ...w, drafts: { ...w.drafts, [scrapNotedKey(itemId, today.slice(0, 7))]: true } }))
+    }
   }
 
   return (
@@ -91,6 +100,7 @@ function Dashboard() {
       <CountDialog lotId={counting} onClose={() => setCounting(null)} />
       <CountSheetDialog scope={walking} onClose={() => setWalking(null)} />
       <LotStateDialog lotId={stating?.lotId ?? null} mode={stating?.mode ?? 'release'} onClose={() => setStating(null)} />
+      <SellScrapDialog lossId={selling} onClose={() => setSelling(null)} />
     </div>
   )
 }

@@ -154,18 +154,35 @@ export function extendDue(
  * write off material that is standing by the door.
  */
 export function closeChallan(
-  ws: Workspace, challanId: string, c: { reason: string; on: string; unaccounted: number },
+  ws: Workspace, challanId: string, c: { reason: string; on: string; unaccounted: number; actor?: string },
 ): Workspace {
   const ch = (ws.challans ?? []).find((x) => x.id === challanId)
   if (!ch || ch.status !== 'out' || c.reason.trim().length < 4) return ws
   if ((ws.receipts ?? []).some((r) => r.challanId === challanId && r.status === 'open')) return ws
-  return {
+  const writtenOff = round3(Math.max(0, c.unaccounted))
+  let w: Workspace = {
     ...ws,
     challans: (ws.challans ?? []).map((x) => (x.id !== challanId ? x : {
-      ...x, status: 'closed' as const, closedOn: c.on, closeReason: c.reason.trim(),
-      writtenOff: round3(Math.max(0, c.unaccounted)),
+      ...x, status: 'closed' as const, closedOn: c.on, closeReason: c.reason.trim(), writtenOff,
     })),
   }
+  /*
+   * What never came back is a loss with a cause — consumed at the jobworker,
+   * past what the process allowed. No movement: it left the shelf the day it
+   * went out, and the challan's own movement already says so.
+   */
+  if (writtenOff > 0) {
+    const [issued, lossId] = issueId(w, 'LS')
+    w = {
+      ...issued,
+      losses: [...(issued.losses ?? []), {
+        id: lossId, on: c.on, itemId: ch.itemId, qty: writtenOff, cause: 'jobwork_loss',
+        source: 'challan', sourceRef: ch.no, recoveryRate: 0, actor: c.actor ?? '',
+        note: c.reason.trim(),
+      }],
+    }
+  }
+  return w
 }
 
 /** Why a challan cannot be closed yet, or null. */
@@ -190,7 +207,11 @@ export function removeChallan(ws: Workspace, challanId: string): Workspace {
     reverse(ws, (m) => m.source === 'challan' && m.sourceRef === c.no),
     (l) => l.id === `LOT-${challanId}`,
   )
-  return { ...w, challans: (w.challans ?? []).filter((x) => x.id !== challanId) }
+  return {
+    ...w,
+    challans: (w.challans ?? []).filter((x) => x.id !== challanId),
+    losses: (w.losses ?? []).filter((l) => !(l.source === 'challan' && l.sourceRef === c.no)),
+  }
 }
 
 /* ------------------------------------------------------------- the ledger -- */

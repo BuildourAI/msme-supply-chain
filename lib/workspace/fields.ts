@@ -250,6 +250,18 @@ export const BUILTIN: Record<SheetEntity, BuiltinColumn[]> = {
     { key: 'lots', label: 'Lots', derived: true },
     { key: 'takenBy', label: 'Taken by', derived: true },
   ],
+  /* every loss is posted by the event it came of, so nothing here imports */
+  loss: [
+    { key: 'on', label: 'Date', identity: true, derived: true },
+    { key: 'cause', label: 'Cause', derived: true },
+    { key: 'item', label: 'Material', derived: true },
+    { key: 'qty', label: 'Lost', derived: true },
+    { key: 'doc', label: 'Document', derived: true },
+    { key: 'job', label: 'Job', derived: true },
+    { key: 'cost', label: 'Cost', derived: true },
+    { key: 'recovery', label: 'Recovery', derived: true },
+    { key: 'note', label: 'Note', derived: true },
+  ],
 }
 
 export const EMPTY_VIEW: TableView = { order: [], hidden: [], labels: {} }
@@ -269,6 +281,7 @@ export const EMPTY_VIEWS: Record<SheetEntity, TableView> = {
   move: EMPTY_VIEW,
   job: EMPTY_VIEW,
   issue: EMPTY_VIEW,
+  loss: EMPTY_VIEW,
 }
 
 /**
@@ -553,6 +566,7 @@ export function pruneCustom(ws: Workspace): Workspace {
     ...(ws.moves ?? []).map((m) => m.id),
     ...(ws.jobs ?? []).map((j) => j.id),
     ...(ws.issues ?? []).map((s) => s.id),
+    ...(ws.losses ?? []).map((l) => l.id),
   ])
   const custom: Record<string, Record<string, string>> = {}
   for (const [id, row] of Object.entries(ws.custom ?? {})) {

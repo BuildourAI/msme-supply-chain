@@ -493,7 +493,7 @@ export type SheetEntity =
   /** the inbound desk's three lists */
   | 'check' | 'receipt' | 'challan'
   /** the store's */
-  | 'rack' | 'lot' | 'count' | 'move' | 'job' | 'issue'
+  | 'rack' | 'lot' | 'count' | 'move' | 'job' | 'issue' | 'loss'
 
 export interface FieldDef {
   id: string

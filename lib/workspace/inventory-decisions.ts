@@ -14,6 +14,7 @@ import { num } from '@/lib/domain/format'
 import { openVariances } from './counting'
 import { sortDecisions, type Decision } from './decisions'
 import { STATE_WORD, lotRows, round3, type LotRow } from './ledger'
+import { scrapRows, unsoldPast } from './losses'
 import { unplacedLots } from './racks'
 import type { Workspace } from './types'
 
@@ -142,6 +143,43 @@ export function inventoryDecisionsFor(ws: Workspace, today: string): Decision[] 
       href: `/inventory/ledger?item=${r.lot.itemId}`,
       refs: { lotId: r.lot.id, itemId: r.lot.itemId },
       weight: days,
+    })
+  }
+
+  /* Scrap booked as money and never collected: owed by a dealer, not in the bank. */
+  for (const r of unsoldPast(ws, today)) {
+    out.push({
+      id: `scrap-unsold:${r.loss.id}`,
+      band: 'costs',
+      kind: 'scrap-unsold',
+      title: `Scrap from ${r.loss.sourceRef} unsold for ${r.age} days`,
+      detail: `${num(r.loss.qty, 3)} ${r.uom} of ${r.item?.name ?? 'material'}, booked at ₹${Math.round(r.recovery.value).toLocaleString('en-IN')}. Past ${
+        ws.policy.scrapUnrealisedDays} days it is recovery on paper — sell it, or say nobody will.`,
+      act: 'sell',
+      actLabel: 'Record the sale',
+      alt: { act: 'no-sale', label: 'No sale' },
+      href: '/inventory/wastage',
+      refs: { lossId: r.loss.id, itemId: r.loss.itemId },
+      weight: r.age,
+    })
+  }
+
+  /* Scrap running over target this month — a pattern, not a bad lay. */
+  const month = today.slice(0, 7)
+  for (const r of scrapRows(ws, month)) {
+    if (!r.over || r.noted) continue
+    out.push({
+      id: `scrap-over:${r.item.id}:${month}`,
+      band: 'costs',
+      kind: 'scrap-over',
+      title: `Scrap on ${r.item.name} ran ${r.pct.value}% this month`,
+      detail: `${num(r.lost, 3)} ${r.item.uom} lost of ${num(r.issued, 3)} issued, against a target of ${r.target}% for class ${
+        r.cls} (and ${ws.policy.scrapTolerancePct} points' margin). Net ₹${Math.round(r.net).toLocaleString('en-IN')}.`,
+      act: 'keep',
+      actLabel: 'Noted',
+      href: '/inventory/wastage',
+      refs: { itemId: r.item.id },
+      weight: r.pct.value - r.target,
     })
   }
 

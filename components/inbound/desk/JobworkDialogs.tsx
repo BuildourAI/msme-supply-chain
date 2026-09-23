@@ -278,7 +278,7 @@ export function ExtendDueDialog({ challanId, onClose }: { challanId: string | nu
  * explained by the process is written off, by name, with the reason.
  */
 export function CloseChallanDialog({ challanId, onClose }: { challanId: string | null; onClose: () => void }) {
-  const { workspace, update, today } = useWorkspace()
+  const { workspace, update, today, session } = useWorkspace()
   const [reason, setReason] = useState('')
   const [tried, setTried] = useState(false)
   useEffect(() => { setReason(''); setTried(false) }, [challanId])
@@ -295,7 +295,7 @@ export function CloseChallanDialog({ challanId, onClose }: { challanId: string |
   const save = () => {
     setTried(true)
     if (problem) return
-    update((w) => closeChallan(w, c.id, { reason, on: today, unaccounted: lost }))
+    update((w) => closeChallan(w, c.id, { reason, on: today, unaccounted: lost, actor: session.actor }))
     onClose()
   }
 

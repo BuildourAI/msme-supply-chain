@@ -68,6 +68,8 @@ export type Act =
   | 'count'         // count a lot, or walk a rack
   | 'write-off'     // take held stock off the book, with a reason
   | 'release'       // held stock is fine after all
+  | 'sell'          // the scrap was sold — say for what
+  | 'no-sale'       // nobody will buy it
 
 export type DecisionKind =
   | 'at-risk' | 'late' | 'unsourced'
@@ -79,6 +81,7 @@ export type DecisionKind =
   | 'challan-overdue' | 'challan-unaccounted' | 'over-ceiling'
   /* the store's — see `inventory-decisions.ts` */
   | 'count-due' | 'no-rack' | 'negative-stock' | 'count-variance' | 'held-long'
+  | 'scrap-unsold' | 'scrap-over'
 
 export interface Decision {
   /** stable across renders, so a list key is not an index */

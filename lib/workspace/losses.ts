@@ -7,9 +7,14 @@
  * count the same metre twice. That is the domain's rule (`CAUSE_MOVES_STOCK`),
  * kept here.
  */
+import { daysBetween } from '@/lib/domain/calc'
+import {
+  lossByCause, lossValue, netLoss, overScrapTarget, realisedValue, recoveryValue, scrapPct,
+  unrealisedRecovery,
+} from '@/lib/domain/inventory'
+import type { Derived, Item, ItemClass, LossCause, Usability } from '@/lib/domain/types'
 import { issueId } from './defaults'
 import { lotOf, post, round3 } from './ledger'
-import type { Usability } from '@/lib/domain/types'
 import type { Workspace, WsLoss } from './types'
 
 /** ₹ per unit a scrap dealer pays for this material; absent is dead loss. */
@@ -82,4 +87,135 @@ export function setLotState(
       state: { from: lot.usability, to, note: reason.trim() || undefined },
     }],
   }
+}
+
+/* ------------------------------------------------------------- settling -- */
+
+export const scrapNotedKey = (itemId: string, month: string) => `inventory.scrapNoted.${itemId}.${month}`
+
+export function sellProblem(ws: Workspace, lossId: string, realised: number): string | null {
+  const l = (ws.losses ?? []).find((x) => x.id === lossId)
+  if (!l) return 'That loss is not on the ledger.'
+  if (l.soldOn || l.noSaleOn) return 'It is already settled.'
+  if (!Number.isFinite(realised) || realised < 0) return 'Put in what the dealer actually paid, in rupees.'
+  return null
+}
+
+/**
+ * The scrap sold, for what it actually fetched — typed in, not the booked
+ * rate. Net loss then counts the money that arrived.
+ */
+export function sellScrap(ws: Workspace, lossId: string, s: { on: string; realised: number }): Workspace {
+  if (sellProblem(ws, lossId, s.realised)) return ws
+  return {
+    ...ws,
+    losses: (ws.losses ?? []).map((l) => (l.id !== lossId ? l
+      : { ...l, soldOn: s.on, realised: Math.round(s.realised * 100) / 100 })),
+  }
+}
+
+/** Nobody bought it: the hoped-for recovery becomes a decided dead loss. */
+export function noSale(ws: Workspace, lossId: string, on: string): Workspace {
+  const l = (ws.losses ?? []).find((x) => x.id === lossId)
+  if (!l || l.soldOn || l.noSaleOn) return ws
+  return { ...ws, losses: (ws.losses ?? []).map((x) => (x.id !== lossId ? x : { ...x, noSaleOn: on })) }
+}
+
+/* --------------------------------------------------------------- reading -- */
+
+export type LossState = 'dead' | 'owed' | 'sold' | 'no_sale'
+
+export interface LossRow {
+  loss: WsLoss
+  item?: Item
+  uom: string
+  rate: number
+  cost: Derived
+  recovery: Derived
+  realised: Derived
+  state: LossState
+  job?: string
+  /** days since it was booked, for scrap still in the bin */
+  age: number
+}
+
+const stateOf = (l: WsLoss): LossState => (l.soldOn ? 'sold' : l.noSaleOn ? 'no_sale' : l.recoveryRate > 0 ? 'owed' : 'dead')
+
+export function lossRows(ws: Workspace, today = ''): LossRow[] {
+  return [...(ws.losses ?? [])]
+    .sort((a, b) => b.on.localeCompare(a.on) || b.id.localeCompare(a.id))
+    .map((loss) => {
+      const item = ws.items.find((i) => i.id === loss.itemId)
+      const uom = item?.uom ?? ''
+      const rate = item?.lastPurchaseRate ?? 0
+      return {
+        loss, item, uom, rate,
+        cost: lossValue(loss, rate, uom),
+        recovery: recoveryValue(loss, uom),
+        realised: realisedValue(loss, uom),
+        state: stateOf(loss),
+        job: loss.jobId ? (ws.jobs ?? []).find((j) => j.id === loss.jobId)?.no : undefined,
+        age: today ? daysBetween(loss.on, today) : 0,
+      }
+    })
+}
+
+const withRate = (ws: Workspace, losses: WsLoss[]) =>
+  losses.map((loss) => ({ loss, rate: ws.items.find((i) => i.id === loss.itemId)?.lastPurchaseRate ?? 0 }))
+
+/** Net loss — what it cost, less what came back — over some losses, or all of them. */
+export const netLossOf = (ws: Workspace, losses: WsLoss[] = ws.losses ?? []): Derived =>
+  netLoss(withRate(ws, losses))
+
+export const byCause = (ws: Workspace, losses: WsLoss[] = ws.losses ?? []) =>
+  lossByCause(withRate(ws, losses))
+
+export const unrealised = (ws: Workspace, today: string): Derived =>
+  unrealisedRecovery(withRate(ws, ws.losses ?? []), today, ws.policy)
+
+/** Recoverable scrap nobody has sold or written off, older than the store rules allow. */
+export const unsoldPast = (ws: Workspace, today: string): LossRow[] =>
+  lossRows(ws, today).filter((r) => r.state === 'owed' && r.age > ws.policy.scrapUnrealisedDays)
+
+/**
+ * Losses that come of using material — scrap on the floor, cutting losses,
+ * what a jobworker consumed past the allowance. Scrap against target is these
+ * over what was issued; a shortfall on a count, spoilage on the shelf and a
+ * rejection at the gate are losses too, but not scrap, and are not in it.
+ */
+export const FLOOR_CAUSES: LossCause[] = ['process_scrap', 'cut_kerf', 'cut_offcut_scrap', 'jobwork_loss']
+
+export interface ScrapRow {
+  item: Item
+  cls: ItemClass
+  issued: number
+  lost: number
+  pct: Derived
+  target: number
+  over: boolean
+  noted: boolean
+  net: number
+}
+
+/**
+ * Scrap against target, per material, for one month: floor losses over
+ * material issued to jobs and sent to jobworkers, net of what came back.
+ */
+export function scrapRows(ws: Workspace, month: string): ScrapRow[] {
+  const inMonth = (on: string) => on.slice(0, 7) === month
+  return ws.items.map((item) => {
+    const moves = (ws.moves ?? []).filter((m) => m.itemId === item.id && inMonth(m.on))
+    const issued = Math.round(-moves.filter((m) => m.kind === 'issue' || m.kind === 'jobwork_out' || m.kind === 'offcut_issue')
+      .reduce((a, m) => a + m.qty, 0) * 1000) / 1000
+    const losses = (ws.losses ?? []).filter((l) => l.itemId === item.id && inMonth(l.on) && FLOOR_CAUSES.includes(l.cause))
+    const lost = Math.round(losses.reduce((a, l) => a + l.qty, 0) * 1000) / 1000
+    const pct = scrapPct(lost, issued, item.uom)
+    return {
+      item, cls: item.itemClass, issued, lost, pct,
+      target: ws.policy.scrapTargetPct[item.itemClass],
+      over: issued > 0 && overScrapTarget(pct.value, item.itemClass, ws.policy),
+      noted: ws.drafts[scrapNotedKey(item.id, month)] === true,
+      net: netLossOf(ws, losses).value,
+    }
+  }).filter((r) => r.issued > 0 || r.lost > 0)
 }
