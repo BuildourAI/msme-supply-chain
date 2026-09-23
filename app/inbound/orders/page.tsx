@@ -11,7 +11,8 @@ import { addDays, daysBetween } from '@/lib/domain/calc'
 import * as S from '@/lib/seed/sourcing'
 import { longDate, money, qtyText, shortDate } from '@/lib/domain/format'
 import { useWorkspace } from '@/components/workspace/store'
-import { ComingNext } from '@/components/inbound/desk/ComingNext'
+import { Orders } from '@/components/inbound/desk/Orders'
+import { DeskOnly } from '@/components/sourcing/DeskOnly'
 
 const seed: SeedBundle = {
   today: S.TODAY_SOURCING, items: S.items, vendors: S.vendors, vendorItems: S.vendorItems,
@@ -84,8 +85,5 @@ function PageBody() {
 export default function Page() {
   const { mode, ready } = useWorkspace()
   if (!ready) return <div className="min-h-[50vh]" aria-hidden />
-  return mode === 'mine'
-    ? <ComingNext title="Open orders" icon="cart"
-        line="Every open line, the versions its supplier has been told and confirmed, and the day each lands against the day the line would stop. It lands after Receiving." />
-    : <PageBody />
+  return mode === 'mine' ? <DeskOnly><Orders /></DeskOnly> : <PageBody />
 }

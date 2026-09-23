@@ -23,6 +23,7 @@
  * is how the result reads back.
  */
 import type { Vendor } from '@/lib/domain/types'
+import { boardLines, verdictText, type BoardLine } from './board'
 import { awaitingArrival } from './receipts'
 import { orderGroups, orderRows } from './sourcing'
 import type { Workspace } from './types'
@@ -46,6 +47,12 @@ export interface Flight {
    */
   progress: number
   state: 'confirmed' | 'shipped'
+  /**
+   * Said only when it is NOT in time: the worst verdict among its lines from
+   * the inbound board — lands before the line stops but cannot be issued
+   * before it does, or lands after. An order on time says nothing extra.
+   */
+  verdict?: { text: string; tone: 'warn' | 'critical' }
 }
 
 export interface Berth {
@@ -61,6 +68,7 @@ const days = (from: string, to: string) =>
 /** Orders with a supplier and not yet due, soonest first, under their supplier. */
 export function inFlight(ws: Workspace, today: string): Berth[] {
   const flights: { vendorId: string; vendor: Vendor | undefined; flight: Flight }[] = []
+  const board = boardLines(ws, today)
 
   for (const g of orderGroups(orderRows(ws))) {
     if (g.state !== 'confirmed' && g.state !== 'shipped') continue
@@ -87,6 +95,7 @@ export function inFlight(ws: Workspace, today: string): Berth[] {
         daysAway: days(today, g.expectedOn),
         progress: span > 0 ? Math.min(Math.max((gone / span) * 100, 0), 100) : 100,
         state: g.state,
+        verdict: worst(board.filter((l) => l.order.no === g.no)),
       },
     })
   }
@@ -100,6 +109,15 @@ export function inFlight(ws: Workspace, today: string): Berth[] {
     else berths.push({ vendorId: f.vendorId, vendor: f.vendor, orders: [f.flight] })
   }
   return berths
+}
+
+/** The worst of an order's lines, when any of them will not be in time. */
+function worst(lines: BoardLine[]): Flight['verdict'] {
+  const late = lines.filter((l) => l.verdict.value === 'late').sort((a, b) => b.lateBy - a.lateBy)[0]
+  if (late) return { text: `lands ${verdictText(late)}`, tone: 'critical' }
+  const tight = lines.find((l) => l.verdict.value === 'tight')
+  if (tight) return { text: 'tight — not issuable in time', tone: 'warn' }
+  return undefined
 }
 
 /** How many orders are out there, for the column's count. */

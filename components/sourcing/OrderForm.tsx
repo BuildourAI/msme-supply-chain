@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { BestLanded } from '@/components/sourcing/BestLanded'
 import { Dialog } from '@/components/ui/Dialog'
 import { Chips, Field, NumberInput, Select } from '@/components/ui/Field'
@@ -7,7 +8,7 @@ import { Icon } from '@/components/ui/icons'
 import { useWorkspace } from '@/components/workspace/store'
 import { issueId } from '@/lib/workspace/defaults'
 import { addDays, nextNo } from '@/lib/workspace/sourcing'
-import { money } from '@/lib/domain/format'
+import { money, num, shortDate } from '@/lib/domain/format'
 import type { OrderState, PurchaseOrder } from '@/lib/workspace/types'
 
 /**
@@ -85,6 +86,17 @@ export function OrderForm({ open, onClose, editing }: {
   if (!open || !workspace) return null
   const ws = workspace
 
+  /*
+   * A line its supplier holds is not edited here. What they are making, how
+   * much and by when is a new version with a reason, which the supplier is
+   * sent and confirms — on Open orders. Typing over it here would change our
+   * figure silently and leave theirs where it was, which is the gap that
+   * screen exists to show. The rate and the state stay editable: the rate is
+   * our record of what was agreed, the state is what somebody observed.
+   */
+  const locked = editing !== null && (editing.state === 'confirmed' || editing.state === 'shipped'
+    || (editing.revisions?.length ?? 0) > 0)
+
   const setLine = (i: number, patch: Partial<Line>) =>
     setLines((ls) => ls.map((l, k) => (k === i ? { ...l, ...patch } : l)))
 
@@ -143,7 +155,9 @@ export function OrderForm({ open, onClose, editing }: {
     update((w0) => {
       if (editing) {
         const l = lines[0]
-        const order: PurchaseOrder = {
+        const order: PurchaseOrder = locked ? {
+          ...editing, unitPrice: n(l.price), orderedOn, state,
+        } : {
           ...editing,
           vendorId,
           itemId: l.itemId,
@@ -187,10 +201,24 @@ export function OrderForm({ open, onClose, editing }: {
     <Dialog open onClose={onClose} wide
       title={editing ? `Edit ${editing.no}` : 'Record an order'}>
       <div className="space-y-4 px-4 py-4">
+        {locked && editing && (
+          <p className="rounded-lg border border-accent/30 bg-accent-tint px-3 py-2.5 text-[12.5px] leading-relaxed text-ink-2"
+            data-locked>
+            {ws.vendors.find((v) => v.id === editing.vendorId)?.name ?? 'The supplier'} has this order —{' '}
+            <strong className="text-ink">{num(editing.qty, 3)} {uomOfItem(ws, editing.itemId)}</strong> by{' '}
+            {shortDate(editing.expectedOn)}. A change to how much or when is a new version they have to
+            confirm, so it is made on{' '}
+            <Link href="/inbound/orders" onClick={onClose}
+              className="font-semibold text-accent-ink underline underline-offset-2">Open orders</Link>.
+          </p>
+        )}
+
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Supplier" htmlFor="of-vendor">
-            <Select id="of-vendor" value={vendorId} onChange={useVendor}
-              options={ws.vendors.map((v) => ({ value: v.id, label: v.name }))} />
+            {locked
+              ? <p className="py-2 text-[13px] font-medium">{ws.vendors.find((v) => v.id === vendorId)?.name ?? '—'}</p>
+              : <Select id="of-vendor" value={vendorId} onChange={useVendor}
+                  options={ws.vendors.map((v) => ({ value: v.id, label: v.name }))} />}
           </Field>
           <Field label="Status">
             <Chips value={state} onChange={(v) => setState(v as OrderState)}
@@ -203,14 +231,18 @@ export function OrderForm({ open, onClose, editing }: {
             <div key={i} className="rounded-lg border border-line bg-surface-2/40 p-3">
               <div className="flex flex-wrap items-end gap-3">
                 <Field label="Material" className="min-w-[12rem] flex-1" htmlFor={`of-item-${i}`}>
-                  <Select id={`of-item-${i}`} value={l.itemId}
-                    onChange={(v) => suggestLine(i, vendorId, v)}
-                    options={ws.items.map((it) => ({ value: it.id, label: it.name }))} />
+                  {locked
+                    ? <p className="py-2 text-[13px] font-medium">{ws.items.find((it) => it.id === l.itemId)?.name ?? '—'}</p>
+                    : <Select id={`of-item-${i}`} value={l.itemId}
+                        onChange={(v) => suggestLine(i, vendorId, v)}
+                        options={ws.items.map((it) => ({ value: it.id, label: it.name }))} />}
                 </Field>
                 <Field label="Quantity" className="w-28" htmlFor={`of-qty-${i}`}>
-                  <NumberInput id={`of-qty-${i}`} value={l.qty}
-                    onChange={(v) => setLine(i, { qty: v })} unit={uomOf(l.itemId)}
-                    invalid={tried && !ok(l)} />
+                  {locked
+                    ? <p className="num py-2 text-[13px] font-medium">{num(n(l.qty), 3)} {uomOf(l.itemId)}</p>
+                    : <NumberInput id={`of-qty-${i}`} value={l.qty}
+                        onChange={(v) => setLine(i, { qty: v })} unit={uomOf(l.itemId)}
+                        invalid={tried && !ok(l)} />}
                 </Field>
                 <Field label="Agreed rate" className="w-32" htmlFor={`of-price-${i}`}>
                   <NumberInput id={`of-price-${i}`} value={l.price}
@@ -261,9 +293,11 @@ export function OrderForm({ open, onClose, editing }: {
               className="num w-full rounded-md border border-line bg-surface px-2.5 py-2 text-[13px] outline-none focus:border-accent" />
           </Field>
           <Field label="Expected" htmlFor="of-exp">
-            <input id="of-exp" type="date" value={expectedOn}
-              onChange={(e) => setExpectedOn(e.target.value)}
-              className="num w-full rounded-md border border-line bg-surface px-2.5 py-2 text-[13px] outline-none focus:border-accent" />
+            {locked
+              ? <p className="num py-2 text-[13px] font-medium">{shortDate(expectedOn)}</p>
+              : <input id="of-exp" type="date" value={expectedOn}
+                  onChange={(e) => setExpectedOn(e.target.value)}
+                  className="num w-full rounded-md border border-line bg-surface px-2.5 py-2 text-[13px] outline-none focus:border-accent" />}
           </Field>
         </div>
 
@@ -293,3 +327,6 @@ export function OrderForm({ open, onClose, editing }: {
     </Dialog>
   )
 }
+
+const uomOfItem = (ws: { items: { id: string; uom: string }[] }, id: string) =>
+  ws.items.find((i) => i.id === id)?.uom ?? ''

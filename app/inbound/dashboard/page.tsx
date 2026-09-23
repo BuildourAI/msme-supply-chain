@@ -8,6 +8,10 @@ import { MetricPicker } from '@/components/sourcing/MetricPicker'
 import { ReceiveForm } from '@/components/sourcing/ReceiveForm'
 import { GrnDocument } from '@/components/inbound/desk/GrnDocument'
 import { InspectForm } from '@/components/inbound/desk/InspectForm'
+import { AckDialog } from '@/components/inbound/desk/AckDialog'
+import { ExpediteDialog } from '@/components/inbound/desk/ChaseDialog'
+import { PoDocument } from '@/components/sourcing/PoDocument'
+import { boardLines, type BoardLine } from '@/lib/workspace/board'
 import { isOpen } from '@/lib/workspace/receipts'
 import { useWorkspace } from '@/components/workspace/store'
 import { type Act, type Band, type Decision } from '@/lib/workspace/decisions'
@@ -41,6 +45,9 @@ function Dashboard() {
   const [inspecting, setInspecting] = useState<string | null>(null)
   const [papering, setPapering] = useState<string | null>(null)
   const [opened, setOpened] = useState<Set<Band>>(new Set())
+  const [noticing, setNoticing] = useState<string | null>(null)
+  const [acking, setAcking] = useState<string | null>(null)
+  const [chasing, setChasing] = useState<BoardLine | null>(null)
 
   // what just arrived goes straight on to its inspection
   useEffect(() => {
@@ -74,6 +81,21 @@ function Dashboard() {
     if (kind === 'keep' && receiptId) {
       // "noted" on a rejection spike: a real answer, and it sticks
       update((w) => ({ ...w, drafts: { ...w.drafts, [`inbound.spikeNoted.${receiptId}`]: true } }))
+      return
+    }
+    if (kind === 'keep' && d.kind === 'churn' && d.refs.orderId) {
+      // noted until the line moves again — the key carries how many versions it had
+      const o = ws.orders.find((x) => x.id === d.refs.orderId)
+      const key = `inbound.churnNoted.${d.refs.orderId}.${o?.revisions?.length ?? 0}`
+      update((w) => ({ ...w, drafts: { ...w.drafts, [key]: true } }))
+      return
+    }
+    // the revised order IS the change notice: the same document, sent again
+    if (kind === 'notice' && orderNo) { setNoticing(orderNo); return }
+    if (kind === 'ack' && orderNo) { setAcking(orderNo); return }
+    if (kind === 'chase' && d.refs.orderId) {
+      const line = boardLines(ws, today).find((l) => l.order.id === d.refs.orderId)
+      if (line) setChasing(line)
     }
   }
 
@@ -113,6 +135,9 @@ function Dashboard() {
       <InspectForm receiptId={inspecting} onClose={() => setInspecting(null)}
         onClosed={(id) => setPapering(id)} />
       <GrnDocument open={papering !== null} receiptId={papering} onClose={() => setPapering(null)} />
+      <PoDocument open={noticing !== null} no={noticing} onClose={() => setNoticing(null)} />
+      <AckDialog no={acking} onClose={() => setAcking(null)} />
+      <ExpediteDialog line={chasing} onClose={() => setChasing(null)} />
     </div>
   )
 }

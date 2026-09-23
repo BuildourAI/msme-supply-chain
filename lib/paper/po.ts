@@ -18,6 +18,7 @@
 import { money, num } from '@/lib/domain/format'
 import { fieldsFor, valueOf } from '@/lib/workspace/fields'
 import type { Vendor } from '@/lib/domain/types'
+import { latestOf } from '@/lib/workspace/orders'
 import type { PurchaseOrder, Workspace } from '@/lib/workspace/types'
 import {
   MARGIN, addressee, dmy, fileName, head, letterhead, page, problemsIn,
@@ -52,6 +53,12 @@ export interface PoDoc {
   problems: Problem[]
   /** materials on it that have no quantity — it is not ready to hand over */
   blanks: string[]
+  /**
+   * What changed since the supplier last confirmed, when anything has. The
+   * revised order IS the change notice: sending it tells the supplier, and
+   * the page says plainly what moved and why, so nobody has to spot it.
+   */
+  revision?: { version: number; changes: string[]; reason: string }
 }
 
 /** Every line of one order — the rows sharing a number, in the order placed. */
@@ -141,6 +148,33 @@ export function buildPo(ws: Workspace, no: string): PoDoc | null {
     blanks: [],
   }
 
+  /*
+   * Lines changed since the supplier confirmed. Compared against the
+   * CONFIRMED version, not the previous one — two changes in a week are one
+   * change as far as the supplier is concerned, from what they agreed to what
+   * we now want.
+   */
+  const changed = lines.filter((o) => {
+    const latest = latestOf(o)
+    return latest && (o.ackedVersion ?? 1) < latest.version
+  })
+  if (changed.length > 0) {
+    const item = (o: PurchaseOrder) => ws.items.find((i) => i.id === o.itemId)
+    doc.revision = {
+      version: Math.max(...changed.map((o) => latestOf(o)!.version)),
+      changes: changed.map((o) => {
+        const was = o.revisions!.find((r) => r.version === (o.ackedVersion ?? 1)) ?? o.revisions![0]
+        const now = latestOf(o)!
+        const uom = item(o)?.uom ?? ''
+        const parts: string[] = []
+        if (was.qty !== now.qty) parts.push(`${num(was.qty, 3)} ${uom} -> ${num(now.qty, 3)} ${uom}`)
+        if (was.promisedDate !== now.promisedDate) parts.push(`by ${dmy(was.promisedDate)} -> ${dmy(now.promisedDate)}`)
+        return `${item(o)?.name ?? 'a line'}: ${parts.join(', ')}`
+      }),
+      reason: [...new Set(changed.map((o) => latestOf(o)!.reason))].join('; '),
+    }
+  }
+
   doc.problems = problemsIn([
     ['your company name', company.name],
     ['your company details', company.lines.join(' ')],
@@ -167,13 +201,31 @@ export function buildPo(ws: Workspace, no: string): PoDoc | null {
 
 export async function renderPo(doc: PoDoc): Promise<Blob> {
   const p = await page()
-  head(p, doc.company, 'PURCHASE ORDER', doc.no, `Dated ${doc.orderedOn}`)
+  head(p, doc.company, doc.revision ? 'REVISED PURCHASE ORDER' : 'PURCHASE ORDER',
+    doc.revision ? `${doc.no} (rev. ${doc.revision.version})` : doc.no, `Dated ${doc.orderedOn}`)
   p.rule()
 
   if (doc.vendor) addressee(p, doc.vendor.name, doc.vendorAddress)
 
-  p.paragraph('Please supply the following against this order.', MARGIN, p.right - MARGIN)
-  p.y += 10
+  if (doc.revision) {
+    /*
+     * The change first, above the table, because it is the reason this page
+     * exists. A supplier who files a revised order under the old one without
+     * reading it makes the old quantity.
+     */
+    p.text('This order has changed since you confirmed it', MARGIN, { bold: true })
+    p.y += 14
+    for (const c of doc.revision.changes) {
+      p.paragraph(c, MARGIN + 12, p.right - MARGIN - 12, 10)
+    }
+    p.paragraph(`Why: ${doc.revision.reason}`, MARGIN + 12, p.right - MARGIN - 12, 9.5)
+    p.y += 4
+    p.paragraph('Please confirm you have this and are making to the revised figures.', MARGIN, p.right - MARGIN, 10)
+    p.y += 10
+  } else {
+    p.paragraph('Please supply the following against this order.', MARGIN, p.right - MARGIN)
+    p.y += 10
+  }
 
   /*
    * Material, quantity, unit, rate, amount — the order every Indian quotation
@@ -259,7 +311,15 @@ export const poFileName = (doc: PoDoc): string => fileName(doc.no, doc.vendor?.n
 /* ----------------------------------------------------------- in words -- */
 
 export function poMessageFor(doc: PoDoc): string {
-  const lines = [
+  const lines = doc.revision ? [
+    `${doc.company.name} — REVISED purchase order ${doc.no} (rev. ${doc.revision.version})`,
+    '',
+    'Changed since you confirmed it:',
+    ...doc.revision.changes.map((c) => `• ${c.replace(/ -> /g, ' → ')}`),
+    `Why: ${doc.revision.reason}`,
+    'Please confirm you are making to the revised figures.',
+    '',
+  ] : [
     `${doc.company.name} — purchase order ${doc.no}`,
     '',
     ...doc.rows.map((r) => `${r.material} — ${r.qty} ${r.unit} @ ${r.rate} = ${r.amount}`),
@@ -275,7 +335,8 @@ export function poMessageFor(doc: PoDoc): string {
 }
 
 export const poSubjectFor = (doc: PoDoc): string =>
-  `Purchase order ${doc.no}${doc.vendor ? ` — ${doc.company.name}` : ''}`
+  `${doc.revision ? 'Revised purchase order' : 'Purchase order'} ${doc.no}${
+    doc.vendor ? ` — ${doc.company.name}` : ''}`
 
 export const poSendableFor = (doc: PoDoc): Sendable => ({
   vendor: doc.vendor,

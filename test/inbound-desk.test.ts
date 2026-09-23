@@ -252,8 +252,14 @@ describe('the inbound rail', () => {
 /* ================================================================= the queue */
 
 describe('the gate\'s queue', () => {
+  /*
+   * With stock on the shelf to cover the wait: an order that lands after the
+   * line stops is its own decision (lands-late, in `inbound-orders.test.ts`),
+   * and these are about the lorry, not the stockout.
+   */
   const due = (expectedOn: string): Workspace => ({
     ...set(),
+    stockLots: [{ id: 'LOT-001', itemId: 'IT-001', batchNo: 'OPENING', qty: 500, usability: 'usable' }],
     orders: [{
       id: 'PO-001', no: 'PO-1', vendorId: 'VN-001', itemId: 'IT-001', qty: 100, unitPrice: 80,
       orderedOn: '2026-09-10', expectedOn, state: 'confirmed',

@@ -10,6 +10,7 @@ import { DocViewer } from '@/components/intake/DocViewer'
 import { AliasPanel } from '@/components/intake/AliasPanel'
 import { useWorkspace } from '@/components/workspace/store'
 import { dropFile, getFile, prune } from '@/lib/intake/blobs'
+import { ackImageIds } from '@/lib/workspace/orders'
 import { mirrorRemove, mirrorUp, pathFor } from '@/lib/intake/mirror'
 import { useAuth } from '@/components/workspace/auth'
 import { stillUndoable } from '@/lib/intake/apply'
@@ -55,7 +56,8 @@ function Documents() {
    * record everywhere, because the record is in the workspace — but the bytes
    * are not, so without this they sit in the first device's storage for good.
    */
-  const ids = workspace?.docs.map((d) => d.id).join(',') ?? ''
+  // a picture of a supplier's confirmation is kept in the same place, and is not a document
+  const ids = workspace ? [...workspace.docs.map((d) => d.id), ...ackImageIds(workspace)].join(',') : ''
   useEffect(() => { void prune(ids ? ids.split(',') : []) }, [ids])
 
   /*

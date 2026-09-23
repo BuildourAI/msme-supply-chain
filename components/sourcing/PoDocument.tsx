@@ -4,6 +4,7 @@ import { StatePill } from '@/components/ui/DataTable'
 import { useWorkspace } from '@/components/workspace/store'
 import { PaperDialog, useSentTo, type Paper } from './PaperDialog'
 import { buildPo, poFileName, poSendableFor, renderPo } from '@/lib/paper/po'
+import { markHandedOver } from '@/lib/workspace/orders'
 import type { SendEntry } from '@/lib/workspace/types'
 
 /**
@@ -23,7 +24,7 @@ export function PoDocument({ open, onClose, no }: {
   /** the order NUMBER, not a row id — several lines are one document */
   no: string | null
 }) {
-  const { workspace, update, today } = useWorkspace()
+  const { workspace, update, today, session } = useWorkspace()
   const sent = useSentTo('po', no ?? '')
 
   const papers = useMemo<Paper[]>(() => {
@@ -44,18 +45,19 @@ export function PoDocument({ open, onClose, no }: {
 
   const onSent = (vendorId: string, via: SendEntry['via']) => {
     const entry: SendEntry = { kind: 'po', id: no, vendorId, via, at: today }
-    update((w) => ({
+    /*
+     * A draft order handed to a supplier is a confirmed one, and what the
+     * supplier now holds is recorded as a version: the first hand-over is
+     * version 1, taken as confirmed because they have the page; a revised
+     * order sent again is the change notice, awaiting their confirmation.
+     * Nothing further moves by itself — shipped and delivered are things
+     * somebody observes, and this build has never claimed to know them.
+     */
+    update((w) => markHandedOver({
       ...w,
       sendLog: [...w.sendLog.filter(
         (s) => !(s.kind === 'po' && s.id === no && s.vendorId === vendorId)), entry],
-      /*
-       * A draft order handed to a supplier is a confirmed one. Nothing further
-       * moves by itself — shipped and delivered are things somebody observes,
-       * and this build has never claimed to know them.
-       */
-      orders: w.orders.map((o) => (o.no === no && o.state === 'draft'
-        ? { ...o, state: 'confirmed' as const } : o)),
-    }))
+    }, no, today, session.actor))
   }
 
   const lines = workspace.orders.filter((o) => o.no === no && o.state !== 'cancelled').length
@@ -63,7 +65,8 @@ export function PoDocument({ open, onClose, no }: {
   return (
     <PaperDialog
       open={open} onClose={onClose}
-      title={`${no} — purchase order`}
+      title={`${no} — ${papers[0] && workspace.orders.some((o) => o.no === no && o.revisions
+        && (o.ackedVersion ?? 1) < o.revisions.length) ? 'revised purchase order' : 'purchase order'}`}
       sub={lines > 1 ? `${lines} lines on one order` : undefined}
       papers={papers}
       sentTo={new Set(sent.map((s) => s.vendorId))}

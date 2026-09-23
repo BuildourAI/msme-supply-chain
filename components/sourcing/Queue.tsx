@@ -205,6 +205,12 @@ export function Queue({ rows, berths, onAct, showAll, onShowAll, clear }: {
                         <span className="mono mt-1 block text-[10.5px] text-ink-3">
                           {f.expectedOn}
                         </span>
+                        {f.verdict && (
+                          <span className={`mt-1 block text-[10.5px] font-semibold ${
+                            f.verdict.tone === 'critical' ? 'text-critical' : 'text-warn'}`}>
+                            {f.verdict.text}
+                          </span>
+                        )}
                       </span>
                     </Card>
                   ))}

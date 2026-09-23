@@ -18,6 +18,7 @@ import { uncheckedItems } from './checks'
 import { openCount } from './decisions'
 import { inboundOpenCount } from './inbound-decisions'
 import { challansOut } from './jobwork'
+import { awaitingAckNos } from './orders'
 import { openReceipts } from './receipts'
 import { staleRates } from './sourcing'
 import type { Workspace } from './types'
@@ -145,11 +146,7 @@ export function sourcingNav(ws: Workspace, today = ''): NavRow[] {
  */
 export function inboundNav(ws: Workspace, today = ''): NavRow[] {
   // by NUMBER: one confirmation covers every line on the document
-  const unconfirmed = new Set(
-    ws.orders
-      .filter((o) => o.revisions && (o.ackedVersion ?? 0) < o.revisions.length)
-      .map((o) => o.no),
-  ).size
+  const unconfirmed = awaitingAckNos(ws).length
   return [
     {
       label: 'Dashboard',
@@ -161,6 +158,7 @@ export function inboundNav(ws: Workspace, today = ''): NavRow[] {
     { label: 'Receiving', href: '/inbound/receiving', icon: 'tray', badge: count(openReceipts(ws).length) },
     // materials nobody has written a check for yet
     { label: 'Checks', href: '/inbound/checks', icon: 'check', badge: count(uncheckedItems(ws).length) },
+    // orders changed and not yet confirmed by their supplier, told or not
     { label: 'Open orders', href: '/inbound/orders', icon: 'cart', badge: count(unconfirmed) },
     { label: 'Jobwork', href: '/inbound/jobwork', icon: 'factory', badge: count(challansOut(ws).length) },
   ]
