@@ -174,6 +174,31 @@ export const BUILTIN: Record<SheetEntity, BuiltinColumn[]> = {
     { key: 'back', label: 'Back', derived: true },
     { key: 'out', label: 'Still there', derived: true },
   ],
+  /*
+   * The store's lists. A rack is a name and nothing else. A lot's quantity is
+   * a balance of movements, so nothing on it is typed in a sheet — lots come
+   * from counts and receipts, and these columns are for arranging and export.
+   */
+  rack: [
+    { key: 'name', label: 'Rack', kind: 'text', identity: true, aliases: ['rack', 'bin', 'shelf', 'location', 'place'] },
+    { key: 'note', label: 'Note', kind: 'text', aliases: ['notes', 'remarks', 'what is on it'] },
+    { key: 'lots', label: 'Lots', derived: true },
+    { key: 'value', label: 'Value', derived: true },
+    { key: 'walked', label: 'Last counted', derived: true },
+    { key: 'due', label: 'Due', derived: true },
+  ],
+  lot: [
+    { key: 'item', label: 'Material', identity: true, derived: true },
+    { key: 'batch', label: 'Lot', derived: true },
+    { key: 'rack', label: 'Rack', derived: true },
+    { key: 'book', label: 'Book', derived: true },
+    { key: 'counted', label: 'Last counted', derived: true },
+    { key: 'difference', label: 'Difference', derived: true },
+    { key: 'confirmed', label: 'Confirmed', derived: true },
+    { key: 'state', label: 'State', derived: true },
+    { key: 'value', label: 'Value', derived: true },
+    { key: 'docs', label: 'Documents', derived: true },
+  ],
 }
 
 export const EMPTY_VIEW: TableView = { order: [], hidden: [], labels: {} }
@@ -187,6 +212,8 @@ export const EMPTY_VIEWS: Record<SheetEntity, TableView> = {
   check: EMPTY_VIEW,
   receipt: EMPTY_VIEW,
   challan: EMPTY_VIEW,
+  rack: EMPTY_VIEW,
+  lot: EMPTY_VIEW,
 }
 
 /**
@@ -465,6 +492,8 @@ export function pruneCustom(ws: Workspace): Workspace {
     ...(ws.specChecks ?? []).map((c) => c.id),
     ...(ws.receipts ?? []).map((r) => r.id),
     ...(ws.challans ?? []).map((c) => c.id),
+    ...(ws.racks ?? []).map((r) => r.id),
+    ...ws.stockLots.map((l) => l.id),
   ])
   const custom: Record<string, Record<string, string>> = {}
   for (const [id, row] of Object.entries(ws.custom ?? {})) {

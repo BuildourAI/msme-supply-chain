@@ -73,6 +73,8 @@ export type DecisionKind =
   | 'to-receive' | 'at-gate' | 'qc-overdue' | 'spike'
   | 'not-told' | 'awaiting-ack' | 'churn' | 'lands-late'
   | 'challan-overdue' | 'challan-unaccounted' | 'over-ceiling'
+  /* the store's — see `inventory-decisions.ts` */
+  | 'count-due' | 'no-rack' | 'negative-stock'
 
 export interface Decision {
   /** stable across renders, so a list key is not an index */
@@ -102,6 +104,12 @@ export interface Decision {
     receiptId?: string
     challanId?: string
     orderId?: string
+    lotId?: string
+    rackId?: string
+    countId?: string
+    jobId?: string
+    lossId?: string
+    cutId?: string
   }
   /** within a band, bigger first */
   weight: number

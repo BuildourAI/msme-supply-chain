@@ -49,7 +49,7 @@ function Foot({ onClose, onSave, label, danger }: {
 export function SendOutForm({ open, onClose, onAddJobworker }: {
   open: boolean; onClose: () => void; onAddJobworker?: () => void
 }) {
-  const { workspace, update, today } = useWorkspace()
+  const { workspace, update, today, session } = useWorkspace()
   const [vendorId, setVendorId] = useState('')
   const [itemId, setItemId] = useState('')
   const [qty, setQty] = useState('')
@@ -90,7 +90,7 @@ export function SendOutForm({ open, onClose, onAddJobworker }: {
   const n = (v: string) => (v.trim() === '' ? NaN : Number(v))
   const s = {
     vendorId, itemId, qty: n(qty), sentOn, dueBack: due,
-    expectedYield: n(yieldPct) / 100, process,
+    expectedYield: n(yieldPct) / 100, process, actor: session?.actor ?? '',
   }
   const problem = sendOutProblem(ws, s)
 

@@ -16,8 +16,10 @@
  * Nothing in `lib/domain/` is touched. Where a figure already exists there —
  * the rejection rate, landed cost — it is read, not reimplemented.
  */
-import type { Item, Vendor } from '@/lib/domain/types'
+import { recordAccuracy, isCountOverTolerance } from '@/lib/domain/inventory'
+import type { Item, ItemClass, Vendor } from '@/lib/domain/types'
 import { atJobworkersValue, qcHeld, unackedExposure } from './inbound'
+import { coverLots, isPhysical, lotRows } from './ledger'
 import { closedReceipts, openReceipts, receiptsFor } from './receipts'
 import { expired } from './sourcing'
 import type { Workspace } from './types'
@@ -78,9 +80,11 @@ export type MetricKey =
   | 'singleSource' | 'concentration' | 'priceMoves' | 'outstanding'
   /* the gate's */
   | 'qcHeld' | 'inspectedOnTime' | 'atJobworkers' | 'unacked'
+  /* the store's */
+  | 'stockValue' | 'unconfirmed' | 'heldStock' | 'accuracy'
 
 /** The desks that have a dashboard of figures. */
-export type MetricStage = 'sourcing' | 'inbound'
+export type MetricStage = 'sourcing' | 'inbound' | 'inventory'
 
 /**
  * Which figures belong to which desk, in the order each shows them.
@@ -96,6 +100,7 @@ export const STAGE_METRICS: Record<MetricStage, MetricKey[]> = {
     'singleSource', 'concentration', 'priceMoves', 'outstanding',
   ],
   inbound: ['qcHeld', 'inspectedOnTime', 'defects', 'onTime', 'unacked', 'atJobworkers', 'lead'],
+  inventory: ['stockValue', 'unconfirmed', 'accuracy', 'heldStock'],
 }
 
 /**
@@ -114,9 +119,13 @@ export const INBOUND_PICKS: MetricKey[] = [
   'qcHeld', 'inspectedOnTime', 'defects', 'onTime', 'unacked', 'atJobworkers',
 ]
 
+/** The store's, before anybody has chosen: what it is worth, and whether the book can be believed. */
+export const INVENTORY_PICKS: MetricKey[] = ['stockValue', 'unconfirmed', 'accuracy', 'heldStock']
+
 export const DEFAULTS_FOR: Record<MetricStage, MetricKey[]> = {
   sourcing: DEFAULT_PICKS,
   inbound: INBOUND_PICKS,
+  inventory: INVENTORY_PICKS,
 }
 
 export const METRIC_LABEL: Record<MetricKey, string> = {
@@ -133,6 +142,10 @@ export const METRIC_LABEL: Record<MetricKey, string> = {
   inspectedOnTime: 'Inspected in time',
   atJobworkers: 'At jobworkers',
   unacked: 'Not yet confirmed',
+  stockValue: 'Stock on the shelf',
+  unconfirmed: 'Not counted in time',
+  heldStock: 'Held, not usable',
+  accuracy: 'Record accuracy',
 }
 
 /** One line each, for the dialog where the owner picks. */
@@ -150,6 +163,10 @@ export const METRIC_WHY: Record<MetricKey, string> = {
   inspectedOnTime: 'How often a receipt is inspected within the days your gate rules allow.',
   atJobworkers: 'Your material in sheds you do not control. Never counted as stock you can use.',
   unacked: 'Changes to orders that the supplier has not confirmed — money riding on hope.',
+  stockValue: 'What usable stock is worth at what you last paid for it.',
+  unconfirmed: 'Stock nobody has counted within its class’s counting cadence — not wrong, unverified.',
+  heldStock: 'Stock on the premises that cannot be used: on hold, damaged, expired.',
+  accuracy: 'How often the book is right when somebody counts — inside the tolerance for its class.',
 }
 
 /* ------------------------------------------------------------- the maths -- */
@@ -527,6 +544,94 @@ export function metricsFor(ws: Workspace, today: string): Metric[] {
         'needs a purchase order that is neither delivered nor called off'),
 
     ...gateMetrics(ws, today, nothing),
+    ...storeMetrics(ws, today, nothing),
+  ]
+}
+
+/**
+ * The store's figures.
+ *
+ * All at the last purchase price, ex-freight (§13-1), the one basis every
+ * screen values stock at. FIFO and weighted average are not modelled, and the
+ * working says so rather than implying otherwise.
+ */
+function storeMetrics(
+  ws: Workspace, today: string,
+  nothing: (key: MetricKey, value: string, how: string) => Metric,
+): Metric[] {
+  const rate = (itemId: string) => ws.items.find((i) => i.id === itemId)?.lastPurchaseRate ?? 0
+  const lots = ws.stockLots.filter((l) => l.qty > 0 && isPhysical(l))
+  const usable = coverLots(ws).filter((l) => l.usability === 'usable')
+  const value = usable.reduce((a, l) => a + l.qty * rate(l.itemId), 0)
+  const held = lots.filter((l) => l.usability !== 'usable')
+  const heldValue = held.reduce((a, l) => a + l.qty * rate(l.itemId), 0)
+
+  // the six materials worth most, as shares of the whole
+  const byItem = new Map<string, number>()
+  for (const l of usable) byItem.set(l.itemId, (byItem.get(l.itemId) ?? 0) + l.qty * rate(l.itemId))
+  const parts = [...byItem.values()].filter((v) => v > 0).sort((a, b) => b - a).slice(0, 6)
+    .map((v) => (value > 0 ? Math.round((v / value) * 1000) / 10 : 0))
+
+  const rows = today ? lotRows(ws, today).filter((r) => !r.correction && r.lot.qty > 0) : []
+  const due = rows.filter((r) => r.due)
+  const dueValue = due.reduce((a, r) => a + r.value.value, 0)
+
+  const clsOf = (itemId: string): ItemClass => ws.items.find((i) => i.id === itemId)?.itemClass ?? 'C'
+  const counts = [...(ws.counts ?? [])].sort((a, b) => a.on.localeCompare(b.on) || a.id.localeCompare(b.id))
+  const acc = recordAccuracy(counts.map((count) => ({ count, cls: clsOf(count.itemId) })), ws.policy)
+
+  return [
+    lots.length > 0 && value > 0
+      ? {
+        key: 'stockValue', label: METRIC_LABEL.stockValue, value: money(value),
+        sub: `usable, across ${byItem.size} material${byItem.size === 1 ? '' : 's'}`,
+        tone: 'neutral', measured: true, href: '/inventory/ledger',
+        how: 'Σ usable qty × last purchase rate, ex-freight — remnants and held stock left out',
+        chart: parts.length > 1 ? { kind: 'stack', parts } : undefined,
+      }
+      : lots.length > 0
+        ? nothing('stockValue', 'No price yet',
+          'needs a price for what is on the shelf — a supplier’s rate, or a receipt against an order')
+        : nothing('stockValue', 'Nothing counted yet', 'needs stock counted onto the book'),
+
+    rows.length > 0
+      ? {
+        key: 'unconfirmed', label: METRIC_LABEL.unconfirmed, value: money(dueValue),
+        sub: due.length === 0 ? 'every lot counted within its cadence'
+          : `${due.length} of ${rows.length} lots past their counting date`,
+        tone: due.length === 0 ? 'good' : 'warn',
+        measured: true, href: '/inventory/ledger',
+        how: 'Σ value of lots whose last count or movement is older than their class’s counting cadence',
+        chart: { kind: 'pips', on: due.length, of: rows.length },
+      }
+      : nothing('unconfirmed', 'Nothing counted yet', 'needs stock counted onto the book'),
+
+    counts.length > 0
+      ? {
+        key: 'accuracy', label: METRIC_LABEL.accuracy, value: pct(acc.value),
+        sub: `of ${counts.length} count${counts.length === 1 ? '' : 's'} inside tolerance`,
+        tone: acc.value >= 95 ? 'good' : acc.value >= 85 ? 'warn' : 'critical',
+        measured: true, href: '/inventory/ledger',
+        how: 'counts inside their class tolerance ÷ counts taken',
+        chart: {
+          kind: 'dots',
+          dots: counts.slice(-14).map((c) => !isCountOverTolerance(c, clsOf(c.itemId), ws.policy)),
+        },
+      }
+      : nothing('accuracy', 'Nothing recounted yet',
+        'needs a lot counted against the book — walk a rack'),
+
+    lots.length > 0
+      ? {
+        key: 'heldStock', label: METRIC_LABEL.heldStock, value: money(heldValue),
+        sub: held.length === 0 ? 'everything on the shelf is usable'
+          : `${held.length} lot${held.length === 1 ? '' : 's'} on hold, damaged or expired`,
+        tone: held.length === 0 ? 'good' : 'warn',
+        measured: true, href: '/inventory/ledger',
+        how: 'Σ qty × last purchase rate over lots that are not usable — on the premises, never cover',
+        chart: held.length > 0 ? { kind: 'pips', on: held.length, of: lots.length } : undefined,
+      }
+      : nothing('heldStock', 'Nothing counted yet', 'needs stock counted onto the book'),
   ]
 }
 
@@ -621,7 +726,9 @@ export function stageMetrics(ws: Workspace, today: string, stage: MetricStage = 
 
 /** Where a desk keeps its owner's choice. Absent is "nobody has chosen yet". */
 export const picksOf = (ws: Workspace, stage: MetricStage): MetricKey[] =>
-  ((stage === 'inbound' ? ws.inboundMetricPicks : ws.metricPicks) ?? DEFAULTS_FOR[stage]) as MetricKey[]
+  ((stage === 'inbound' ? ws.inboundMetricPicks
+    : stage === 'inventory' ? ws.inventoryMetricPicks
+      : ws.metricPicks) ?? DEFAULTS_FOR[stage]) as MetricKey[]
 
 /** The ones the owner keeps, in the order the desk shows them. */
 export function pickedMetrics(ws: Workspace, today: string, stage: MetricStage = 'sourcing'): Metric[] {

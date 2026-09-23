@@ -54,5 +54,5 @@ function PageBody() {
 }
 
 export default function Page() {
-  return <StageGate later="Inventory and warehousing"><PageBody /></StageGate>
+  return <StageGate sample="the cut records and the offcut register" shows="cut records, cutting yield and the register of remnants"><PageBody /></StageGate>
 }

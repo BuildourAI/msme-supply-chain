@@ -13,6 +13,8 @@
 import { quotedItems, unquotedItems } from './bundle'
 import { coveredItems } from './checks'
 import { jobworkers } from './jobwork'
+import { jobWord, openJobs } from './jobs'
+import { unplacedLots } from './racks'
 import type { StageId } from './reveal'
 import type { Workspace } from './types'
 
@@ -33,6 +35,8 @@ export type StepId =
   | 'company' | 'materials' | 'suppliers' | 'stock' | 'rules'
   /* inbound's own three */
   | 'checks' | 'jobworkers' | 'gateRules'
+  /* the store's own three */
+  | 'racks' | 'jobs' | 'storeRules'
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
@@ -138,9 +142,62 @@ export const INBOUND_STEPS: Step[] = [
   },
 ]
 
+/**
+ * Setting up the store.
+ *
+ * Materials and the stock count are sourcing's own step objects again — a
+ * company that has counted its stock for sourcing has counted it for the
+ * store — and the count now asks which rack each material sits on. The other
+ * three are the store's: where things sit, what material leaves against, and
+ * the rules a count and a loss are judged by.
+ */
+export const INVENTORY_STEPS: Step[] = [
+  byId('materials'),
+  {
+    id: 'racks',
+    title: 'Where things sit',
+    why: 'Name the racks — A-1, the fabric wall, the trims cupboard. A count is walked rack by rack, and a lot on no rack is a lot nobody will find.',
+    cta: 'Name your racks',
+    /*
+     * "Everything is in one place" is a real answer, the way "we do not send
+     * anything out" is for jobwork. A step that could only go green by
+     * inventing a rack would teach people to invent one.
+     */
+    done: (ws) => (ws.racks ?? []).length > 0 || ws.drafts['inventory.oneRack'] === true,
+    summary: (ws) => {
+      const n = (ws.racks ?? []).length
+      if (n === 0) return 'one store, no racks'
+      const off = unplacedLots(ws).length
+      return off > 0 ? `${plural(n, 'rack')} · ${plural(off, 'lot')} on no rack` : plural(n, 'rack')
+    },
+  },
+  byId('stock'),
+  {
+    id: 'jobs',
+    title: 'How material leaves the store',
+    why: 'Nothing leaves without a job, style or order number on the slip — so every metre is somebody’s, and what each one used is a sum, not a guess.',
+    cta: 'Set up job numbers',
+    done: (ws) => ws.jobNumbering !== undefined,
+    summary: (ws) => {
+      const w = jobWord(ws)
+      const open = openJobs(ws).length
+      return `${w.many} numbered ${ws.jobNumbering?.prefix ?? ''}-…${open ? ` · ${open} open` : ''}`
+    },
+  },
+  {
+    id: 'storeRules',
+    title: 'Your store rules',
+    why: 'How often each class is counted, what size of difference is a real one, what scrap you will accept — and whether you cut material at all.',
+    cta: 'Set the store rules',
+    done: (ws) => ws.drafts['inventory.rules.agreed'] === true,
+    summary: (ws) => `count A every ${plural(ws.policy.countCadenceDays.A, 'day')} · scrap target ${
+      ws.policy.scrapTargetPct.A}%${ws.cutting ? ' · cutting on' : ''}`,
+  },
+]
+
 /** The set-up list for a stage. A stage with none of its own gets sourcing's. */
 export const stepsFor = (stage: StageId | null | undefined): Step[] =>
-  stage === 'inbound' ? INBOUND_STEPS : SOURCING_STEPS
+  stage === 'inbound' ? INBOUND_STEPS : stage === 'inventory' ? INVENTORY_STEPS : SOURCING_STEPS
 
 export interface Progress {
   steps: { step: Step; done: boolean }[]
@@ -164,4 +221,4 @@ export function progressOf(ws: Workspace, steps: Step[] = SOURCING_STEPS): Progr
 }
 
 export const stepById = (id: StepId): Step =>
-  [...SOURCING_STEPS, ...INBOUND_STEPS].find((s) => s.id === id)!
+  [...SOURCING_STEPS, ...INBOUND_STEPS, ...INVENTORY_STEPS].find((s) => s.id === id)!

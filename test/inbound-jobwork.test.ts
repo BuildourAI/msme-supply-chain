@@ -19,6 +19,7 @@ import {
   registerLedger, removeChallan, sendOut, sendOutProblem, usableOnHand, type SendOut,
 } from '@/lib/workspace/jobwork'
 import { closeReceipt, receiptsFor } from '@/lib/workspace/receipts'
+import { trail } from '@/lib/workspace/ledger'
 import { removeVendor, vendorImpact } from '@/lib/workspace/sourcing'
 import type { Item, VendorItem } from '@/lib/domain/types'
 import type { Workspace } from '@/lib/workspace/types'
@@ -52,7 +53,12 @@ const base = (): Workspace => {
     ],
     vendorType: { 'VN-002': JOBWORKER },
     vendorItems: [quote],
-    stockLots: [{ id: 'LOT-001', itemId: 'IT-001', batchNo: 'OPENING', qty: 120, usability: 'usable' }],
+    stockLots: [{ id: 'LOT-001', itemId: 'IT-001', batchNo: 'OPENING', qty: 120, usability: 'usable', on: '2026-09-01' }],
+    // the opening line every lot has, which `migrate` writes on load
+    moves: [{
+      id: 'MV-OPEN-LOT-001', lotId: 'LOT-001', itemId: 'IT-001', on: '2026-09-01', kind: 'opening',
+      qty: 120, source: 'opening', sourceRef: 'before the ledger', actor: 'R. Mehta',
+    }],
     nextIds: { ...ws.nextIds, IT: 1, VN: 2 },
   }
 }
@@ -90,9 +96,13 @@ describe('material leaving for a jobworker', () => {
     expect(ws.challans[0]).toMatchObject({
       no: 'JW-1', vendorId: 'VN-002', qtySent: 50, rate: 800, status: 'out', process: 'Laser cutting',
     })
-    expect(ws.stockLots.find((l) => l.id === 'LOT-JW-001')).toMatchObject({
-      qty: -50, usability: 'usable', batchNo: 'JW-1 → Shree Laser',
-    })
+    // off the lot it actually left, as a line in the journal named for the challan
+    expect(ws.stockLots.find((l) => l.id === 'LOT-JW-001')).toBeUndefined()
+    expect(ws.stockLots.find((l) => l.id === 'LOT-001')!.qty).toBe(70)
+    expect(ws.moves.slice(1)).toEqual([expect.objectContaining({
+      lotId: 'LOT-001', kind: 'jobwork_out', qty: -50, source: 'challan', sourceRef: 'JW-1',
+      note: 'to Shree Laser',
+    })])
     expect(usableOnHand(ws, 'IT-001')).toBe(70)
   })
 
@@ -103,8 +113,9 @@ describe('material leaving for a jobworker', () => {
     expect(row.truePosition.value).toBe(70)
     expect(row.nonUsable.value).toBe(0)
     expect(row.coverDays.value).toBe(35)
-    // and the movement names its document in the derivation's own inputs
-    expect(row.usable.inputs.map((i) => i.name)).toContain('lot JW-1 → Shree Laser')
+    // and the lot it came off says why it is lighter
+    expect(trail(ws, 'LOT-001').map((t) => [t.what, t.doc, t.balance]))
+      .toContainEqual(['Out to jobwork', 'JW-1', 70])
   })
 
   it('refuses more than is usable on the shelf', () => {

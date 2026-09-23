@@ -19,9 +19,10 @@
  */
 import { trailingLeadTimeDays } from '@/lib/domain/calc'
 import { acceptedQty, failedChecks, inspectionComplete } from '@/lib/domain/inbound'
-import type { CheckResult, StockLot, Usability, VendorItem } from '@/lib/domain/types'
+import type { CheckResult, Usability, VendorItem } from '@/lib/domain/types'
 import { checksFor } from './checks'
 import { issueId } from './defaults'
+import { dropLots, newLot, reverse } from './ledger'
 import { rejectionCost } from './landed'
 import type { Challan, GoodsReceipt, PurchaseOrder, Workspace } from './types'
 
@@ -270,6 +271,8 @@ export interface CloseInput {
   /** the signed-in name */
   inspector: string
   closedAt: string
+  /** the rack it goes onto; absent in a store that has not named its racks */
+  rack?: string
 }
 
 /**
@@ -305,22 +308,32 @@ export function closeReceipt(ws: Workspace, receiptId: string, c: CloseInput): W
   const reason = c.reason?.trim() || undefined
   let w = ws
 
+  /*
+   * Both lots are written through the ledger, so each opens with the receipt
+   * that brought it — a jobwork return as what it was, back from jobwork.
+   */
   const batch = `${order?.no ?? challan?.no ?? r.id}/${r.receivedOn}`
-  const lots: StockLot[] = []
+  const arrived = {
+    on: c.closedAt, kind: r.challanId ? 'jobwork_return' as const : 'receipt' as const,
+    source: 'grn' as const, sourceRef: r.id, actor: c.inspector,
+  }
+  const where = { rack: c.rack || undefined, receiptId: r.id, challanId: r.challanId }
   if (accepted > 0) {
-    lots.push({ id: `LOT-${r.id}`, itemId: r.itemId, batchNo: batch, qty: accepted, usability: 'usable' })
+    [w] = newLot(w, {
+      id: `LOT-${r.id}`, itemId: r.itemId, batchNo: batch, usability: 'usable', ...where,
+    }, { ...arrived, qty: accepted })
   }
   if (c.rejected > 0) {
     // the first failure that actually puts material out of use names the bucket
     const rule = failed.find((f) => f.failBucket !== 'usable') ?? failed[0]
     const bucket: Usability = rule && rule.failBucket !== 'usable' ? rule.failBucket : 'qc_hold'
-    lots.push({
-      id: `LOT-${r.id}-NU`, itemId: r.itemId, batchNo: `${batch} rejected`, qty: c.rejected,
+    ;[w] = newLot(w, {
+      id: `LOT-${r.id}-NU`, itemId: r.itemId, batchNo: `${batch} rejected`,
       usability: bucket,
       usabilityReason: rule?.failReason ?? reason ?? 'Rejected at the gate',
-    })
+      ...where,
+    }, { ...arrived, qty: c.rejected })
   }
-  w = { ...w, stockLots: [...w.stockLots, ...lots] }
 
   const item = w.items.find((i) => i.id === r.itemId)
   const priceBefore = order && item ? item.lastPurchaseRate : undefined
@@ -388,6 +401,22 @@ export function recordReceipt(ws: Workspace, r: ReceiptInput): Workspace {
 }
 
 /**
+ * Why a receipt cannot be taken back, or null.
+ *
+ * Once anything has been done with what it brought — issued to a job, sent to
+ * a jobworker, counted, written off — deleting the receipt would leave that
+ * with nothing under it. The later documents come off first.
+ */
+export function removeReceiptProblem(ws: Workspace, receiptId: string): string | null {
+  const lots = new Set([`LOT-${receiptId}`, `LOT-${receiptId}-NU`])
+  const since = (ws.moves ?? []).filter((m) => lots.has(m.lotId)
+    && !(m.source === 'grn' && m.sourceRef === receiptId))
+  if (since.length === 0) return null
+  const docs = [...new Set(since.map((m) => m.sourceRef))].slice(0, 3).join(', ')
+  return `What this receipt brought in has been used since (${docs}). Take those back first.`
+}
+
+/**
  * Taking a receipt back — a mis-keyed delivery is not a permanent fact.
  *
  * Both of its lots go, the order goes back to where the remaining closed
@@ -396,13 +425,14 @@ export function recordReceipt(ws: Workspace, r: ReceiptInput): Workspace {
  */
 export function removeReceipt(ws: Workspace, receiptId: string): Workspace {
   const gone = (ws.receipts ?? []).find((r) => r.id === receiptId)
-  if (!gone) return ws
+  if (!gone || removeReceiptProblem(ws, receiptId)) return ws
 
-  let w: Workspace = {
-    ...ws,
-    receipts: (ws.receipts ?? []).filter((r) => r.id !== receiptId),
-    stockLots: ws.stockLots.filter((l) => l.id !== `LOT-${receiptId}` && l.id !== `LOT-${receiptId}-NU`),
-  }
+  const mine = (id: string) => id === `LOT-${receiptId}` || id === `LOT-${receiptId}-NU`
+  let w: Workspace = dropLots(
+    reverse(ws, (m) => m.source === 'grn' && m.sourceRef === receiptId),
+    (l) => mine(l.id),
+  )
+  w = { ...w, receipts: (w.receipts ?? []).filter((r) => r.id !== receiptId) }
 
   /*
    * And the order goes back to where the remaining receipts put it. Left

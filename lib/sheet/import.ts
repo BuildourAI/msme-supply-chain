@@ -15,6 +15,7 @@
  * produce.
  */
 import { issueId } from '@/lib/workspace/defaults'
+import { dropLots, newLot } from '@/lib/workspace/ledger'
 import {
   buildItem, buildVendor, findItemByCode, findItemByName, findVendorByName,
   parseNumber, parseUom,
@@ -23,7 +24,7 @@ import { addField, BUILTIN, setValue } from '@/lib/workspace/fields'
 import { nextNo } from '@/lib/workspace/sourcing'
 import { forgetAlias } from '@/lib/intake/alias'
 import { toIsoDate, toYesNo } from './match'
-import type { Item, SpecCheck, StockLot, Vendor } from '@/lib/domain/types'
+import type { Item, SpecCheck, Vendor } from '@/lib/domain/types'
 import {
   addCheck, checkProblem, checksFor, readBucket, readCheckKind, updateCheck, type CheckInput,
 } from '@/lib/workspace/checks'
@@ -107,6 +108,7 @@ const IDENTITY: Record<SheetEntity, string> = {
   check: 'item',
   // never imported — see `importable` — but every list names its identity
   receipt: 'id', challan: 'no',
+  rack: 'name', lot: 'item',
 }
 
 /** The second record a row has to resolve, for the lists that name two. */
@@ -148,7 +150,7 @@ function checkFromRow(itemId: string, get: (target: string) => string): CheckInp
  * import into.
  */
 export const importable = (entity: SheetEntity): boolean =>
-  entity !== 'receipt' && entity !== 'challan'
+  entity !== 'receipt' && entity !== 'challan' && entity !== 'rack' && entity !== 'lot'
 
 /**
  * Whether a value fits the column it was matched to.
@@ -448,14 +450,23 @@ export function applyImport(
         sideBefore.push({ map: 'itemGroup', id, before: w.itemGroup[id] ?? null })
         w = { ...w, itemGroup: { ...w.itemGroup, [id]: values.group } }
       }
+      /*
+       * An on-hand figure is an opening lot, written through the ledger so it
+       * opens with a line. Re-importing replaces it — unless something has
+       * been done with it since, in which case it is left as it is and the
+       * count is where a correction belongs.
+       */
       const onHand = parseNumber(values.onHand ?? '')
       if (onHand !== null && onHand > 0) {
         const lotId = `LOT-IMP-${id}`
-        lotsCreated.push(lotId)
-        const lot: StockLot = {
-          id: lotId, itemId: id, batchNo: `OPENING-${today}`, qty: onHand, usability: 'usable',
+        const touched = (w.moves ?? []).some((m) => m.lotId === lotId && m.kind !== 'opening')
+        if (!touched) {
+          w = dropLots(w, (l) => l.id === lotId)
+          const [next, made] = newLot(w, {
+            id: lotId, itemId: id, batchNo: `OPENING-${today}`, usability: 'usable',
+          }, { on: today, kind: 'opening', qty: onHand, source: 'opening', sourceRef: `import ${today}`, actor: '' })
+          if (made) { w = next; lotsCreated.push(lotId) }
         }
-        w = { ...w, stockLots: [...w.stockLots.filter((l) => l.id !== lotId), lot] }
       }
       recordId = id
     } else if (entity === 'quote') {
@@ -639,13 +650,14 @@ export function undoImport(ws: Workspace): Workspace {
   }
 
   const gone = new Set(undo.created)
+  // opening lots it wrote go with their lines, and so does the stock of any material it invented
+  w = dropLots(w, (l) => (undo.lotsCreated ?? []).includes(l.id) || gone.has(l.itemId))
   w = {
     ...w,
     vendors: w.vendors.filter((v) => !gone.has(v.id)),
     items: w.items.filter((i) => !gone.has(i.id)),
     rfqs: w.rfqs.filter((r) => !gone.has(r.id)),
     vendorItems: w.vendorItems.filter((vi) => !gone.has(vi.vendorId) && !gone.has(vi.itemId)),
-    stockLots: w.stockLots.filter((l) => !(undo.lotsCreated ?? []).includes(l.id) && !gone.has(l.itemId)),
     /*
      * `gone` now holds quote and order ids too, not only the masters they hang
      * off — an import into those lists creates the records themselves, so the

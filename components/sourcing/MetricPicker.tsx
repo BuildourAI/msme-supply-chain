@@ -44,9 +44,9 @@ export function MetricPicker({ open, onClose, stage = 'sourcing' }: {
   })
 
   const save = () => {
-    update((w) => (stage === 'inbound'
-      ? { ...w, inboundMetricPicks: [...picks] }
-      : { ...w, metricPicks: [...picks] }))
+    update((w) => (stage === 'inbound' ? { ...w, inboundMetricPicks: [...picks] }
+      : stage === 'inventory' ? { ...w, inventoryMetricPicks: [...picks] }
+        : { ...w, metricPicks: [...picks] }))
     onClose()
   }
 
@@ -84,7 +84,7 @@ export function MetricPicker({ open, onClose, stage = 'sourcing' }: {
       <footer className="flex items-center gap-2 border-t border-line-soft px-4 py-3">
         <button type="button" onClick={() => setPicks(new Set(DEFAULTS_FOR[stage]))}
           className="press rounded-lg px-2.5 py-2 text-[12.5px] text-ink-3 hover:text-ink">
-          Back to the usual {DEFAULTS_FOR[stage].length === 6 ? 'six' : DEFAULTS_FOR[stage].length}
+          Back to the usual {['none', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'][DEFAULTS_FOR[stage].length] ?? DEFAULTS_FOR[stage].length}
         </button>
         <span className="ml-auto" />
         <button type="button" onClick={onClose}

@@ -117,7 +117,8 @@ describe('setting up the gate', () => {
   it('gives each stage its own list, and sourcing keeps its five', () => {
     expect(stepsFor('inbound')).toBe(INBOUND_STEPS)
     expect(stepsFor('sourcing')).toBe(SOURCING_STEPS)
-    expect(stepsFor('inventory')).toBe(SOURCING_STEPS)
+    // a stage with no list of its own still gets sourcing's
+    expect(stepsFor('production')).toBe(SOURCING_STEPS)
   })
 })
 
@@ -554,10 +555,16 @@ describe('a recount after goods have arrived', () => {
     expect(onHand(ws)).toBe(160)
     // the physical count agrees with the book: nothing changes
     expect(onHand(applyCount(ws, TODAY, { 'IT-001': { good: 160 } }))).toBe(160)
-    // five short on the shelf: a correction of minus five, as its own lot
+    // five short on the shelf: a count adjustment of minus five, off the oldest lot
     const short = applyCount(ws, TODAY, { 'IT-001': { good: 155 } })
     expect(onHand(short)).toBe(155)
-    expect(short.stockLots.find((l) => l.batchNo === `COUNT-${TODAY}`)!.qty).toBe(-5)
+    expect(short.moves.filter((m) => m.kind === 'count_adjust')).toEqual([expect.objectContaining({
+      qty: -5, sourceRef: `COUNT-${TODAY}`, note: 'Counted 155 against a book of 160',
+    })])
+    expect(short.stockLots.find((l) => l.batchNo === `OPENING-2026-09-11`)!.qty).toBe(115)
+    // five over: a lot of its own, found on the count
+    const over = applyCount(ws, TODAY, { 'IT-001': { good: 165 } })
+    expect(over.stockLots.find((l) => l.batchNo === `FOUND-${TODAY}`)!.qty).toBe(5)
   })
 
   it('still replaces the opening count when nothing else has moved it', () => {

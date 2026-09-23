@@ -6,7 +6,9 @@ import { CountHistory, StockLedger } from '@/components/inventory/Ledger'
 import { useInventory } from '@/components/inventory/store'
 import { Note } from '@/components/ui/Note'
 import { longDate } from '@/lib/domain/format'
-import { StageGate } from '@/components/onboard/StageGate'
+import { useWorkspace } from '@/components/workspace/store'
+import { DeskOnly } from '@/components/sourcing/DeskOnly'
+import { Ledger } from '@/components/inventory/desk/Ledger'
 
 function PageBody() {
   const { stockRows, accuracy, today } = useInventory()
@@ -35,6 +37,14 @@ function PageBody() {
   )
 }
 
+/**
+ * One route, two companies. The sample keeps its worked example; the owner
+ * gets their own book, which reads their workspace and nothing else.
+ */
 export default function Page() {
-  return <StageGate later="Inventory and warehousing"><PageBody /></StageGate>
+  const { mode, ready } = useWorkspace()
+  if (!ready) return <div className="min-h-[50vh]" aria-hidden />
+  return mode === 'mine'
+    ? <DeskOnly><Ledger /></DeskOnly>
+    : <PageBody />
 }

@@ -5,6 +5,7 @@ import { Field, NumberInput } from '@/components/ui/Field'
 import { useWorkspace } from '@/components/workspace/store'
 import { money, num as fmt } from '@/lib/domain/format'
 import { applyCount, type Counted } from '@/lib/workspace/count'
+import { RackSelect } from '@/components/inventory/desk/RackSelect'
 
 /**
  * Counting what is on the shelf, one material per screen.
@@ -25,25 +26,29 @@ import { applyCount, type Counted } from '@/lib/workspace/count'
  * somebody says how much it is.
  */
 export function StockWizard({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { workspace, update, today } = useWorkspace()
+  const { workspace, update, today, session } = useWorkspace()
   const [good, setGood] = useState<Record<string, string>>({})
   const [held, setHeld] = useState<Record<string, string>>({})
   const [why, setWhy] = useState<Record<string, string>>({})
+  const [rack, setRack] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (!open || !workspace) return
     const g: Record<string, string> = {}
     const h: Record<string, string> = {}
     const w: Record<string, string> = {}
+    const r: Record<string, string> = {}
     for (const it of workspace.items) {
-      const lots = workspace.stockLots.filter((l) => l.itemId === it.id)
+      // remnants are on the book but not what "usable stock" asks about
+      const lots = workspace.stockLots.filter((l) => l.itemId === it.id && !l.remnant)
       const usable = lots.filter((l) => l.usability === 'usable').reduce((a, l) => a + l.qty, 0)
       const bad = lots.filter((l) => l.usability !== 'usable')
-      g[it.id] = lots.length ? String(usable) : ''
+      g[it.id] = lots.length ? String(Math.round(usable * 1000) / 1000) : ''
       h[it.id] = bad.length ? String(bad.reduce((a, l) => a + l.qty, 0)) : ''
       w[it.id] = bad[0]?.usabilityReason ?? ''
+      r[it.id] = lots.find((l) => l.rack)?.rack ?? ''
     }
-    setGood(g); setHeld(h); setWhy(w)
+    setGood(g); setHeld(h); setWhy(w); setRack(r)
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open || !workspace) return null
@@ -104,6 +109,15 @@ export function StockWizard({ open, onClose }: { open: boolean; onClose: () => v
             </Field>
           )}
 
+          {(ws.racks ?? []).length > 0 && (
+            <Field label="Which rack is it on?"
+              hint="Where somebody walking the store will find it. A new rack can be named here."
+              htmlFor={`sk-rack-${it.id}`}>
+              <RackSelect id={`sk-rack-${it.id}`} value={rack[it.id] ?? ''}
+                onChange={(v) => setRack((s) => ({ ...s, [it.id]: v }))} />
+            </Field>
+          )}
+
           {Number.isFinite(g) && g > 0 && it.avgDailyConsumption > 0 && (
             <p className="rounded-md border border-line bg-surface-2 px-2.5 py-2 text-[12px] leading-relaxed text-ink-2">
               At {fmt(it.avgDailyConsumption, 3)} {it.uom} a day, that is{' '}
@@ -127,9 +141,10 @@ export function StockWizard({ open, onClose }: { open: boolean; onClose: () => v
         good: Number.isFinite(g) ? g : undefined,
         held: Number.isFinite(h) ? h : undefined,
         why: why[it.id],
+        rack: rack[it.id] || undefined,
       }
     }
-    update((w) => applyCount(w, today, counts))
+    update((w) => applyCount(w, today, counts, session.actor))
     onClose()
   }
 

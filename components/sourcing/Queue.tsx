@@ -117,6 +117,10 @@ const KIND: Record<DecisionKind, IconName> = {
   'challan-overdue': 'factory',
   'challan-unaccounted': 'factory',
   'over-ceiling': 'cash',
+  // the store's
+  'count-due': 'hash',
+  'no-rack': 'columns',
+  'negative-stock': 'alert',
 }
 
 export function Queue({ rows, berths, onAct, showAll, onShowAll, clear }: {

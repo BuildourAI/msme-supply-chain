@@ -35,6 +35,10 @@ const ICON: Record<MetricKey, IconName> = {
   inspectedOnTime: 'clock',
   atJobworkers: 'factory',
   unacked: 'cart',
+  stockValue: 'boxes',
+  unconfirmed: 'hash',
+  heldStock: 'tray',
+  accuracy: 'check',
 }
 
 /*

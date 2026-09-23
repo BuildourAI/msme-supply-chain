@@ -14,6 +14,7 @@
  * `unquotedItems` names the rest so a screen can say plainly what is missing.
  */
 import * as S from '@/lib/seed/sourcing'
+import { coverLots } from './ledger'
 import { ackedDate, ackedQty } from './orders'
 import { purchaseReceipts, receivedAgainst } from './receipts'
 import type { SeedBundle } from '@/lib/domain/derive'
@@ -84,7 +85,8 @@ export function bundleFor(ws: Workspace, today: string): SeedBundle {
     items: quotedItems(ws),
     vendors: ws.vendors,
     vendorItems: ws.vendorItems,
-    stockLots: ws.stockLots,
+    // remnants are stock but never cover: the domain offers them, it does not count them
+    stockLots: coverLots(ws),
     poLines: ws.orders
       .filter((o) => o.state === 'confirmed' || o.state === 'shipped')
       .map((o) => ({

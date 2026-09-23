@@ -31,6 +31,7 @@
 import { buyerCoverDays, daysBetween, stockoutDate } from '@/lib/domain/calc'
 import { issuableFrom } from '@/lib/domain/inbound'
 import type { Derived, Item, Vendor } from '@/lib/domain/types'
+import { usableOnHand } from './ledger'
 import { ackedDate, ackedQty, syncOf } from './orders'
 import { receivedAgainst } from './receipts'
 import type { PurchaseOrder, Workspace } from './types'
@@ -61,10 +62,7 @@ export interface BoardLine {
   lateBy: number
 }
 
-const usableOf = (ws: Workspace, itemId: string) =>
-  Math.round(ws.stockLots
-    .filter((l) => l.itemId === itemId && l.usability === 'usable')
-    .reduce((a, l) => a + l.qty, 0) * 1000) / 1000
+const usableOf = usableOnHand
 
 /** Every line handed over and not yet all here, soonest to land first. */
 export function boardLines(ws: Workspace, today: string): BoardLine[] {

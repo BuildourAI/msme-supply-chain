@@ -16,7 +16,8 @@
  */
 import type { Policy } from '@/lib/domain/policy'
 import type {
-  CheckResult, Item, PoRevision, SpecCheck, StockLot, Uom, Vendor, VendorItem,
+  CheckResult, CutRecord, CycleCount, Item, LossRecord, PoRevision, SpecCheck, StockLot,
+  StockMovement, Uom, Vendor, VendorItem,
 } from '@/lib/domain/types'
 import type { SupplierDoc, VendorAlias } from '@/lib/intake/types'
 
@@ -366,6 +367,95 @@ export interface Challan {
   extensions?: { from: string; to: string; on: string; reason: string }[]
 }
 
+/* -------------------------------------------------------------- the store -- */
+
+/**
+ * A place stock sits — A-1, "Fabric wall", "Trims cupboard". One store, many
+ * racks: every lot is on one of them, and a count is walked rack by rack.
+ */
+export interface Rack {
+  id: string
+  name: string
+  note?: string
+}
+
+/**
+ * A lot as the owner's store holds it.
+ *
+ * Structurally still the domain's `StockLot` — every field added is optional —
+ * so the derivation takes it unchanged and every reader written before racks
+ * existed still compiles. `qty` stays the balance; `moves` below is the
+ * journal behind it, and nothing but `post` in `ledger.ts` writes it.
+ */
+export type WsLot = StockLot & {
+  rack?: string
+  /** the day it came to be: the opening count, the receipt closed, the return */
+  on?: string
+  receiptId?: string
+  challanId?: string
+  /**
+   * A remnant: returned from a job short of a full piece, or left over from a
+   * cut. Never counted as cover — a remnant is offered against an order, not
+   * assumed to be one.
+   */
+  remnant?: true
+  pieces?: number
+  /** a cut's remnant: the piece size in the item's unit, and what it is */
+  size?: number
+  spec?: string
+  cutId?: string
+}
+
+/** A line in the journal. The domain's movement, and the job it was for. */
+export type StockMove = StockMovement & { jobId?: string }
+
+/** A lot moved from one rack to another. No quantity changes, so no movement. */
+export interface Transfer {
+  id: string
+  lotId: string
+  from?: string
+  to?: string
+  on: string
+  actor: string
+}
+
+/** A count of one lot, and the walk of the rack it was part of. */
+export type WsCount = CycleCount & { rack?: string; sheet?: string }
+
+/** What material leaves the store against — a job, a style, an order. */
+export interface Job {
+  id: string
+  /** the owner's own number — ST-4521, JOB-12 */
+  no: string
+  name?: string
+  customer?: string
+  openedOn: string
+  closedOn?: string
+  note?: string
+}
+
+export interface JobNumbering {
+  prefix: string
+  word: 'job' | 'style' | 'order'
+}
+
+/** A slip: material out of the store against a job, or back into it. */
+export interface IssueSlip {
+  id: string
+  /** IS-1, IS-2 */
+  no: string
+  kind: 'issue' | 'return'
+  jobId: string
+  on: string
+  takenBy: string
+  actor: string
+  note?: string
+  lines: { lotId: string; itemId: string; qty: number }[]
+}
+
+export type WsCut = CutRecord & { jobId?: string; rack?: string }
+export type WsLoss = LossRecord & { jobId?: string }
+
 /* --------------------------------------------- fields the owner invents -- */
 
 /**
@@ -395,6 +485,8 @@ export type SheetEntity =
   | 'supplier' | 'material' | 'rfq' | 'quote' | 'order'
   /** the inbound desk's three lists */
   | 'check' | 'receipt' | 'challan'
+  /** the store's */
+  | 'rack' | 'lot'
 
 export interface FieldDef {
   id: string
@@ -542,7 +634,7 @@ export interface Workspace {
   items: Item[]
   vendors: Vendor[]
   vendorItems: VendorItem[]
-  stockLots: StockLot[]
+  stockLots: WsLot[]
   /** step 5 — the rules, which the Sourcing Desk's own panel then edits */
   policy: Policy
   /** this company's vocabulary, keyed by vendor id and item id */
@@ -629,6 +721,34 @@ export interface Workspace {
    * has chosen yet.
    */
   inboundMetricPicks?: string[]
+
+  /* ------------------------------------------------------------ the store */
+  racks: Rack[]
+  /**
+   * The journal: every change to a lot's quantity, against the document that
+   * made it. Σ per lot equals `lot.qty`, always — the tests hold it to that.
+   * Append-only; at a small firm's volume that is a few hundred lines a month.
+   */
+  moves: StockMove[]
+  transfers: Transfer[]
+  counts: WsCount[]
+  jobs: Job[]
+  /** absent until the owner says what they call a job */
+  jobNumbering?: JobNumbering
+  issues: IssueSlip[]
+  /**
+   * Whether this company cuts material into parts — fabric lays, sheet, tube.
+   * Absent reads as no. The records behind it exist either way, so switching
+   * it on later is a choice, not a migration.
+   */
+  cutting?: boolean
+  cuts: WsCut[]
+  losses: WsLoss[]
+  /** below this piece size a remnant is scrap at the cut, by item id */
+  minRemnant: Record<string, number>
+  /** ₹ per unit a scrap dealer pays, by item id; absent is dead loss */
+  scrapRate: Record<string, number>
+  inventoryMetricPicks?: string[]
 }
 
 /**
@@ -647,8 +767,14 @@ export interface Workspace {
  * Nothing reads this number yet — it is written and kept — so what the bump
  * documents is the direction it cannot go: a build from before 6 reading a
  * workspace saved by this one would treat an uninspected receipt as stock.
+ *
+ * 7 opens the store: a journal of movements behind every lot, racks, counts,
+ * jobs and what is issued against them, cuts and losses. Every lot saved
+ * before it gets one opening movement, so the journal adds up from the first
+ * load. A build from before 7 would read a remnant as cover, and would not
+ * know that material sent to a jobworker left a lot rather than a new one.
  */
-export const SCHEMA = 6
+export const SCHEMA = 7
 
 /** Which company the screens are reading. The sample is never written to. */
 export type WorkspaceMode = 'sample' | 'mine'

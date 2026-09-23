@@ -102,5 +102,5 @@ function PageBody() {
 }
 
 export default function Page() {
-  return <StageGate later="Inventory and warehousing"><PageBody /></StageGate>
+  return <StageGate sample="the Inventory dashboard" shows="what the whole inventory stage does, system by system"><PageBody /></StageGate>
 }

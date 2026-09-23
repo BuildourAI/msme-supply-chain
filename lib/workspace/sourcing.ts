@@ -18,6 +18,7 @@ import type { Item, Vendor } from '@/lib/domain/types'
 import { bundleFor } from './bundle'
 import { issueId } from './defaults'
 import { pruneCustom } from './fields'
+import { dropLots, usableOnHand } from './ledger'
 import { repriceTerms } from './landed'
 import { backfillRates, buildRate } from './records'
 import { quoteState } from './types'
@@ -98,9 +99,8 @@ export function materialRows(ws: Workspace): MaterialRow[] {
   return ws.items.map((item) => ({
     item,
     group: ws.itemGroup[item.id] ?? '',
-    onHand: ws.stockLots
-      .filter((l) => l.itemId === item.id && l.usability === 'usable')
-      .reduce((a, l) => a + l.qty, 0),
+    // usable, less remnants — what the reorder point counts as cover
+    onHand: usableOnHand(ws, item.id),
     suppliers: ws.vendorItems.filter((vi) => vi.itemId === item.id).length,
   }))
 }
@@ -572,11 +572,14 @@ export function removeVendor(ws: Workspace, vendorId: string): Workspace {
 }
 
 export function removeItem(ws: Workspace, itemId: string): Workspace {
+  // its lots go with every line, count and rack move behind them
+  const w = dropLots(ws, (l) => l.itemId === itemId)
   return pruneCustom(syncRfqStates({
-    ...ws,
-    items: ws.items.filter((i) => i.id !== itemId),
-    vendorItems: ws.vendorItems.filter((vi) => vi.itemId !== itemId),
-    stockLots: ws.stockLots.filter((l) => l.itemId !== itemId),
+    ...w,
+    items: w.items.filter((i) => i.id !== itemId),
+    vendorItems: w.vendorItems.filter((vi) => vi.itemId !== itemId),
+    minRemnant: Object.fromEntries(Object.entries(w.minRemnant ?? {}).filter(([id]) => id !== itemId)),
+    scrapRate: Object.fromEntries(Object.entries(w.scrapRate ?? {}).filter(([id]) => id !== itemId)),
     rfqs: ws.rfqs.filter((r) => r.itemId !== itemId),
     /*
      * The lines that named it, not the quotations they were on. A quotation
@@ -591,6 +594,12 @@ export function removeItem(ws: Workspace, itemId: string): Workspace {
     // what to check when it arrives, and where it went out to be worked on
     specChecks: (ws.specChecks ?? []).filter((c) => c.itemId !== itemId),
     challans: (ws.challans ?? []).filter((c) => c.itemId !== itemId),
+    // and what the store recorded of it: slips lose its lines, cuts and losses go
+    issues: (ws.issues ?? [])
+      .map((x) => ({ ...x, lines: x.lines.filter((l) => l.itemId !== itemId) }))
+      .filter((x) => x.lines.length > 0),
+    cuts: (ws.cuts ?? []).filter((c) => c.itemId !== itemId),
+    losses: (ws.losses ?? []).filter((l) => l.itemId !== itemId),
     itemGroup: Object.fromEntries(
       Object.entries(ws.itemGroup).filter(([id]) => id !== itemId),
     ),

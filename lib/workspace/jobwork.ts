@@ -8,8 +8,9 @@
  * is for a process, and letting it into the landed-cost ranking would let a
  * galvaniser win a comparison for the steel.
  */
-import type { StockLot, Vendor } from '@/lib/domain/types'
+import type { Vendor } from '@/lib/domain/types'
 import { issueId } from './defaults'
+import { allocate, dropLots, postMany, reverse, round3, usableOnHand } from './ledger'
 import { arrive } from './receipts'
 import { nextNo } from './sourcing'
 import type { Challan, Workspace } from './types'
@@ -29,13 +30,8 @@ export const challansOut = (ws: Workspace) =>
 
 /* ------------------------------------------------------------ the challan -- */
 
-const round3 = (n: number) => Math.round(n * 1000) / 1000
-
-/** Usable stock of a material right now — what can be sent out. */
-export const usableOnHand = (ws: Workspace, itemId: string): number =>
-  round3(ws.stockLots
-    .filter((l) => l.itemId === itemId && l.usability === 'usable')
-    .reduce((a, l) => a + l.qty, 0))
+/** Usable stock of a material right now, less remnants — what can be sent out. */
+export { usableOnHand }
 
 export interface SendOut {
   vendorId: string
@@ -47,6 +43,10 @@ export interface SendOut {
   expectedYield: number
   process?: string
   note?: string
+  /** the one lot it goes from; absent takes the oldest first */
+  lotId?: string
+  /** who sent it, for the journal */
+  actor?: string
 }
 
 /** Why material cannot go out as described, or null. */
@@ -56,6 +56,11 @@ export function sendOutProblem(ws: Workspace, s: SendOut): string | null {
   if (!Number.isFinite(s.qty) || s.qty <= 0) return 'Put in how much is going out.'
   const have = usableOnHand(ws, s.itemId)
   if (s.qty > have) return `Only ${have} is usable on the shelf — you cannot send out more than you have.`
+  if (!allocate(ws, s.itemId, s.qty, { lotId: s.lotId })) {
+    return s.lotId
+      ? 'That lot does not have that much on it — pick another, or let it take the oldest first.'
+      : 'The lots on the shelf do not add up to that much — count the material first.'
+  }
   if (s.sentOn.length !== 10) return 'Put in the day it left.'
   if (s.dueBack.length !== 10 || s.dueBack < s.sentOn) return 'Put in the day they promised it back, on or after it left.'
   if (!Number.isFinite(s.expectedYield) || s.expectedYield <= 0 || s.expectedYield > 2) {
@@ -67,11 +72,12 @@ export function sendOutProblem(ws: Workspace, s: SendOut): string | null {
 /**
  * Material out of the gate to a jobworker.
  *
- * The movement out is a lot of its own — negative, usable, named for the
- * challan and the jobworker — so every sum of the shelf falls by exactly what
- * left, the derivation's usable figure lists it as "JW-1 → Shree Laser: −50",
- * and taking the challan back is removing one lot. Every movement names its
- * document. Valued at the last purchase price on the day it left (§13-1).
+ * It comes off the lots it actually left — the oldest first, or the one
+ * somebody picked — as a movement on each, named for the challan. It used to
+ * be a negative lot of its own, which kept the sums right but could not say
+ * which pile went; the journal now does. Taking the challan back reverses
+ * those movements. Valued at the last purchase price on the day it left
+ * (§13-1).
  */
 export function sendOut(ws: Workspace, s: SendOut): [Workspace, string] {
   if (sendOutProblem(ws, s)) return [ws, '']
@@ -92,15 +98,15 @@ export function sendOut(ws: Workspace, s: SendOut): [Workspace, string] {
     note: s.note?.trim() || undefined,
     status: 'out',
   }
-  const lot: StockLot = {
-    id: `LOT-${id}`, itemId: s.itemId, batchNo: `${no} → ${vendor?.name ?? 'jobworker'}`,
-    qty: -s.qty, usability: 'usable',
-  }
-  return [{
-    ...issued,
-    challans: [...(issued.challans ?? []), challan],
-    stockLots: [...issued.stockLots, lot],
-  }, id]
+  const from = allocate(issued, s.itemId, s.qty, { lotId: s.lotId })
+  if (!from) return [ws, '']
+  const [moved, ids] = postMany(issued, from.map((f) => ({
+    lotId: f.lotId, itemId: s.itemId, on: s.sentOn, kind: 'jobwork_out' as const, qty: -f.qty,
+    source: 'challan' as const, sourceRef: no, actor: s.actor ?? '',
+    note: `to ${vendor?.name ?? 'the jobworker'}`,
+  })))
+  if (ids.length === 0) return [ws, '']
+  return [{ ...moved, challans: [...(moved.challans ?? []), challan] }, id]
 }
 
 /**
@@ -176,12 +182,15 @@ export function closeChallanProblem(ws: Workspace, challanId: string, reason: st
  * back against it: once a return is on record, the challan is history.
  */
 export function removeChallan(ws: Workspace, challanId: string): Workspace {
-  if ((ws.receipts ?? []).some((r) => r.challanId === challanId)) return ws
-  return {
-    ...ws,
-    challans: (ws.challans ?? []).filter((c) => c.id !== challanId),
-    stockLots: ws.stockLots.filter((l) => l.id !== `LOT-${challanId}`),
-  }
+  const c = (ws.challans ?? []).find((x) => x.id === challanId)
+  if (!c || (ws.receipts ?? []).some((r) => r.challanId === challanId)) return ws
+  // the movements it wrote go back onto their lots; one saved before the
+  // journal left a negative lot of its own, which simply goes
+  const w = dropLots(
+    reverse(ws, (m) => m.source === 'challan' && m.sourceRef === c.no),
+    (l) => l.id === `LOT-${challanId}`,
+  )
+  return { ...w, challans: (w.challans ?? []).filter((x) => x.id !== challanId) }
 }
 
 /* ------------------------------------------------------------- the ledger -- */

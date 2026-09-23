@@ -17,6 +17,9 @@ import { bundleFor } from './bundle'
 import { uncheckedItems } from './checks'
 import { openCount } from './decisions'
 import { inboundOpenCount } from './inbound-decisions'
+import { inventoryOpenCount } from './inventory-decisions'
+import { lotRows } from './ledger'
+import { unplacedLots } from './racks'
 import { challansOut } from './jobwork'
 import { awaitingAckNos } from './orders'
 import { openReceipts } from './receipts'
@@ -54,7 +57,7 @@ export type StageId = typeof STAGE_TILES[number]['id']
  * Inbound is second because it is where sourcing ends: every order in the
  * sourcing dashboard's right-hand column finishes at this gate.
  */
-export const BUILT: StageId[] = ['sourcing', 'inbound']
+export const BUILT: StageId[] = ['sourcing', 'inbound', 'inventory']
 
 export const isBuilt = (s: StageId | null): s is StageId => s !== null && BUILT.includes(s)
 
@@ -66,7 +69,7 @@ export const isBuilt = (s: StageId | null): s is StageId => s !== null && BUILT.
 export const STAGE_HOME: Record<StageId, string> = {
   sourcing: '/sourcing/suppliers',
   inbound: '/inbound/dashboard',
-  inventory: '/',
+  inventory: '/inventory/dashboard',
   production: '/',
   dispatch: '/',
 }
@@ -175,9 +178,33 @@ export function inboundNav(ws: Workspace, today = ''): NavRow[] {
   ]
 }
 
+/**
+ * The store's rows.
+ *
+ * The ledger is the store: what is on each rack, what the book says, what was
+ * last counted. The racks themselves are set up once and walked from the
+ * ledger, so their row waits under "More". Every badge is work that goes down
+ * when somebody does it — lots past their counting date, lots on no rack.
+ */
+export function inventoryNav(ws: Workspace, today = ''): NavRow[] {
+  const due = today ? lotRows(ws, today).filter((r) => r.due).length : 0
+  return [
+    {
+      label: 'Dashboard',
+      href: '/inventory/dashboard',
+      icon: 'activity',
+      badge: count(inventoryOpenCount(ws, today)),
+    },
+    { label: 'Stock ledger', href: '/inventory/ledger', icon: 'boxes', badge: count(due) },
+    { label: 'Racks', href: '/inventory/racks', icon: 'columns', badge: count(unplacedLots(ws).length), tucked: true },
+  ]
+}
+
 /** The rail for the stage somebody is standing in. */
 export const navFor = (stage: StageId, ws: Workspace, today = ''): NavRow[] =>
-  stage === 'inbound' ? inboundNav(ws, today) : sourcingNav(ws, today)
+  stage === 'inbound' ? inboundNav(ws, today)
+    : stage === 'inventory' ? inventoryNav(ws, today)
+      : sourcingNav(ws, today)
 
 const count = (n: number) => (n > 0 ? String(n) : undefined)
 

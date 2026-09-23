@@ -6,6 +6,9 @@ import { progressOf, stepsFor, type StepId } from '@/lib/workspace/checklist'
 import { STAGE_TILES, type StageId } from '@/lib/workspace/reveal'
 import { ChecksWizard } from './wizards/ChecksWizard'
 import { GateRulesWizard } from './wizards/GateRulesWizard'
+import { JobsWizard } from './wizards/JobsWizard'
+import { RacksWizard } from './wizards/RacksWizard'
+import { StoreRulesWizard } from './wizards/StoreRulesWizard'
 import { JobworkerWizard } from './wizards/JobworkerWizard'
 import { MaterialWizard } from './wizards/MaterialWizard'
 import { SupplierWizard } from './wizards/SupplierWizard'
@@ -143,6 +146,9 @@ function Wizards({ open, onClose }: { open: StepId | null; onClose: () => void }
       <ChecksWizard open={open === 'checks'} onClose={onClose} />
       <JobworkerWizard open={open === 'jobworkers'} onClose={onClose} />
       <GateRulesWizard open={open === 'gateRules'} onClose={onClose} />
+      <RacksWizard open={open === 'racks'} onClose={onClose} />
+      <JobsWizard open={open === 'jobs'} onClose={onClose} />
+      <StoreRulesWizard open={open === 'storeRules'} onClose={onClose} />
     </>
   )
 }

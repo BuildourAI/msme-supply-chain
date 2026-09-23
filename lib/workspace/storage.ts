@@ -15,11 +15,13 @@
 import { DEFAULT_POLICY } from '@/lib/domain/policy'
 import type { Item, SpecCheck, Vendor } from '@/lib/domain/types'
 import { highestIssued } from './defaults'
+import { lotDate, openingMovesFor } from './ledger'
 import { SCHEMA } from './types'
 import type {
   Challan, RateChange,
   FieldDef, GoodsReceipt, PurchaseOrder, Quote, QuoteLine, QuoteState, Rfq, SendEntry, Session,
   TableView, Workspace, WorkspaceMode,
+  IssueSlip, Job, Rack, StockMove, Transfer, WsCount, WsCut, WsLoss, WsLot,
 } from './types'
 import type { SupplierDoc, VendorAlias } from '@/lib/intake/types'
 
@@ -232,6 +234,28 @@ function migrate(raw: Partial<Workspace>): Workspace {
   const challans = list<Challan>(raw.challans)
 
   /*
+   * The store. Every lot saved before the journal existed gets its date and
+   * one opening movement, so Σ movements = quantity from the first load —
+   * and because this runs on every load, both are derived rather than
+   * issued: a second load finds them already there.
+   */
+  const createdAt = raw.createdAt ?? ''
+  const lotCtx = { receipts, challans, createdAt }
+  const stockLots = list<WsLot>(raw.stockLots).map((l) => (l.on ? l : { ...l, on: lotDate(l, lotCtx) }))
+  const heldMoves = list<StockMove>(raw.moves)
+  const moves = [
+    ...heldMoves,
+    ...openingMovesFor({ lots: stockLots, moves: heldMoves, ...lotCtx, actor: raw.owner?.name ?? '' }),
+  ]
+  const racks = list<Rack>(raw.racks)
+  const transfers = list<Transfer>(raw.transfers)
+  const counts = list<WsCount>(raw.counts)
+  const jobs = list<Job>(raw.jobs)
+  const issues = list<IssueSlip>(raw.issues)
+  const cuts = list<WsCut>(raw.cuts)
+  const losses = list<WsLoss>(raw.losses)
+
+  /*
    * The id counter is seeded from what is actually there the first time a blob
    * is read, and only ever moves forward afterwards. Taking the higher of the
    * two matters: a stored counter that somehow trails the data would otherwise
@@ -253,6 +277,15 @@ function migrate(raw: Partial<Workspace>): Workspace {
   seed('RC', list<RateChange>(raw.rateLog))
   seed('CK', specChecks)
   seed('JW', challans)
+  seed('LOT', stockLots)
+  seed('MV', moves)
+  seed('RK', racks)
+  seed('TR', transfers)
+  seed('CC', counts)
+  seed('JB', jobs)
+  seed('IS', issues)
+  seed('CT', cuts)
+  seed('LS', losses)
 
   const view = (v: Partial<TableView> | undefined): TableView => ({
     order: list<string>(v?.order),
@@ -283,7 +316,7 @@ function migrate(raw: Partial<Workspace>): Workspace {
     items,
     vendors,
     vendorItems: list(raw.vendorItems),
-    stockLots: list(raw.stockLots),
+    stockLots,
     /*
      * Policy was never migrated, so a workspace saved before it existed loaded
      * with `policy` undefined — and the material form reads
@@ -331,6 +364,8 @@ function migrate(raw: Partial<Workspace>): Workspace {
       check: view(views.check),
       receipt: view(views.receipt),
       challan: view(views.challan),
+      rack: view(views.rack),
+      lot: view(views.lot),
     },
     vendorContact: map(raw.vendorContact),
     /*
@@ -362,6 +397,25 @@ function migrate(raw: Partial<Workspace>): Workspace {
     metricPicks: raw.metricPicks,
     reviewedFlips: map<string>(raw.reviewedFlips),
     inboundMetricPicks: raw.inboundMetricPicks,
+    /*
+     * All empty on anything saved before the store opened, and nothing is
+     * lost: the lots above carry what there was, each with its opening line.
+     * Whether this company cuts material is left unanswered rather than
+     * answered no — the store rules step asks.
+     */
+    racks,
+    moves,
+    transfers,
+    counts,
+    jobs,
+    jobNumbering: raw.jobNumbering,
+    issues,
+    cutting: raw.cutting,
+    cuts,
+    losses,
+    minRemnant: map<number>(raw.minRemnant),
+    scrapRate: map<number>(raw.scrapRate),
+    inventoryMetricPicks: raw.inventoryMetricPicks,
   }
 }
 

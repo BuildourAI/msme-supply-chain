@@ -38,5 +38,5 @@ function PageBody() {
 }
 
 export default function Page() {
-  return <StageGate later="Inventory and warehousing"><PageBody /></StageGate>
+  return <StageGate sample="the loss ledger" shows="every loss by cause, net of what scrap fetched"><PageBody /></StageGate>
 }
