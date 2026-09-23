@@ -1,10 +1,22 @@
 'use client'
-import { useMemo } from 'react'
+import { useId, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Icon, Logo } from '@/components/ui/icons'
 import { useWorkspace } from '@/components/workspace/store'
-import { isBuilt, navFor, stageOf, STAGE_TILES } from '@/lib/workspace/reveal'
+import { foldCount, isBuilt, navFor, stageOf, STAGE_TILES, type NavRow } from '@/lib/workspace/reveal'
+
+/*
+ * Whether somebody left "More" open, per stage. Remembering it is a
+ * convenience, so a browser that refuses storage just starts it shut.
+ */
+const foldKey = (stage: string) => `desk.more.${stage}`
+function readFold(stage: string): boolean {
+  try { return window.localStorage.getItem(foldKey(stage)) === '1' } catch { return false }
+}
+function writeFold(stage: string, open: boolean) {
+  try { window.localStorage.setItem(foldKey(stage), open ? '1' : '0') } catch { /* not remembered */ }
+}
 
 /**
  * The owner's sidebar: flat, a handful of rows, no expanding groups.
@@ -16,6 +28,10 @@ import { isBuilt, navFor, stageOf, STAGE_TILES } from '@/lib/workspace/reveal'
  *
  * A stage that is not open yet keeps the sourcing rail, so a route that says
  * "comes after sourcing" still has somewhere to go from.
+ *
+ * Rows used now and then sit under "More" at the foot. It carries their
+ * waiting count while shut, and opens by itself on one of their pages, so the
+ * page you are on is always somewhere on the rail.
  */
 export function DeskNav({ onNavigate }: { onNavigate?: () => void }) {
   const { workspace, today } = useWorkspace()
@@ -32,7 +48,57 @@ export function DeskNav({ onNavigate }: { onNavigate?: () => void }) {
     () => (workspace ? navFor(stage, workspace, today) : []),
     [stage, workspace, today],
   )
+  const foldId = useId()
+  const [folds, setFolds] = useState<Record<string, boolean>>({})
+  // closed by hand while standing on one of its own pages — only for that page
+  const [shutOn, setShutOn] = useState<string | null>(null)
   if (!workspace) return null
+
+  const main = rows.filter((r) => !r.tucked)
+  const tucked = rows.filter((r) => r.tucked)
+  const onTucked = tucked.some((r) => r.href === pathname)
+  const remembered = folds[stage] ?? readFold(stage)
+  const open = remembered || (onTucked && shutOn !== pathname)
+  const waiting = foldCount(rows)
+  const toggle = () => {
+    const next = !open
+    setFolds((f) => ({ ...f, [stage]: next }))
+    writeFold(stage, next)
+    setShutOn(next ? null : pathname)
+  }
+
+  const row = (r: NavRow) => {
+    const on = pathname === r.href
+    return (
+      <li key={r.href}>
+        {r.later ? (
+          <span
+            title="Comes once the desk is in use — reorder suggestions, cost comparison, blocked capital"
+            className="flex cursor-default items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] font-medium text-ink-4">
+            <Icon name={r.icon} className="size-4 shrink-0" />
+            <span className="min-w-0 leading-tight">{r.label}</span>
+            <span className="mono ml-auto shrink-0 text-[9.5px] uppercase tracking-wider">
+              later
+            </span>
+          </span>
+        ) : (
+          <Link href={r.href} onClick={onNavigate}
+            aria-current={on ? 'page' : undefined}
+            className={`flex items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] font-medium transition-colors ${
+              on ? 'bg-accent-tint text-accent-ink' : 'text-ink-2 hover:bg-surface-2 hover:text-ink'}`}>
+            <Icon name={r.icon} className={`size-4 shrink-0 ${on ? 'text-accent' : 'text-ink-3'}`} />
+            <span className="min-w-0 leading-tight">{r.label}</span>
+            {r.badge && (
+              <span className={`mono ml-auto shrink-0 rounded-full px-1.5 text-[10px] leading-[17px] ${
+                on ? 'bg-accent-ink text-on-accent' : 'bg-surface-3 text-ink-3'}`}>
+                {r.badge}
+              </span>
+            )}
+          </Link>
+        )}
+      </li>
+    )
+  }
 
   const tile = STAGE_TILES.find((s) => s.id === stage)!
 
@@ -58,38 +124,28 @@ export function DeskNav({ onNavigate }: { onNavigate?: () => void }) {
         </Link>
 
         <ul className="space-y-0.5">
-          {rows.map((r) => {
-            const on = pathname === r.href
-            return (
-              <li key={r.href}>
-                {r.later ? (
-                  <span
-                    title="Comes once the desk is in use — reorder suggestions, cost comparison, blocked capital"
-                    className="flex cursor-default items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] font-medium text-ink-4">
-                    <Icon name={r.icon} className="size-4 shrink-0" />
-                    <span className="min-w-0 leading-tight">{r.label}</span>
-                    <span className="mono ml-auto shrink-0 text-[9.5px] uppercase tracking-wider">
-                      later
-                    </span>
+          {main.map(row)}
+          {tucked.length > 0 && (
+            <li>
+              <button type="button" onClick={toggle}
+                aria-expanded={open} aria-controls={foldId}
+                className="press flex w-full items-center gap-2.5 rounded-md px-2.5 py-[7px] text-left text-[13px] font-medium text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink">
+                <Icon name="chevron" className={`size-4 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+                <span className="min-w-0 leading-tight">More</span>
+                {/* shut, it speaks for the rows behind it; open, they speak for themselves */}
+                {!open && waiting > 0 && (
+                  <span className="mono ml-auto shrink-0 rounded-full bg-surface-3 px-1.5 text-[10px] leading-[17px] text-ink-3">
+                    {waiting}
                   </span>
-                ) : (
-                  <Link href={r.href} onClick={onNavigate}
-                    aria-current={on ? 'page' : undefined}
-                    className={`flex items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] font-medium transition-colors ${
-                      on ? 'bg-accent-tint text-accent-ink' : 'text-ink-2 hover:bg-surface-2 hover:text-ink'}`}>
-                    <Icon name={r.icon} className={`size-4 shrink-0 ${on ? 'text-accent' : 'text-ink-3'}`} />
-                    <span className="min-w-0 leading-tight">{r.label}</span>
-                    {r.badge && (
-                      <span className={`mono ml-auto shrink-0 rounded-full px-1.5 text-[10px] leading-[17px] ${
-                        on ? 'bg-accent-ink text-on-accent' : 'bg-surface-3 text-ink-3'}`}>
-                        {r.badge}
-                      </span>
-                    )}
-                  </Link>
                 )}
-              </li>
-            )
-          })}
+              </button>
+              {open && (
+                <ul id={foldId} className="mt-0.5 space-y-0.5 pl-3">
+                  {tucked.map(row)}
+                </ul>
+              )}
+            </li>
+          )}
         </ul>
       </nav>
     </>

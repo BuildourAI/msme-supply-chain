@@ -9,10 +9,11 @@
 import { describe, expect, it } from 'vitest'
 import { emptyWorkspace } from '@/lib/workspace/defaults'
 import { parseStored } from '@/lib/workspace/storage'
-import { sourcingNav } from '@/lib/workspace/reveal'
+import { foldCount, sourcingNav } from '@/lib/workspace/reveal'
 import { quoteState } from '@/lib/workspace/types'
 import type { PurchaseOrder, Quote, QuoteLine, Rfq, Workspace } from '@/lib/workspace/types'
 import type { Item, Vendor, VendorItem } from '@/lib/domain/types'
+import type { SupplierDoc } from '@/lib/intake/types'
 import {
   acceptAll, acceptLine, addDays, draftOrderFrom, itemImpact, materialRows, nextNo,
   orderFromQuote, orderGroups, orderRows, orderState, quoteGroups, rejectLine, removeItem, removeQuote, removeRfq,
@@ -773,5 +774,41 @@ describe('a workspace saved before these records existed', () => {
     // and the screens can read it without guarding every list
     expect(() => orderRows(back!.workspace)).not.toThrow()
     expect(() => quoteGroups(back!.workspace)).not.toThrow()
+  })
+})
+
+/* ============================================================ the More fold */
+
+describe('the sourcing rail\'s "More" fold', () => {
+  const unfiled = (id: string): SupplierDoc => ({
+    id, vendorName: 'Shah Metals', fileName: `${id}.pdf`, mime: 'application/pdf', bytes: 1,
+    channel: 'email', read: 'pdf-text', receivedAt: TODAY, addedAt: TODAY, lines: [], status: 'draft',
+  })
+  // two materials where the lowest rate carries freight that makes it dearer
+  const flips = (): VendorItem[] => ['IT-001', 'IT-002'].flatMap((itemId) => [
+    rate({ itemId, vendorId: 'VN-001', rate: 780, freightPerUnit: 40 }),
+    rate({ itemId, vendorId: 'VN-002', rate: 800 }),
+  ])
+
+  it('tucks exactly Documents and Landed cost, and leaves the rest in order', () => {
+    const rows = sourcingNav(fresh(), TODAY)
+    expect(rows.filter((r) => r.tucked).map((r) => r.label)).toEqual(['Documents', 'Landed cost'])
+    expect(rows.filter((r) => !r.tucked).map((r) => r.label))
+      .toEqual(['Dashboard', 'Suppliers', 'Materials', 'Requests', 'Quotes', 'Purchase orders'])
+  })
+
+  it('counts what waits behind it: one unfiled document and two flips make three', () => {
+    const ws = { ...fresh(), docs: [unfiled('SD-001')], vendorItems: flips() }
+    const rows = sourcingNav(ws, TODAY)
+    expect(rows.find((r) => r.label === 'Documents')?.badge).toBe('1')
+    expect(rows.find((r) => r.label === 'Landed cost')?.badge).toBe('2')
+    expect(foldCount(rows)).toBe(3)
+  })
+
+  it('says nothing when neither waits, and never counts a row left out', () => {
+    expect(foldCount(sourcingNav(fresh(), TODAY))).toBe(0)
+    // the suppliers badge is on the rail already, so it must not add into More
+    const ws = { ...fresh(), vendors: [vendor(), vendor({ id: 'VN-002', name: 'Om Steel' })] }
+    expect(foldCount(sourcingNav(ws, TODAY))).toBe(0)
   })
 })

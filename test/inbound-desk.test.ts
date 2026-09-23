@@ -244,6 +244,8 @@ describe('the inbound rail', () => {
     const rows = inboundNav(set(), TODAY)
     expect(rows.map((r) => r.label)).toEqual(['Dashboard', 'Receiving', 'Checks', 'Open orders', 'Jobwork'])
     expect(rows.some((r) => r.later)).toBe(false)
+    // five rows is short enough that nothing needs a "More"
+    expect(rows.some((r) => r.tucked)).toBe(false)
     expect(navFor('inbound', set(), TODAY)).toEqual(rows)
     expect(navFor('sourcing', set(), TODAY)).toEqual(sourcingNav(set(), TODAY))
   })

@@ -31,6 +31,11 @@ export interface NavRow {
   badge?: string
   /** it exists but is not built yet, so it says so rather than 404ing */
   later?: boolean
+  /**
+   * kept under "More" at the foot of the rail: still built, still badged, just
+   * not in the way of the rows somebody uses every day
+   */
+  tucked?: boolean
 }
 
 export const STAGE_TILES = [
@@ -74,6 +79,10 @@ export const STAGE_HOME: Record<StageId, string> = {
  * somebody is a nav they have to keep re-learning — worse than one that is
  * briefly empty. What each screen does when it has nothing is say so, which is
  * a job for the screen rather than the menu.
+ *
+ * Documents and Landed cost are tucked under "More": reached now and then,
+ * usually from a dashboard card that already links straight to them, so they
+ * do not take a row each from the six used every day.
  */
 export function sourcingNav(ws: Workspace, today = ''): NavRow[] {
   // by NUMBER, not by row: several lines sharing one are one order, so a
@@ -105,11 +114,12 @@ export function sourcingNav(ws: Workspace, today = ''): NavRow[] {
     },
     { label: 'Suppliers', href: '/sourcing/suppliers', icon: 'truck', badge: count(ws.vendors.length) },
     /*
-     * Straight after Suppliers, because documents are how suppliers arrive. The
-     * badge counts what is waiting on a person rather than how many documents
-     * exist — a number that never goes down is not a badge, it is decoration.
+     * Documents are how suppliers arrive. The badge counts what is waiting on a
+     * person rather than how many documents exist — a number that never goes
+     * down is not a badge, it is decoration — and it adds into "More" while
+     * the fold is shut.
      */
-    { label: 'Documents', href: '/sourcing/documents', icon: 'doc', badge: count(unfiled) },
+    { label: 'Documents', href: '/sourcing/documents', icon: 'doc', badge: count(unfiled), tucked: true },
     { label: 'Materials', href: '/sourcing/materials', icon: 'boxes', badge: count(ws.items.length) },
     { label: 'Requests', href: '/sourcing/rfqs', icon: 'doc', badge: count(waiting) },
     { label: 'Quotes', href: '/sourcing/quotes', icon: 'scale', badge: count(ws.quotes.length) },
@@ -130,6 +140,7 @@ export function sourcingNav(ws: Workspace, today = ''): NavRow[] {
       href: '/sourcing/compare',
       icon: 'cash',
       badge: count(flipping(ws) + (today ? staleRates(ws, today) : 0)),
+      tucked: true,
     },
     { label: 'Purchase orders', href: '/sourcing/orders', icon: 'cart', badge: count(open) },
   ]
@@ -169,6 +180,13 @@ export const navFor = (stage: StageId, ws: Workspace, today = ''): NavRow[] =>
   stage === 'inbound' ? inboundNav(ws, today) : sourcingNav(ws, today)
 
 const count = (n: number) => (n > 0 ? String(n) : undefined)
+
+/**
+ * The number on "More": what is waiting behind the fold, added up, so tucking a
+ * row away never hides that something in it needs a person.
+ */
+export const foldCount = (rows: NavRow[]): number =>
+  rows.reduce((n, r) => n + (r.tucked && r.badge ? Number(r.badge) || 0 : 0), 0)
 
 /**
  * The materials the desk says are in trouble.
