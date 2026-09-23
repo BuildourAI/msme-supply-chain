@@ -42,6 +42,7 @@ const ICON: Record<MetricKey, IconName> = {
   netLoss: 'cash',
   scrap: 'alert',
   dio: 'clock',
+  remnants: 'scissors',
 }
 
 /*

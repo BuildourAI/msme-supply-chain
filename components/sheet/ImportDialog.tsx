@@ -31,6 +31,7 @@ const NOUN: Record<SheetEntity, string> = {
   quote: 'quotes', order: 'orders',
   check: 'checks', receipt: 'receipts', challan: 'challans',
   rack: 'racks', lot: 'lots', count: 'counts', move: 'movements', job: 'jobs', issue: 'issue slips', loss: 'losses',
+  cut: 'cuts', offcut: 'remnants',
 }
 
 /** Columns an import can fill. Worked-out ones are not offered — they are sums. */

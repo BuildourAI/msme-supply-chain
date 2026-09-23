@@ -70,6 +70,8 @@ export type Act =
   | 'release'       // held stock is fine after all
   | 'sell'          // the scrap was sold — say for what
   | 'no-sale'       // nobody will buy it
+  | 'use'           // remnant pieces into a job
+  | 'scrap'         // remnant pieces off the book, by decision
 
 export type DecisionKind =
   | 'at-risk' | 'late' | 'unsourced'
@@ -82,6 +84,8 @@ export type DecisionKind =
   /* the store's — see `inventory-decisions.ts` */
   | 'count-due' | 'no-rack' | 'negative-stock' | 'count-variance' | 'held-long'
   | 'scrap-unsold' | 'scrap-over'
+  /* only with cutting switched on */
+  | 'remnant-aged' | 'remnant-covers' | 'cut-below-plan'
 
 export interface Decision {
   /** stable across renders, so a list key is not an index */

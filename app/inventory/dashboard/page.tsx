@@ -14,6 +14,8 @@ import { varianceNotedKey } from '@/lib/workspace/counting'
 import { noSale, scrapNotedKey } from '@/lib/workspace/losses'
 import { SellScrapDialog } from '@/components/inventory/desk/Wastage'
 import { CountDialog, CountSheetDialog, LotStateDialog } from '@/components/inventory/desk/LedgerDialogs'
+import { ScrapRemnantDialog, UseRemnantDialog } from '@/components/inventory/desk/CuttingDialogs'
+import { cutNotedKey, remnantNotedKey } from '@/lib/workspace/cutting'
 
 /**
  * The store's morning.
@@ -36,6 +38,8 @@ function Dashboard() {
   const [walking, setWalking] = useState<{ rackId?: string; itemId?: string } | null>(null)
   const [stating, setStating] = useState<{ lotId: string; mode: 'release' | 'write-off' } | null>(null)
   const [selling, setSelling] = useState<string | null>(null)
+  const [using, setUsing] = useState<string | null>(null)
+  const [scrapping, setScrapping] = useState<string | null>(null)
 
   if (!workspace) return null
   const ws = workspace
@@ -63,6 +67,18 @@ function Dashboard() {
     if (kind === 'no-sale' && lossId) { update((w) => noSale(w, lossId, today)); return }
     if (kind === 'keep' && d.kind === 'scrap-over' && itemId) {
       update((w) => ({ ...w, drafts: { ...w.drafts, [scrapNotedKey(itemId, today.slice(0, 7))]: true } }))
+      return
+    }
+    // the cutting table's, only ever raised with cutting switched on
+    if (kind === 'use' && lotId) { setUsing(lotId); return }
+    if (kind === 'scrap' && lotId) { setScrapping(lotId); return }
+    const { cutId, orderNo } = d.refs
+    if (kind === 'keep' && d.kind === 'cut-below-plan' && cutId) {
+      update((w) => ({ ...w, drafts: { ...w.drafts, [cutNotedKey(cutId)]: true } }))
+      return
+    }
+    if (kind === 'keep' && d.kind === 'remnant-covers' && orderNo && itemId) {
+      update((w) => ({ ...w, drafts: { ...w.drafts, [remnantNotedKey(orderNo, itemId)]: true } }))
     }
   }
 
@@ -101,6 +117,8 @@ function Dashboard() {
       <CountSheetDialog scope={walking} onClose={() => setWalking(null)} />
       <LotStateDialog lotId={stating?.lotId ?? null} mode={stating?.mode ?? 'release'} onClose={() => setStating(null)} />
       <SellScrapDialog lossId={selling} onClose={() => setSelling(null)} />
+      <UseRemnantDialog lotId={using} onClose={() => setUsing(null)} />
+      <ScrapRemnantDialog lotId={scrapping} onClose={() => setScrapping(null)} />
     </div>
   )
 }

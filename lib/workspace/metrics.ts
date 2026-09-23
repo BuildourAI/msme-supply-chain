@@ -16,10 +16,10 @@
  * Nothing in `lib/domain/` is touched. Where a figure already exists there —
  * the rejection rate, landed cost — it is read, not reimplemented.
  */
-import { recordAccuracy, isCountOverTolerance } from '@/lib/domain/inventory'
+import { recordAccuracy, isCountOverTolerance, remnantAgeDays } from '@/lib/domain/inventory'
 import type { Item, ItemClass, Vendor } from '@/lib/domain/types'
 import { atJobworkersValue, qcHeld, unackedExposure } from './inbound'
-import { coverLots, isPhysical, lotRows } from './ledger'
+import { coverLots, isPhysical, isRemnant, lotRows } from './ledger'
 import { netLossOf, scrapRows } from './losses'
 import { daysInventoryOutstanding } from '@/lib/domain/exec'
 import { buildRows } from '@/lib/domain/derive'
@@ -86,6 +86,8 @@ export type MetricKey =
   | 'qcHeld' | 'inspectedOnTime' | 'atJobworkers' | 'unacked'
   /* the store's */
   | 'stockValue' | 'unconfirmed' | 'heldStock' | 'accuracy' | 'netLoss' | 'scrap' | 'dio'
+  /* only with cutting switched on */
+  | 'remnants'
 
 /** The desks that have a dashboard of figures. */
 export type MetricStage = 'sourcing' | 'inbound' | 'inventory'
@@ -104,8 +106,11 @@ export const STAGE_METRICS: Record<MetricStage, MetricKey[]> = {
     'singleSource', 'concentration', 'priceMoves', 'outstanding',
   ],
   inbound: ['qcHeld', 'inspectedOnTime', 'defects', 'onTime', 'unacked', 'atJobworkers', 'lead'],
-  inventory: ['stockValue', 'unconfirmed', 'accuracy', 'heldStock', 'netLoss', 'scrap', 'dio'],
+  inventory: ['stockValue', 'unconfirmed', 'accuracy', 'heldStock', 'netLoss', 'scrap', 'dio', 'remnants'],
 }
+
+/** Figures that belong to a switch in the store rules, and are not offered with it off. */
+const NEEDS_CUTTING: MetricKey[] = ['remnants']
 
 /**
  * What a new owner sees before they have chosen.
@@ -123,8 +128,12 @@ export const INBOUND_PICKS: MetricKey[] = [
   'qcHeld', 'inspectedOnTime', 'defects', 'onTime', 'unacked', 'atJobworkers',
 ]
 
-/** The store's, before anybody has chosen: what it is worth, and whether the book can be believed. */
-export const INVENTORY_PICKS: MetricKey[] = ['stockValue', 'unconfirmed', 'accuracy', 'heldStock', 'netLoss', 'scrap']
+/**
+ * The store's, before anybody has chosen: what it is worth, and whether the
+ * book can be believed. Remnants join them in a store that cuts — and are not
+ * offered in one that does not, so there it is the first six.
+ */
+export const INVENTORY_PICKS: MetricKey[] = ['stockValue', 'unconfirmed', 'accuracy', 'heldStock', 'netLoss', 'scrap', 'remnants']
 
 export const DEFAULTS_FOR: Record<MetricStage, MetricKey[]> = {
   sourcing: DEFAULT_PICKS,
@@ -153,6 +162,7 @@ export const METRIC_LABEL: Record<MetricKey, string> = {
   netLoss: 'Net loss',
   scrap: 'Scrap against target',
   dio: 'Days of stock',
+  remnants: 'Remnants on the racks',
 }
 
 /** One line each, for the dialog where the owner picks. */
@@ -177,6 +187,7 @@ export const METRIC_WHY: Record<MetricKey, string> = {
   netLoss: 'What material lost this month cost, less what its scrap fetched.',
   scrap: 'Scrap on the floor as a share of what was issued, for the material furthest over its target.',
   dio: 'How many days the usable stock would last at the rate it is used — money sitting on the shelf.',
+  remnants: 'What the offcuts on the racks are worth, and how much of it is past the age a remnant gets used by.',
 }
 
 /* ------------------------------------------------------------- the maths -- */
@@ -601,6 +612,10 @@ function storeMetrics(
   const dio = daysInventoryOutstanding(today ? buildRows(bundleFor(ws, today), ws.policy) : [])
   const burn = ws.items.reduce((a, i) => a + i.avgDailyConsumption * i.lastPurchaseRate, 0)
 
+  const remnants = ws.stockLots.filter((l) => isRemnant(l) && l.qty > 0)
+  const remnantValue = remnants.reduce((a, l) => a + l.qty * rate(l.itemId), 0)
+  const aged = today ? remnants.filter((l) => remnantAgeDays(l.on ?? today, today).value > ws.policy.remnantAgeDays) : []
+
   return [
     lots.length > 0 && value > 0
       ? {
@@ -684,6 +699,21 @@ function storeMetrics(
         how: 'Σ usable × last price ÷ Σ daily use × last price — raw material only, remnants and held stock out',
       }
       : nothing('dio', 'Not enough to say', 'needs usable stock with a price, and a daily use on its material'),
+
+    remnants.length > 0
+      ? {
+        // a remnant of a material nobody has priced is still a remnant: counted, never "₹0"
+        key: 'remnants', label: METRIC_LABEL.remnants,
+        value: remnantValue > 0 ? money(remnantValue) : `${remnants.length} remnant${remnants.length === 1 ? '' : 's'}`,
+        sub: aged.length === 0
+          ? `${remnants.length} remnant${remnants.length === 1 ? '' : 's'}, none past ${ws.policy.remnantAgeDays} days`
+          : `${aged.length} of ${remnants.length} past ${ws.policy.remnantAgeDays} days`,
+        tone: aged.length === 0 ? 'neutral' : 'warn',
+        measured: true, href: '/inventory/offcuts',
+        how: 'Σ remnant qty × last purchase rate — on the book, never counted as cover',
+        chart: { kind: 'pips', on: aged.length, of: remnants.length },
+      }
+      : nothing('remnants', 'No remnants yet', 'a remnant is made by a cut, or a short piece returned from a job'),
   ]
 }
 
@@ -773,7 +803,9 @@ function gateMetrics(
 /** Every figure a desk offers, in its own order. */
 export function stageMetrics(ws: Workspace, today: string, stage: MetricStage = 'sourcing'): Metric[] {
   const all = metricsFor(ws, today)
-  return STAGE_METRICS[stage].map((k) => all.find((m) => m.key === k)!).filter(Boolean)
+  return STAGE_METRICS[stage]
+    .filter((k) => ws.cutting || !NEEDS_CUTTING.includes(k))
+    .map((k) => all.find((m) => m.key === k)!).filter(Boolean)
 }
 
 /** Where a desk keeps its owner's choice. Absent is "nobody has chosen yet". */

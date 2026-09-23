@@ -112,8 +112,14 @@ export const reopenJob = (ws: Workspace, id: string): Workspace => ({
 export function jobProblemToRemove(ws: Workspace, id: string): string | null {
   const slips = (ws.issues ?? []).filter((s) => s.jobId === id).length
   const lost = (ws.losses ?? []).filter((l) => l.jobId === id).length
-  if (slips + lost === 0) return null
-  return `Material has moved against it (${slips} slip${slips === 1 ? '' : 's'}${lost ? `, ${lost} loss record${lost === 1 ? '' : 's'}` : ''}). Close it instead — its record stays.`
+  const cuts = (ws.cuts ?? []).filter((c) => c.jobId === id).length
+  if (slips + lost + cuts === 0) return null
+  const parts = [
+    slips ? `${slips} slip${slips === 1 ? '' : 's'}` : '',
+    cuts ? `${cuts} cut${cuts === 1 ? '' : 's'}` : '',
+    lost ? `${lost} loss record${lost === 1 ? '' : 's'}` : '',
+  ].filter(Boolean).join(', ')
+  return `Material has moved against it (${parts}). Close it instead — its record stays.`
 }
 
 export const removeJob = (ws: Workspace, id: string): Workspace =>
@@ -123,15 +129,28 @@ export const removeJob = (ws: Workspace, id: string): Workspace =>
 
 const r3 = (n: number) => Math.round(n * 1000) / 1000
 
-/** What a job has had of a material: issued, returned, wasted, and what that leaves with it. */
+/** Losses that happened on a job — scrap on the floor, and the blade and the bin at a cut. */
+const JOB_CAUSES = new Set(['process_scrap', 'cut_kerf', 'cut_offcut_scrap'])
+
+/**
+ * What a job has had of a material: issued, returned, wasted, and what that
+ * leaves with it. A cut for the job counts too — what went on the table is
+ * issued, its usable remnants came back to the store, its kerf and its scrap
+ * were wasted — so what is left with the job is the parts it cut.
+ */
 export function onJob(ws: Workspace, jobId: string, itemId: string) {
   const slips = (ws.issues ?? []).filter((s) => s.jobId === jobId)
-  const sum = (kind: IssueSlip['kind']) => r3(slips.filter((s) => s.kind === kind)
-    .flatMap((s) => s.lines).filter((l) => l.itemId === itemId).reduce((a, l) => a + l.qty, 0))
-  const issued = sum('issue')
-  const returned = sum('return')
+  const sum = (kind: IssueSlip['kind']) => slips.filter((s) => s.kind === kind)
+    .flatMap((s) => s.lines).filter((l) => l.itemId === itemId).reduce((a, l) => a + l.qty, 0)
+  const cuts = (ws.cuts ?? []).filter((c) => c.jobId === jobId && c.itemId === itemId)
+  const cutNos = new Set(cuts.map((c) => c.cutNo))
+  const cutIn = cuts.reduce((a, c) => a + c.inputQty, 0)
+  const cutBack = (ws.moves ?? []).filter((m) => m.kind === 'offcut_in' && m.source === 'cut'
+    && cutNos.has(m.sourceRef) && m.itemId === itemId).reduce((a, m) => a + m.qty, 0)
+  const issued = r3(sum('issue') + cutIn)
+  const returned = r3(sum('return') + cutBack)
   const wasted = r3((ws.losses ?? []).filter((l) => l.jobId === jobId && l.itemId === itemId
-    && l.cause === 'process_scrap').reduce((a, l) => a + l.qty, 0))
+    && JOB_CAUSES.has(l.cause)).reduce((a, l) => a + l.qty, 0))
   return { issued, returned, wasted, withJob: r3(issued - returned - wasted) }
 }
 
@@ -338,7 +357,15 @@ export function removeSlip(ws: Workspace, slipId: string): Workspace {
     reverse(ws, (m) => m.source === 'job' && m.sourceRef === slip.no),
     (l) => made.includes(l.id),
   )
-  return { ...w, issues: (w.issues ?? []).filter((s) => s.id !== slipId) }
+  // remnant pieces it issued go back on the count, as well as the quantity
+  const back = new Map<string, number>()
+  for (const l of slip.lines) if (l.pieces) back.set(l.lotId, (back.get(l.lotId) ?? 0) + l.pieces)
+  return {
+    ...w,
+    stockLots: back.size === 0 ? w.stockLots
+      : w.stockLots.map((l) => (back.has(l.id) ? { ...l, pieces: (l.pieces ?? 0) + back.get(l.id)! } : l)),
+    issues: (w.issues ?? []).filter((s) => s.id !== slipId),
+  }
 }
 
 /* -------------------------------------------------------------- reading -- */
@@ -369,8 +396,10 @@ export interface JobRow {
 export function jobRows(ws: Workspace): JobRow[] {
   return (ws.jobs ?? []).map((job) => {
     const slips = (ws.issues ?? []).filter((s) => s.jobId === job.id)
+    const cuts = (ws.cuts ?? []).filter((c) => c.jobId === job.id)
     const itemIds = [...new Set([
       ...slips.flatMap((s) => s.lines.map((l) => l.itemId)),
+      ...cuts.map((c) => c.itemId),
       ...(ws.losses ?? []).filter((l) => l.jobId === job.id).map((l) => l.itemId),
     ])]
     const materials = itemIds.map((itemId) => {
@@ -391,7 +420,7 @@ export function jobRows(ws: Workspace): JobRow[] {
       consumption: Math.round(materials.reduce((a, m) => a + m.value, 0) * 100) / 100,
       wastedValue: Math.round(materials.reduce((a, m) => a + m.wasted * rate(m.itemId), 0) * 100) / 100,
       slips: slips.length,
-      lastOn: slips.map((s) => s.on).sort().pop(),
+      lastOn: [...slips.map((s) => s.on), ...cuts.map((c) => c.on)].sort().pop(),
     }
   }).sort((a, b) => Number(b.open) - Number(a.open) || b.job.openedOn.localeCompare(a.job.openedOn)
     || b.job.no.localeCompare(a.job.no, undefined, { numeric: true }))

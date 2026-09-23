@@ -19,6 +19,7 @@ import { openCount } from './decisions'
 import { inboundOpenCount } from './inbound-decisions'
 import { inventoryOpenCount } from './inventory-decisions'
 import { openVariances } from './counting'
+import { cutRows, offcutRows } from './cutting'
 import { jobWordCap, openJobs } from './jobs'
 import { lotRows } from './ledger'
 import { unsoldPast } from './losses'
@@ -202,6 +203,16 @@ export function inventoryNav(ws: Workspace, today = ''): NavRow[] {
     { label: 'Stock ledger', href: '/inventory/ledger', icon: 'boxes', badge: count(due) },
     // the owner's own word — Styles, Jobs, Orders — with how many are open
     { label: jobWordCap(ws).many, href: '/inventory/issues', icon: 'factory', badge: count(openJobs(ws).length) },
+    /*
+     * Only in a store that cuts. Remnants past their age, and cuts well below
+     * plan nobody has looked at. Switched off, the row goes and every record
+     * stays — switching it on again finds them all where they were.
+     */
+    ...(ws.cutting ? [{
+      label: 'Cutting & offcuts', href: '/inventory/offcuts', icon: 'scissors' as const,
+      badge: count(today ? offcutRows(ws, today).filter((r) => r.aged).length
+        + cutRows(ws).filter((r) => r.belowPlan && !r.noted).length : 0),
+    }] : []),
     // scrap booked as money and never collected: the one number here that is owed to you
     { label: 'Wastage & loss', href: '/inventory/wastage', icon: 'alert', badge: count(today ? unsoldPast(ws, today).length : 0) },
     { label: 'Racks', href: '/inventory/racks', icon: 'columns', badge: count(unplacedLots(ws).length), tucked: true },

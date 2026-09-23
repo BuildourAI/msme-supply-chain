@@ -456,7 +456,8 @@ export interface IssueSlip {
   takenBy: string
   actor: string
   note?: string
-  lines: { lotId: string; itemId: string; qty: number }[]
+  /** `pieces` is set when remnant pieces were issued, so taking the slip back restores the count */
+  lines: { lotId: string; itemId: string; qty: number; pieces?: number }[]
 }
 
 export type WsCut = CutRecord & { jobId?: string; rack?: string }
@@ -493,7 +494,7 @@ export type SheetEntity =
   /** the inbound desk's three lists */
   | 'check' | 'receipt' | 'challan'
   /** the store's */
-  | 'rack' | 'lot' | 'count' | 'move' | 'job' | 'issue' | 'loss'
+  | 'rack' | 'lot' | 'count' | 'move' | 'job' | 'issue' | 'loss' | 'cut' | 'offcut'
 
 export interface FieldDef {
   id: string

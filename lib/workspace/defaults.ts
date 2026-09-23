@@ -139,6 +139,7 @@ export function emptyWorkspace(input: {
       check: BLANK_VIEW, receipt: BLANK_VIEW, challan: BLANK_VIEW,
       rack: BLANK_VIEW, lot: BLANK_VIEW, count: BLANK_VIEW, move: BLANK_VIEW,
       job: BLANK_VIEW, issue: BLANK_VIEW, loss: BLANK_VIEW,
+      cut: BLANK_VIEW, offcut: BLANK_VIEW,
     },
     vendorContact: {},
     sendLog: [],

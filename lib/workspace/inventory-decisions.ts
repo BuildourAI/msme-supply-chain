@@ -12,6 +12,7 @@
 import { daysBetween } from '@/lib/domain/calc'
 import { num } from '@/lib/domain/format'
 import { openVariances } from './counting'
+import { cutRows, offcutRows, remnantEffects } from './cutting'
 import { sortDecisions, type Decision } from './decisions'
 import { STATE_WORD, lotRows, round3, type LotRow } from './ledger'
 import { scrapRows, unsoldPast } from './losses'
@@ -183,7 +184,76 @@ export function inventoryDecisionsFor(ws: Workspace, today: string): Decision[] 
     })
   }
 
+  if (ws.cutting) out.push(...cuttingDecisions(ws, today))
+
   return sortDecisions(out)
+}
+
+/**
+ * The cutting table's three, asked only of a store that cuts. A remnant past
+ * its age is money on a rack nobody will reach for; one that could cover part
+ * of an order about to go out is the same material bought twice; a cut well
+ * below its plan is a lay worth looking at.
+ */
+function cuttingDecisions(ws: Workspace, today: string): Decision[] {
+  const out: Decision[] = []
+  const money = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`
+
+  for (const r of offcutRows(ws, today)) {
+    if (!r.aged) continue
+    const name = r.item?.name ?? 'material'
+    out.push({
+      id: `remnant-aged:${r.lot.id}`,
+      band: 'costs',
+      kind: 'remnant-aged',
+      title: `A remnant of ${name} is ${r.age.value} days old`,
+      detail: `${r.pieces ? `${plural(r.pieces, 'piece')} · ` : ''}${num(r.lot.qty, 3)} ${r.uom}${r.rack ? ` on ${r.rack.name}` : ''}${
+        r.from ? `, from ${r.from}` : ''}. Past ${ws.policy.remnantAgeDays} days a remnant is rarely reached for — use it in a job, or scrap it${
+        r.value > 0 ? ` (worth ${money(r.value)})` : ''}.`,
+      act: 'use',
+      actLabel: 'Use in a job',
+      alt: { act: 'scrap', label: 'Scrap it' },
+      href: '/inventory/offcuts',
+      refs: { lotId: r.lot.id, itemId: r.lot.itemId },
+      weight: r.age.value,
+    })
+  }
+
+  for (const e of remnantEffects(ws, today)) {
+    if (e.noted || !e.moves) continue
+    out.push({
+      id: `remnant-covers:${e.order.no}:${e.item.id}`,
+      band: 'costs',
+      kind: 'remnant-covers',
+      title: `Draft ${e.order.no} buys ${num(e.order.qty, 3)} ${e.item.uom} of ${e.item.name}; ${num(e.remnant, 3)} ${e.item.uom} of remnants are on the racks`,
+      detail: `Netting them off the need, the order could be ${num(e.effect.revisedQty.value, 3)} ${e.item.uom} rather than ${
+        num(e.without.revisedQty.value, 3)}, with the smallest order applied again. Use the remnants first; they are not counted as cover.`,
+      act: 'open',
+      actLabel: 'Open the order',
+      alt: { act: 'keep', label: 'Keep the order' },
+      href: '/sourcing/orders',
+      refs: { orderNo: e.order.no, itemId: e.item.id },
+      weight: (e.without.revisedQty.value - e.effect.revisedQty.value) * (e.item.lastPurchaseRate || 1),
+    })
+  }
+
+  for (const r of cutRows(ws)) {
+    if (!r.belowPlan || r.noted) continue
+    out.push({
+      id: `cut-below-plan:${r.cut.id}`,
+      band: 'costs',
+      kind: 'cut-below-plan',
+      title: `${r.cut.cutNo} came out ${r.shortfall.value} points below plan`,
+      detail: `${r.item?.name ?? 'Material'} off ${r.batch}${r.job ? ` for ${r.job.no}` : ''}: ${r.yielded.value}% into parts against ${
+        r.planned.value}% planned, on ${r.cut.on}. The rules allow ${ws.policy.yieldTolerancePct} points — a bad lay, a flaw in the lot, or a plan that was wrong.`,
+      act: 'keep',
+      actLabel: 'Noted',
+      href: '/inventory/offcuts?view=cuts',
+      refs: { cutId: r.cut.id, itemId: r.cut.itemId },
+      weight: r.shortfall.value,
+    })
+  }
+  return out
 }
 
 export const inventoryOpenCount = (ws: Workspace, today: string): number =>

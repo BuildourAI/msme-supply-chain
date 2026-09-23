@@ -376,8 +376,12 @@ export function JobSheet({ jobId, onClose }: { jobId: string | null; onClose: ()
   const row = jobRows(workspace).find((r) => r.job.id === jobId)
   if (!row) return null
   const word = jobWordCap(workspace).one
-  const slips = (workspace.issues ?? []).filter((s) => s.jobId === jobId)
-    .sort((a, b) => a.on.localeCompare(b.on) || a.id.localeCompare(b.id))
+  // slips and, where material is cut, the cuts made for it — in the order they happened
+  const history = [
+    ...(workspace.issues ?? []).filter((s) => s.jobId === jobId).map((s) => ({ kind: 'slip' as const, on: s.on, id: s.id, s })),
+    ...(workspace.cuts ?? []).filter((c) => c.jobId === jobId).map((c) => ({ kind: 'cut' as const, on: c.on, id: c.id, c })),
+  ].sort((a, b) => a.on.localeCompare(b.on) || a.id.localeCompare(b.id))
+  const itemOf = (id?: string) => workspace.items.find((i) => i.id === id)
 
   return (
     <Dialog open onClose={onClose} wide title={`${word} ${row.job.no}${row.job.name ? ` — ${row.job.name}` : ''}`}
@@ -417,15 +421,21 @@ export function JobSheet({ jobId, onClose }: { jobId: string | null; onClose: ()
           Used is what was issued less what came back — waste included, because wasted material went into
           the {word.toLowerCase()} too. Worth is at the last purchase price.
         </p>
-        {slips.length > 0 && (
+        {history.length > 0 && (
           <ul className="space-y-1 text-[12.5px] text-ink-2">
-            {slips.map((s) => (
-              <li key={s.id}>
-                <span className="mono">{s.no}</span> · {shortDate(s.on)} · {s.kind === 'issue' ? 'issued' : 'back'}{' '}
-                {num(s.lines.reduce((a, l) => a + l.qty, 0), 3)} {workspace.items.find((i) => i.id === s.lines[0]?.itemId)?.uom ?? ''}{' '}
-                of {workspace.items.find((i) => i.id === s.lines[0]?.itemId)?.name ?? 'material'} · {s.takenBy}
+            {history.map((h) => (h.kind === 'slip' ? (
+              <li key={h.s.id}>
+                <span className="mono">{h.s.no}</span> · {shortDate(h.s.on)} · {h.s.kind === 'issue' ? 'issued' : 'back'}{' '}
+                {num(h.s.lines.reduce((a, l) => a + l.qty, 0), 3)} {itemOf(h.s.lines[0]?.itemId)?.uom ?? ''}{' '}
+                of {itemOf(h.s.lines[0]?.itemId)?.name ?? 'material'}{h.s.takenBy ? ` · ${h.s.takenBy}` : ''}
               </li>
-            ))}
+            ) : (
+              <li key={h.c.id}>
+                <span className="mono">{h.c.cutNo}</span> · {shortDate(h.c.on)} · cut {num(h.c.inputQty, 3)} {itemOf(h.c.itemId)?.uom ?? ''}{' '}
+                of {itemOf(h.c.itemId)?.name ?? 'material'} into {num(h.c.partsQty, 3)} of parts
+                {h.c.operator ? ` · ${h.c.operator}` : ''}
+              </li>
+            )))}
           </ul>
         )}
       </div>

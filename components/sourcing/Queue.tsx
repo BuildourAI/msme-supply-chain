@@ -125,6 +125,9 @@ const KIND: Record<DecisionKind, IconName> = {
   'held-long': 'tray',
   'scrap-unsold': 'cash',
   'scrap-over': 'alert',
+  'remnant-aged': 'clock',
+  'remnant-covers': 'cart',
+  'cut-below-plan': 'scissors',
 }
 
 export function Queue({ rows, berths, onAct, showAll, onShowAll, clear }: {

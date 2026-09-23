@@ -18,7 +18,7 @@ export type IconName =
   | 'activity' | 'alert' | 'clock' | 'cash' | 'calendar' | 'menu' | 'help'
   | 'close' | 'scale' | 'doc' | 'arrow-down' | 'info' | 'mail' | 'camera' | 'filter'
   | 'ruler' | 'eye' | 'hash' | 'pencil' | 'trash' | 'plus' | 'star'
-  | 'upload' | 'download' | 'columns' | 'share' | 'whatsapp' | 'undo'
+  | 'upload' | 'download' | 'columns' | 'share' | 'whatsapp' | 'undo' | 'scissors'
 
 const PATHS: Record<IconName, React.ReactNode> = {
   home: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5.5 9.5V20h13V9.5" /></>,
@@ -63,6 +63,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ruler: <><rect x="1.5" y="8" width="21" height="8" rx="1.5" /><path d="M6 8v3.5M10 8v5M14 8v3.5M18 8v5" /></>,
   eye: <><path d="M2 12s3.8-6 10-6 10 6 10 6-3.8 6-10 6-10-6-10-6Z" /><circle cx="12" cy="12" r="3" /></>,
   hash: <path d="M9 3.5 7 20.5M17 3.5l-2 17M3.5 8.5h17M2.5 15.5h17" />,
+  scissors: <><circle cx="6" cy="6.5" r="2.75" /><circle cx="6" cy="17.5" r="2.75" /><path d="M8.3 8 20 17.5M8.3 16 20 6.5" /></>,
 }
 
 export function Icon({ name, className = 'size-4' }: { name: IconName; className?: string }) {

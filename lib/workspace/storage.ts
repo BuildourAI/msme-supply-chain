@@ -371,6 +371,8 @@ function migrate(raw: Partial<Workspace>): Workspace {
       job: view(views.job),
       issue: view(views.issue),
       loss: view(views.loss),
+      cut: view(views.cut),
+      offcut: view(views.offcut),
     },
     vendorContact: map(raw.vendorContact),
     /*

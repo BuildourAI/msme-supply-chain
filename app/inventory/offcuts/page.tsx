@@ -9,7 +9,12 @@ import { buildRows, type SeedBundle } from '@/lib/domain/derive'
 import { DEFAULT_POLICY } from '@/lib/domain/policy'
 import * as S from '@/lib/seed/sourcing'
 import { lakh, longDate } from '@/lib/domain/format'
-import { StageGate } from '@/components/onboard/StageGate'
+import { useState } from 'react'
+import { useWorkspace } from '@/components/workspace/store'
+import { DeskOnly } from '@/components/sourcing/DeskOnly'
+import { Cutting } from '@/components/inventory/desk/Cutting'
+import { StoreRulesWizard } from '@/components/onboard/wizards/StoreRulesWizard'
+import { Icon } from '@/components/ui/icons'
 
 const seed: SeedBundle = {
   today: S.TODAY_SOURCING, items: S.items, vendors: S.vendors, vendorItems: S.vendorItems,
@@ -53,6 +58,37 @@ function PageBody() {
   )
 }
 
+/**
+ * One route, two companies. The sample keeps its worked example. The owner's
+ * company gets its own cut records and register — when it cuts. A store that
+ * said it does not is told where that was said, and can change its mind from
+ * here; every record made while it was on is still there when it comes back.
+ */
 export default function Page() {
-  return <StageGate sample="the cut records and the offcut register" shows="cut records, cutting yield and the register of remnants"><PageBody /></StageGate>
+  const { mode, ready, workspace } = useWorkspace()
+  if (!ready) return <div className="min-h-[50vh]" aria-hidden />
+  if (mode !== 'mine') return <PageBody />
+  return <DeskOnly>{workspace?.cutting ? <Cutting /> : <SwitchedOff />}</DeskOnly>
+}
+
+function SwitchedOff() {
+  const [open, setOpen] = useState(false)
+  return (
+    <section className="mx-auto mt-6 max-w-[34rem] rounded-xl border border-line bg-surface px-6 py-10 text-center">
+      <span aria-hidden className="mx-auto mb-3 grid size-10 place-items-center rounded-lg bg-accent-tint text-accent-ink">
+        <Icon name="scissors" className="size-5" />
+      </span>
+      <h1 className="text-[16px] font-bold leading-tight tracking-tight">Cutting is switched off</h1>
+      <p className="mx-auto mt-2 max-w-[26rem] text-[13px] leading-relaxed text-ink-2">
+        Your store rules say material goes out as it came in. If you cut fabric, sheet or tube, switch it on and
+        this becomes your cut records and the register of remnants — which rack, how many pieces, how old.
+        It is the first question in the store rules, the last set-up step on the Inventory dashboard.
+      </p>
+      <button type="button" onClick={() => setOpen(true)}
+        className="press mt-4 inline-flex items-center gap-1.5 rounded-lg border border-accent-ink bg-accent-ink px-3.5 py-2 text-[13px] font-semibold text-on-accent hover:bg-accent">
+        Open the store rules
+      </button>
+      <StoreRulesWizard open={open} onClose={() => setOpen(false)} />
+    </section>
+  )
 }
