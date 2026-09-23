@@ -58,6 +58,8 @@ export interface Approval {
   contact?: { phone?: string; email?: string }
   custom?: Record<string, string>
   termsDays?: number
+  /** days to deliver, from the document or the owner — the build's 7 otherwise */
+  leadDays?: number
   /**
    * Columns off the document the owner chose to keep.
    *
@@ -307,7 +309,7 @@ export function applyApproval(ws: Workspace, a: Approval): { ws: Workspace; undo
       unitPrice: l.rate,
       moq: 0,
       qty: l.qty && l.qty > 0 ? l.qty : undefined,
-      leadDays: DEFAULT_LEAD_DAYS,
+      leadDays: a.leadDays && a.leadDays > 0 ? Math.round(a.leadDays) : DEFAULT_LEAD_DAYS,
       state: 'received' as const,
     })
 

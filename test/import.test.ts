@@ -17,6 +17,7 @@ import {
   NEW_FIELD, applyImport, planImport, summarise, undoImport,
   type DupPolicy, type Mapping,
 } from '@/lib/sheet/import'
+import { matchHeader } from '@/lib/sheet/match'
 import type { Workspace } from '@/lib/workspace/types'
 
 const TODAY = '2026-09-18'
@@ -183,6 +184,69 @@ describe('carrying an import out', () => {
     expect(after.items[0].lastPurchaseRate).toBe(850)
     expect(after.items[0].safetyStock).toBe(50)
     expect(after.items[0].avgDailyConsumption).toBe(10)
+  })
+
+  it('takes the planning figures when the sheet has them', () => {
+    const map: Mapping[] = [
+      { column: 0, target: 'name' }, { column: 1, target: 'uom' }, { column: 2, target: 'daily' },
+      { column: 3, target: 'cushion' }, { column: 4, target: 'minOrder' },
+    ]
+    const plans = planImport(blank(), 'material', [['Denim 12 oz rigid', 'Mtr', '720', '7', '1,000']], map, 'update')
+    expect(plans[0].reason).toBeUndefined()
+    const item = applyImport(blank(), 'material', plans, map, 'x.csv', TODAY).ws.items[0]
+    expect(item.uom).toBe('m')
+    expect(item.avgDailyConsumption).toBe(720)
+    expect(item.floorConsumptionPerDay).toBe(720)
+    expect(item.safetyStock).toBe(5040)               // 720 a day × 7 days of cushion
+    expect(item.moq).toBe(1000)
+  })
+
+  it('reads a safety stock quantity as days of cushion — never as stock on the shelf', () => {
+    const map: Mapping[] = [
+      { column: 0, target: 'name' }, { column: 1, target: 'daily' }, { column: 2, target: 'safety' },
+    ]
+    const plans = planImport(blank(), 'material', [['Copper rivet', '3000', '15000']], map, 'update')
+    const { ws } = applyImport(blank(), 'material', plans, map, 'x.csv', TODAY)
+    expect(ws.items[0].safetyStock).toBe(15000)
+    expect(ws.stockLots).toEqual([])
+  })
+
+  it('refuses a planning figure that is not a number', () => {
+    const map: Mapping[] = [{ column: 0, target: 'name' }, { column: 1, target: 'daily' }]
+    const plans = planImport(blank(), 'material', [['Copper rivet', 'lots']], map, 'update')
+    expect(plans[0].reason).toMatch(/not a number/)
+  })
+
+  it('keeps the planning figures a later sheet leaves blank', () => {
+    const map: Mapping[] = [
+      { column: 0, target: 'name' }, { column: 1, target: 'daily' }, { column: 2, target: 'cushion' },
+      { column: 3, target: 'minOrder' },
+    ]
+    let ws = applyImport(blank(), 'material',
+      planImport(blank(), 'material', [['Copper rivet', '3000', '5', '10000']], map, 'update'), map, 'x.csv', TODAY).ws
+    ws = applyImport(ws, 'material',
+      planImport(ws, 'material', [['Copper rivet', '', '', '']], map, 'update'), map, 'x.csv', TODAY).ws
+    expect(ws.items[0]).toMatchObject({ avgDailyConsumption: 3000, safetyStock: 15000, moq: 10000 })
+    // a new daily figure keeps the cushion in days, not the old quantity
+    ws = applyImport(ws, 'material',
+      planImport(ws, 'material', [['Copper rivet', '4000', '', '']], map, 'update'), map, 'x.csv', TODAY).ws
+    expect(ws.items[0]).toMatchObject({ avgDailyConsumption: 4000, safetyStock: 20000 })
+  })
+
+  it('matches the planning headers a stock register uses, by itself', () => {
+    const targets = BUILTIN.material.filter((b) => !b.derived && b.kind)
+      .map((b) => ({ key: b.key, label: b.label, aliases: b.aliases, kind: b.kind! }))
+    const pick = (h: string) => matchHeader(h, targets, new Set())
+    expect(pick('Used per day')).toBe('daily')
+    expect(pick('Daily consumption')).toBe('daily')
+    expect(pick('Days of cushion')).toBe('cushion')
+    expect(pick('Safety stock')).toBe('safety')
+    expect(pick('MOQ')).toBe('minOrder')
+    expect(pick('Smallest order')).toBe('minOrder')
+    // and the ones that were already there still land where they did
+    expect(pick('On hand')).toBe('onHand')
+    expect(pick('Stock')).toBe('onHand')
+    expect(pick('Last paid')).toBe('rate')
   })
 
   it('will not invent a material to hang a request on', () => {

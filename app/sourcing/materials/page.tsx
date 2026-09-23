@@ -73,6 +73,35 @@ function Materials() {
         : <span className="text-ink-4">not counted</span>),
       text: (r) => (r.onHand > 0 ? String(r.onHand) : ''),
     },
+    daily: {
+      align: 'right',
+      cell: (r) => (r.item.avgDailyConsumption > 0
+        ? `${num(r.item.avgDailyConsumption, 3)} ${r.item.uom}`
+        : <span className="text-ink-4" title="Nothing can be planned for a material nobody says they use">not set</span>),
+      text: (r) => (r.item.avgDailyConsumption > 0 ? String(r.item.avgDailyConsumption) : ''),
+    },
+    cushion: {
+      align: 'right',
+      cell: (r) => (r.item.avgDailyConsumption > 0 && r.item.safetyStock > 0
+        ? `${num(r.item.safetyStock / r.item.avgDailyConsumption, 1)} days`
+        : <span className="text-ink-4">—</span>),
+      text: (r) => (r.item.avgDailyConsumption > 0 && r.item.safetyStock > 0
+        ? String(Math.round((r.item.safetyStock / r.item.avgDailyConsumption) * 10) / 10) : ''),
+    },
+    safety: {
+      align: 'right',
+      cell: (r) => (r.item.safetyStock > 0
+        ? `${num(r.item.safetyStock, 3)} ${r.item.uom}`
+        : <span className="text-ink-4">—</span>),
+      text: (r) => (r.item.safetyStock > 0 ? String(r.item.safetyStock) : ''),
+    },
+    minOrder: {
+      align: 'right',
+      cell: (r) => (r.item.moq > 0
+        ? `${num(r.item.moq, 3)} ${r.item.uom}`
+        : <span className="text-ink-4">—</span>),
+      text: (r) => (r.item.moq > 0 ? String(r.item.moq) : ''),
+    },
     suppliers: {
       align: 'right',
       cell: (r) => (r.suppliers === 0

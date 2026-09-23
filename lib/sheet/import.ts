@@ -413,21 +413,28 @@ export function applyImport(
 
       const rate = parseNumber(values.rate ?? '')
       /*
-       * Safety stock is a product of daily use and a cushion, neither of which
-       * a catalogue sheet carries. For a material already here, the cushion is
-       * recovered from what it already holds so that re-importing a price list
-       * does not quietly zero everybody's safety stock. A brand-new material
-       * gets nothing, because nothing has been measured — a reorder point
+       * Safety stock is a product of daily use and a cushion. A sheet that
+       * carries them — as "Used per day" and either "Days of cushion" or a
+       * "Safety stock" quantity — sets them; a column left blank keeps what the
+       * material already holds, so re-importing a price list never quietly
+       * zeroes anybody's safety stock. A brand-new material with no figures
+       * gets nothing, because nothing has been measured: a reorder point
        * invented from a spreadsheet is a number somebody would act on.
        */
-      const daily = before?.avgDailyConsumption ?? 0
-      const cushionDays = before && daily > 0 ? before.safetyStock / daily : 0
+      const fig = (k: string) => { const n = parseNumber(values[k] ?? ''); return n !== null && n >= 0 ? n : null }
+      const daily = fig('daily') ?? before?.avgDailyConsumption ?? 0
+      const heldCushion = before && before.avgDailyConsumption > 0
+        ? before.safetyStock / before.avgDailyConsumption : 0
+      const safety = fig('safety')
+      const cushionDays = fig('cushion')
+        ?? (safety !== null && daily > 0 ? safety / daily : null)
+        ?? heldCushion
       const item: Item = buildItem(w, {
         id,
         name: values.name,
         code: values.code || before?.code || suggest(values.name, w.items),
         uom: parseUom(values.uom ?? '') ?? before?.uom ?? 'kg',
-        moq: before?.moq ?? 0,
+        moq: fig('minOrder') ?? before?.moq ?? 0,
         daily,
         cushionDays,
         lastPurchaseRate: rate ?? before?.lastPurchaseRate ?? 0,

@@ -94,6 +94,19 @@ describe('a document from a supplier nobody has entered yet', () => {
     expect(ws.vendorItems).toEqual([])
   })
 
+  it('gives each line the days to deliver the document promised', () => {
+    const { ws } = applyApproval(withMaterial(), approval({ leadDays: 21 }))
+    expect(ws.quotes[0].lines[0].leadDays).toBe(21)
+    // and accepting it is what makes 21 days the supplier's quoted lead time
+    const taken = acceptAll(ws, ws.quotes[0].id)
+    expect(taken.vendorItems[0].quotedLeadTimeDays).toBe(21)
+  })
+
+  it('falls back to a week when the document says nothing', () => {
+    expect(applyApproval(withMaterial(), approval()).ws.quotes[0].lines[0].leadDays).toBe(7)
+    expect(applyApproval(withMaterial(), approval({ leadDays: 0 })).ws.quotes[0].lines[0].leadDays).toBe(7)
+  })
+
   it('dates the quote from the document rather than from today', () => {
     const { ws } = applyApproval(withMaterial(), approval())
     expect(ws.quotes[0].on).toBe('2026-09-12')

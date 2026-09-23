@@ -318,3 +318,22 @@ describe('a wording somebody has already decided', () => {
     expect(ws.aliases[0].vendorId).toBe('VN-002')
   })
 })
+
+/* ======================================================= a GIF is a picture */
+
+describe('which files the upload offers', () => {
+  it('offers a GIF in the picker, not only by drag and drop', async () => {
+    const { acceptFiles } = await import('@/lib/intake/read')
+    expect(acceptFiles().split(',')).toContain('.gif')
+  })
+
+  it('and reads one as a photograph', async () => {
+    const { readDocument } = await import('@/lib/intake/read')
+    let asked = ''
+    const ocr = async (f: Blob) => { asked = (f as File).name; return { rows: [['Pocketing fabric', '3000', 'm', '48']], confidence: 0.94 } }
+    const got = await readDocument(new File([new Uint8Array([71, 73, 70])], 'Q7-Narol-Pocketing.gif'), ocr)
+    expect(asked).toBe('Q7-Narol-Pocketing.gif')
+    expect(got.read).toBe('photo')
+    expect(got.rows).toEqual([['Pocketing fabric', '3000', 'm', '48']])
+  })
+})

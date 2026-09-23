@@ -112,7 +112,24 @@ export interface DocHeader {
    * can use the moment it is filed.
    */
   termsDays?: number
+  /**
+   * How many days they say delivery takes — "Delivery: 21 days", "Lead time
+   * 12 days", "Dispatch within 2 weeks". A range takes its far end, because
+   * the far end is the one a line stops on. Absent when nothing is printed,
+   * and then the build's own default stands and says it is a default.
+   */
+  leadDays?: number
 }
+
+/**
+ * A delivery promise, in days. The keyword has to come first and the figure
+ * within a short reach of it, without crossing a sentence — "Payment terms:
+ * 30 days. Delivery 10-14 days" must give 14, never 30.
+ */
+const LEAD = /\b(?:delivery|lead\s*time|dispatch|despatch|supply|ready)\b[^.|]{0,30}?\b(\d{1,3})(?:\s*(?:-|–|to)\s*(\d{1,3}))?\s*(?:working\s+)?(days?|weeks?|wks?)\b/i
+
+/** Terms that belong to something other than paying — "Delivery terms: 15 days". */
+const NOT_PAYMENT = /\b(?:delivery|dispatch|despatch|shipping|freight|price|supply)\s*$/i
 
 /** Terms that mean there is no credit, however they are written. */
 const NO_CREDIT = /\b(advance|against\s+delivery|before\s+dispatch|cash|c\.?o\.?d\.?|immediate|proforma)\b/i
@@ -132,10 +149,16 @@ export function readHeader(rows: string[][]): DocHeader {
 
   for (const line of lines) {
     if (!out.docNo) {
-      const m = /\b(?:no|ref|quotation|quote|invoice|bill)\.?\s*[:#-]?\s*([A-Z0-9][A-Z0-9/\\-]{3,})/i
-        .exec(line)
-      // a date is not a document number, however much it looks like one
-      if (m && !toIsoDate(m[1])) out.docNo = m[1]
+      /*
+       * Every candidate on the line, not just the first. A letterhead that
+       * prints "QUOTATION" beside "Quotation No. SDM/QTN/0418" offered the
+       * second word as the number, and "Quote valid upto" offered "valid". A
+       * document number has a digit in it; a word does not.
+       */
+      for (const m of line.matchAll(/\b(?:no|ref|quotation|quote|invoice|bill)\.?\s*[:#-]?\s*([A-Z0-9][A-Z0-9/\\-]{3,})/gi)) {
+        // a date is not a document number, however much it looks like one
+        if (/\d/.test(m[1]) && !toIsoDate(m[1])) { out.docNo = m[1]; break }
+      }
     }
     if (!out.validUntil) {
       const m = /\bvalid\s*(?:until|upto|up\s*to|till|through)?\s*[:-]?\s*([\d./-]{6,10})/i.exec(line)
@@ -148,13 +171,24 @@ export function readHeader(rows: string[][]): DocHeader {
       // "valid until" carries a date too, and it is not this one
       if (iso && !/valid/i.test(line)) out.date = iso
     }
+    if (out.leadDays === undefined) {
+      const m = LEAD.exec(line)
+      if (m) {
+        const n = Number(m[2] ?? m[1])
+        const days = /^w/i.test(m[3]) ? n * 7 : n
+        if (days > 0 && days <= 365) out.leadDays = days
+      }
+    }
     if (!out.terms) {
       /*
        * Read off the phrase rather than the whole line, because "Payment
        * terms: 30 days from invoice" sits two inches from "Delivery: 15 days"
-       * and taking the first number on the row would swap them.
+       * and taking the first number on the row would swap them. And "Delivery
+       * terms: 15 days" is not about paying at all, so terms named for
+       * something else are passed over.
        */
-      const m = /\b(?:payment\s*)?terms?\s*[:-]\s*([^|]{2,64})/i.exec(line)
+      const all = [...line.matchAll(/\b(?:payment\s*)?terms?\s*[:-]\s*([^|]{2,64})/gi)]
+      const m = all.find((x) => !NOT_PAYMENT.test(line.slice(0, x.index ?? 0)))
       if (m) {
         /*
          * One sentence, not the rest of the row. Letterheads run the terms and

@@ -77,6 +77,8 @@ export function UploadDialog({ open, onClose, resume }: {
   const [lines, setLines] = useState<DocLine[]>([])
   const [type, setType] = useState('')
   const [terms, setTerms] = useState('30')
+  // days to deliver: off the document when it says, the build's 7 when not
+  const [lead, setLead] = useState('7')
   /*
    * Which of the document's own columns to keep, by heading. Absent means
    * keep — the spreadsheet import makes the same choice for the same reason:
@@ -99,7 +101,7 @@ export function UploadDialog({ open, onClose, resume }: {
     setDocId(null)
     setFile(null); setBusy(null); setPct(0); setError(null); setNote(null); setRead('typed')
     setVendorId(''); setVendorName(''); setChannel('email'); setReceivedAt(today)
-    setTyped(''); setRows([]); setFound(null); setLines([]); setType(''); setTerms('30')
+    setTyped(''); setRows([]); setFound(null); setLines([]); setType(''); setTerms('30'); setLead('7')
     setDropped({})
     setPhone(''); setEmail(''); setCustom({}); setDone(null)
   }
@@ -153,6 +155,7 @@ export function UploadDialog({ open, onClose, resume }: {
     if (head.date) setReceivedAt(head.date)
     // only for a supplier this is about to invent; an existing one keeps theirs
     if (head.termsDays !== undefined) setTerms(String(head.termsDays))
+    setLead(String(head.leadDays ?? 7))
     setHeader(head)
 
     const drafted = draftLines(ws, forId, read, 'SD-new')
@@ -301,6 +304,7 @@ export function UploadDialog({ open, onClose, resume }: {
         contact: { phone: phone.trim() || undefined, email: email.trim() || undefined },
         custom: Object.keys(custom).length ? custom : undefined,
         termsDays: Number(terms) >= 0 ? Number(terms) : undefined,
+        leadDays: Number(lead) > 0 ? Number(lead) : undefined,
         columns,
         lines: approvalLines(),
         actor: session.actor,
@@ -422,6 +426,7 @@ export function UploadDialog({ open, onClose, resume }: {
             onDrop={(label, off) => setDropped((d) => ({ ...d, [label]: off }))}
             type={type} onType={setType}
             terms={terms} onTerms={setTerms} termsFromDoc={header.terms}
+            lead={lead} onLead={setLead} leadFromDoc={header.leadDays}
             phone={phone} onPhone={setPhone}
             email={email} onEmail={setEmail}
             custom={custom} onCustom={setCustom}
@@ -745,6 +750,10 @@ function Check(p: {
   /** what the document said, when it said anything */
   termsFromDoc?: string
   onTerms: (v: string) => void
+  lead: string
+  onLead: (v: string) => void
+  /** the days the document printed, when it printed any */
+  leadFromDoc?: number
   phone: string
   onPhone: (v: string) => void
   email: string
@@ -771,6 +780,20 @@ function Check(p: {
         <Count n={p.plan.columnsAdded} one="new column" many="new columns" />
         {p.plan.skipped.length > 0
           && <Count n={p.plan.skipped.length} one="line left out" many="lines left out" />}
+      </div>
+
+      {/*
+        * Every line on the quotation takes this as its lead time until real
+        * deliveries measure one. Asked for every supplier, known or new —
+        * a delivery promise is about this quotation, not about who sent it.
+        */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Days to deliver" htmlFor="ud-lead"
+          hint={p.leadFromDoc !== undefined
+            ? `Read off the document — ${p.leadFromDoc} days.`
+            : 'The document does not say, so this is a guess — change it if you know.'}>
+          <NumberInput id="ud-lead" value={p.lead} onChange={p.onLead} unit="days" step="1" />
+        </Field>
       </div>
 
       {p.columns.length > 0 && (

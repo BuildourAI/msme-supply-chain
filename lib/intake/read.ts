@@ -32,7 +32,7 @@ const HEIC = /\.(heic|heif)$/i
 
 /** What the picker should accept, given what this browser can do. */
 export const acceptFiles = (): string =>
-  `${canReadPdf() ? '.pdf,' : ''}.png,.jpg,.jpeg,.webp,.xlsx,.xlsm,.csv`
+  `${canReadPdf() ? '.pdf,' : ''}.png,.jpg,.jpeg,.webp,.gif,.xlsx,.xlsm,.csv`
 
 export async function readDocument(
   file: File,

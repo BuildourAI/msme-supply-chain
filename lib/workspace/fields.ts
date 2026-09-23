@@ -57,6 +57,22 @@ export const BUILTIN: Record<SheetEntity, BuiltinColumn[]> = {
     { key: 'uom', label: 'Bought in', kind: 'text', aliases: ['unit', 'uom', 'units', 'measure'] },
     { key: 'rate', label: 'Last paid', kind: 'number', aliases: ['rate', 'price', 'cost', 'last rate'] },
     { key: 'onHand', label: 'On hand', kind: 'number', aliases: ['stock', 'quantity', 'qty', 'balance'] },
+    /*
+     * The three planning figures. A catalogue sheet rarely has them, but a
+     * factory that keeps a stock register in Excel usually does — and without
+     * them every imported material sat at "used per day 0" until somebody
+     * edited it by hand, one at a time. "Safety stock" is its own column so a
+     * sheet that carries it as a quantity says so, instead of the header
+     * falling through to "stock" and landing on the shelf as On hand.
+     */
+    { key: 'daily', label: 'Used per day', kind: 'number',
+      aliases: ['daily use', 'daily consumption', 'consumption per day', 'per day', 'avg daily consumption'] },
+    { key: 'cushion', label: 'Days of cushion', kind: 'number',
+      aliases: ['cushion days', 'safety days', 'buffer days', 'cushion'] },
+    { key: 'safety', label: 'Safety stock', kind: 'number',
+      aliases: ['safety qty', 'safety quantity', 'buffer stock', 'minimum stock'] },
+    { key: 'minOrder', label: 'Smallest order', kind: 'number',
+      aliases: ['moq', 'min order', 'minimum order', 'minimum order quantity', 'min order qty'] },
     { key: 'suppliers', label: 'Suppliers', derived: true },
   ],
   rfq: [
@@ -192,6 +208,10 @@ const HIDDEN_UNTIL_USED: Record<string, (ws: Workspace) => boolean> = {
    * column, on the screen where there is least room for it.
    */
   moq: (ws) => (ws.quotes ?? []).some((q) => q.lines.some((l) => l.moq > 0)),
+  // a material's cushion and its smallest order, once any material has one
+  cushion: (ws) => ws.items.some((i) => i.safetyStock > 0),
+  safety: (ws) => ws.items.some((i) => i.safetyStock > 0),
+  minOrder: (ws) => ws.items.some((i) => i.moq > 0),
 }
 
 /* -------------------------------------------------------------- reading -- */

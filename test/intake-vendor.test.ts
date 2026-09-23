@@ -143,6 +143,59 @@ describe('the payment terms printed on a quotation', () => {
   })
 })
 
+describe('the quotation number', () => {
+  const head = (...lines: string[]) => readHeader(lines.map((l) => [l]))
+
+  it('is the number, not the title printed beside it', () => {
+    expect(head('QUOTATION Quotation No. SDM/QTN/2026/0418').docNo).toBe('SDM/QTN/2026/0418')
+    expect(head('Quote valid upto 31/03/2027', 'Ref: KLH/Q/2026/077').docNo).toBe('KLH/Q/2026/077')
+  })
+
+  it('and a word is never a number', () => {
+    expect(head('QUOTATION FOR DENIM FABRIC').docNo).toBeUndefined()
+  })
+})
+
+/* ================================================ the delivery promise */
+
+describe('the delivery time printed on a quotation', () => {
+  const head = (...lines: string[]) => readHeader(lines.map((l) => [l]))
+
+  it('comes back as days, however it is worded', () => {
+    expect(head('Delivery: 21 days from PO').leadDays).toBe(21)
+    expect(head('Lead time: 12 days').leadDays).toBe(12)
+    expect(head('Dispatch within 2 weeks of order').leadDays).toBe(14)
+    expect(head('Ready stock — dispatch in 3 working days').leadDays).toBe(3)
+  })
+
+  it('takes the far end of a range, the end a line stops on', () => {
+    expect(head('Delivery 10-14 days ex-works').leadDays).toBe(14)
+    expect(head('Delivery: 15 to 20 days').leadDays).toBe(20)
+  })
+
+  it('never reads the payment terms as a delivery time, on one line or two', () => {
+    expect(head('Payment terms: 30 days from invoice').leadDays).toBeUndefined()
+    const h = head('Terms: 30 days from invoice. Freight extra. Delivery 10-14 days ex-works.')
+    expect(h.leadDays).toBe(14)
+    expect(h.termsDays).toBe(30)
+  })
+
+  it('does not read a delivery date as a number of days', () => {
+    expect(head('Delivery by: 15/10/2026').leadDays).toBeUndefined()
+  })
+
+  it('and "Delivery terms" are not payment terms', () => {
+    const h = head('Delivery terms: 15 days ex-works', 'Payment terms: 45 days from invoice')
+    expect(h.termsDays).toBe(45)
+    expect(h.leadDays).toBe(15)
+    expect(head('Delivery terms: 15 days').termsDays).toBeUndefined()
+  })
+
+  it('says nothing when nothing is printed', () => {
+    expect(head('Quotation No. QTR-2026-118', 'Date: 14/09/2026').leadDays).toBeUndefined()
+  })
+})
+
 /* ============================================ columns the build never knew */
 
 /**

@@ -100,6 +100,8 @@ describe('a quotation that arrived as a PDF', () => {
       // read off the same letterhead block, one sentence of it
       terms: '30 days from invoice',
       termsDays: 30, date: '2026-09-12', validUntil: '2026-10-15',
+      // "Delivery 10-14 days ex-works" — the far end of the range
+      leadDays: 14,
     })
   })
 })
