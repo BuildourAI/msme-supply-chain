@@ -220,3 +220,32 @@ export function onTheRoad(ws: Workspace, today: string, rows = consignmentRows(w
   }
   return out
 }
+
+/** Not yet confirmed as delivered, and past the day the customer was given. */
+export const overdueInTransit = (ws: Workspace, today: string): number =>
+  consignmentRows(ws, today).filter((r) => r.late).length
+
+export const chasedKey = (consignmentId: string) => `dispatch.chased.${consignmentId}`
+
+export interface CarrierMonth {
+  carrier: WsCarrier
+  delivered: number
+  late: number
+  /** mean days behind the promise, over this month's late ones */
+  behind: number
+}
+
+/** How each carrier did this month, over deliveries somebody confirmed this month. */
+export function carriersThisMonth(ws: Workspace, today: string, rows = consignmentRows(ws, today)): CarrierMonth[] {
+  const month = today.slice(0, 7)
+  return (ws.carriers ?? []).map((carrier) => {
+    const mine = rows.filter((r) => r.consignment.carrierId === carrier.id && r.delivered && r.consignment.deliveredOn!.slice(0, 7) === month)
+    const late = mine.filter((r) => !r.onTime)
+    return {
+      carrier,
+      delivered: mine.length,
+      late: late.length,
+      behind: late.length ? Math.round((late.reduce((a, r) => a + r.drift, 0) / late.length) * 10) / 10 : 0,
+    }
+  })
+}

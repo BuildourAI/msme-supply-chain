@@ -34,7 +34,7 @@ export function Notes() {
   const rows = noteRows(ws)
 
   const drawn: Record<string, DrawnColumn<NoteRow>> = {
-    no: { cell: (r) => <span className="mono text-[12.5px] font-semibold text-ink">{r.note.no}</span>, text: (r) => r.note.no },
+    no: { cell: (r) => <span className="mono whitespace-nowrap text-[12.5px] font-semibold text-ink">{r.note.no}</span>, text: (r) => r.note.no },
     on: { cell: (r) => <span className="num whitespace-nowrap text-ink-2">{shortDate(r.note.on)}</span>, text: (r) => r.note.on },
     order: { cell: (r) => <span className="mono text-[12px] text-ink-2">{r.order?.no ?? '—'}</span>, text: (r) => r.order?.no ?? '' },
     customer: { cell: (r) => <span className="font-medium text-ink">{r.customer?.name ?? '—'}</span>, text: (r) => r.customer?.name ?? '' },

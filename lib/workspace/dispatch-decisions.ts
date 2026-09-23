@@ -11,7 +11,7 @@
  */
 import { addDays, daysBetween } from '@/lib/domain/calc'
 import { shortDate } from '@/lib/domain/format'
-import { consignmentOf } from './consignments'
+import { carriersThisMonth, chasedKey, consignmentOf, consignmentRows } from './consignments'
 import { customerOf } from './customers'
 import { sortDecisions, type Decision } from './decisions'
 import { handoff } from './dispatch-notes'
@@ -27,6 +27,10 @@ export const riskNotedKey = (orderId: string) => `dispatch.riskNoted.${orderId}`
 export const shortNotedKey = (orderId: string) => `dispatch.shortNoted.${orderId}`
 export const noCarrierKey = (noteId: string) => `dispatch.noCarrier.${noteId}`
 export const ewayKey = (noteId: string) => `dispatch.eway.${noteId}`
+export const carrierKey = (carrierId: string, month: string) => `dispatch.carrier.${carrierId}.${month}`
+
+/** A carrier is worth a word when two deliveries this month were late, or a third of them. */
+const carrierIsLate = (delivered: number, late: number) => late >= 2 || (delivered >= 3 && late / delivered > 1 / 3)
 
 /** How far ahead an order counts as due: a promise within this many days with too little ready is a card. */
 export const DUE_SOON_DAYS = 3
@@ -177,6 +181,48 @@ export function dispatchDecisionsFor(ws: Workspace, today: string): Decision[] {
       })
     }
   }
+  /* On the road: due today or past the day the customer was given, and nobody has said it arrived. */
+  const cons = consignmentRows(ws, today)
+  for (const r of cons.filter((x) => !x.delivered && x.consignment.promisedDate <= today)) {
+    const who = r.customer?.name ?? 'the customer'
+    const late = daysBetween(r.consignment.promisedDate, today)
+    const chased = ws.drafts[chasedKey(r.consignment.id)] as string | undefined
+    out.push({
+      id: `delivery-due:${r.consignment.id}`,
+      band: late > 0 ? 'costs' : 'unfinished',
+      kind: 'delivery-due',
+      title: late > 0
+        ? `${r.note.no} to ${who} was promised ${shortDate(r.consignment.promisedDate)} and nobody has confirmed delivery`
+        : `${r.note.no} to ${who} is due today — has it arrived?`,
+      detail: `With ${r.carrier?.name ?? 'the carrier'}${r.consignment.lrNo ? `, docket ${r.consignment.lrNo}` : ''}, left ${shortDate(r.note.on)}.${chased ? ` You chased them ${chased === today ? 'today' : shortDate(chased)}.` : ''} On time and in full counts it only once somebody says it landed.`,
+      act: 'delivered',
+      actLabel: 'Delivered',
+      alt: { act: 'chase', label: 'Chase' },
+      href: '/dispatch/consignments',
+      refs: { consignmentId: r.consignment.id, noteId: r.note.id, carrierId: r.consignment.carrierId },
+      weight: 50 + late,
+    })
+  }
+
+  /* A carrier who keeps landing late this month. */
+  const month = today.slice(0, 7)
+  for (const c of carriersThisMonth(ws, today, cons)) {
+    if (!carrierIsLate(c.delivered, c.late)) continue
+    if (ws.drafts[carrierKey(c.carrier.id, month)] === c.late) continue
+    out.push({
+      id: `carrier-late:${c.carrier.id}`,
+      band: 'costs',
+      kind: 'carrier-late',
+      title: `${c.carrier.name} delivered ${c.late} of ${c.delivered} late this month, ${c.behind} day${c.behind === 1 ? '' : 's'} behind on average`,
+      detail: 'Each of those is a promise to a customer the bay kept and the carrier did not. Worth a word with them, or a different carrier on the lanes they miss.',
+      act: 'keep',
+      actLabel: 'Noted',
+      alt: { act: 'open', label: 'See by carrier' },
+      href: '/dispatch/consignments?view=carriers',
+      refs: { carrierId: c.carrier.id },
+      weight: 20 + c.late,
+    })
+  }
   return sortDecisions(out)
 }
 
@@ -185,6 +231,10 @@ export function noteDispatch(ws: Workspace, d: Decision, today: string): Workspa
   const set = (k: string, v: unknown): Workspace => ({ ...ws, drafts: { ...ws.drafts, [k]: v } })
   if (d.kind === 'note-no-carrier' && d.refs.noteId) return set(noCarrierKey(d.refs.noteId), true)
   if (d.kind === 'note-eway' && d.refs.noteId) return set(ewayKey(d.refs.noteId), true)
+  if (d.kind === 'carrier-late' && d.refs.carrierId) {
+    const c = carriersThisMonth(ws, today).find((x) => x.carrier.id === d.refs.carrierId)
+    return c ? set(carrierKey(c.carrier.id, today.slice(0, 7)), c.late) : ws
+  }
   const orderId = d.refs.orderId
   if (!orderId) return ws
   const rows = orderRows(ws, today)

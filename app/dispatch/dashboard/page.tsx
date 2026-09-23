@@ -7,6 +7,7 @@ import { Queue, type Side } from '@/components/sourcing/Queue'
 import { Tiles } from '@/components/sourcing/Tiles'
 import { MetricPicker } from '@/components/sourcing/MetricPicker'
 import { BookCarrierDialog, DeliveryDocument, NoteForm } from '@/components/dispatch/desk/NoteDialogs'
+import { ChaseDialog, DeliveredDialog } from '@/components/dispatch/desk/ConsignmentDialogs'
 import { useWorkspace } from '@/components/workspace/store'
 import { onTheRoad } from '@/lib/workspace/consignments'
 import { type Act, type Band, type Decision } from '@/lib/workspace/decisions'
@@ -36,6 +37,8 @@ function Dashboard() {
   const [noting, setNoting] = useState<string | null | undefined>(undefined)
   const [doc, setDoc] = useState<string | null>(null)
   const [booking, setBooking] = useState<string | null>(null)
+  const [delivering, setDelivering] = useState<string | null>(null)
+  const [chasing, setChasing] = useState<string | null>(null)
 
   if (!workspace) return null
   const ws = workspace
@@ -63,7 +66,9 @@ function Dashboard() {
   }
 
   const act = (d: Decision, kind: Act) => {
-    const { orderId, lineId, noteId } = d.refs
+    const { orderId, lineId, noteId, consignmentId } = d.refs
+    if (kind === 'delivered' && consignmentId) { setDelivering(consignmentId); return }
+    if (kind === 'chase' && consignmentId) { setChasing(consignmentId); return }
     if (kind === 'dispatch') { setNoting(orderId ?? null); return }
     if (kind === 'book' && noteId) { setBooking(noteId); return }
     if (kind === 'plan' && orderId && lineId) { update((w) => openJobForOrder(w, orderId, lineId, today)[0]); return }
@@ -110,6 +115,8 @@ function Dashboard() {
       <NoteForm orderId={noting} onClose={() => setNoting(undefined)} onRaised={setDoc} />
       <DeliveryDocument noteId={doc} onClose={() => setDoc(null)} />
       <BookCarrierDialog noteId={booking} onClose={() => setBooking(null)} />
+      <DeliveredDialog consignmentId={delivering} onClose={() => setDelivering(null)} />
+      <ChaseDialog consignmentId={chasing} onClose={() => setChasing(null)} />
     </div>
   )
 }

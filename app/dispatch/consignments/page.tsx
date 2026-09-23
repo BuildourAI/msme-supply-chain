@@ -7,6 +7,9 @@ import { useDispatch } from '@/components/dispatch/store'
 import { Note } from '@/components/ui/Note'
 import { longDate, num } from '@/lib/domain/format'
 import { StageGate } from '@/components/onboard/StageGate'
+import { useWorkspace } from '@/components/workspace/store'
+import { DeskOnly } from '@/components/sourcing/DeskOnly'
+import { Consignments } from '@/components/dispatch/desk/Consignments'
 
 function PageBody() {
   const { otif, inTransit, today } = useDispatch()
@@ -40,6 +43,15 @@ function PageBody() {
   )
 }
 
+/**
+ * One route, two companies. The sample keeps its consignment register over
+ * its own carriers; the owner gets theirs, which reads their own notes and
+ * nothing else.
+ */
 export default function Page() {
-  return <StageGate sample="Consignments" shows="deliveries, carriers and on-time-in-full in the worked example"><PageBody /></StageGate>
+  const { mode, ready } = useWorkspace()
+  if (!ready) return <div className="min-h-[50vh]" aria-hidden />
+  return mode === 'mine'
+    ? <DeskOnly><Consignments /></DeskOnly>
+    : <StageGate sample="Consignments"><PageBody /></StageGate>
 }
