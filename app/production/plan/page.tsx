@@ -1,7 +1,7 @@
 'use client'
-import { DeskOnly } from '@/components/sourcing/DeskOnly'
-import { Plan } from '@/components/production/desk/Plan'
+import { Moved } from '@/components/shell/Moved'
 
+/** Plan vs actual became the job cards' own screen; the address still answers. */
 export default function Page() {
-  return <DeskOnly><Plan /></DeskOnly>
+  return <Moved to="/production/jobs" />
 }

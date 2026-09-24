@@ -34,7 +34,7 @@ import { TeamWizard } from './wizards/TeamWizard'
  *
  * Only the next step gets a primary button. Five buttons of equal weight is a
  * menu; one is an instruction. The count in the words is the stage's own —
- * the gate has four, the store six.
+ * the gate has four, the store five.
  *
  * One component for every stage: the stage picks the list, and the list is
  * data in `checklist.ts`. The steps two stages share are the same objects, so

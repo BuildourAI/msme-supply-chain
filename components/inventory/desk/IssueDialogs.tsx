@@ -7,12 +7,11 @@ import { useWorkspace } from '@/components/workspace/store'
 import { money, num, shortDate } from '@/lib/domain/format'
 import { buildIssueSlip, issueFileName, issueSendableFor, renderIssueSlip } from '@/lib/paper/issue'
 import {
-  addJob, issueMaterial, issueProblem, jobProblem, jobRows, jobWordCap, lastDrawnLot, nextJobNo,
-  onJob, openJobs, returnProblem, returnToStore, updateJob, wasteOnJob, wasteProblem,
+  issueMaterial, issueProblem, jobRows, jobWordCap, lastDrawnLot,
+  onJob, openJobs, returnProblem, returnToStore, wasteOnJob, wasteProblem, type JobMaterial,
 } from '@/lib/workspace/jobs'
 import { fifo, usableOnHand } from '@/lib/workspace/ledger'
-import { linesMadeOn, linkableLines, madeForProblem, madeForText, salesLineLabel, setMadeFor } from '@/lib/workspace/sales'
-import type { Job } from '@/lib/workspace/types'
+import { madeForText } from '@/lib/workspace/sales'
 import { RackSelect } from './RackSelect'
 
 const n = (v: string) => (v.trim() === '' ? NaN : Number(v.replace(/,/g, '')))
@@ -30,77 +29,11 @@ function Foot({ onClose, label, onSave }: { onClose: () => void; label: string; 
   )
 }
 
-/** A job opened, or its details changed. */
-export function JobForm({ job, onClose, onSaved }: {
-  /** undefined is closed; null is a new one */
-  job: Job | null | undefined
-  onClose: () => void
-  onSaved?: (no: string) => void
-}) {
-  const { workspace, update, today } = useWorkspace()
-  const [no, setNo] = useState('')
-  const [name, setName] = useState('')
-  const [lineId, setLineId] = useState('')
-  const [was, setWas] = useState<string | undefined>(undefined)
-  const [tried, setTried] = useState(false)
-
-  useEffect(() => {
-    if (job === undefined || !workspace) return
-    setNo(job?.no ?? nextJobNo(workspace)); setName(job?.name ?? '')
-    // the line it is made for now, which a change here moves it off
-    const on = job ? linesMadeOn(workspace, job.id)[0]?.line.id : undefined
-    setLineId(on ?? ''); setWas(on)
-    setTried(false)
-  }, [job]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (job === undefined || !workspace) return null
-  const word = jobWordCap(workspace).one
-  const lines = linkableLines(workspace, job?.id)
-  const picked = lines.find((r) => r.line.id === lineId)
-  const input = {
-    no, name, openedOn: job?.openedOn ?? today,
-    // kept for an old one whose customer was typed; a new one's is its sales order's
-    customer: picked?.customer?.name ?? job?.customer,
-  }
-  const problem = jobProblem(workspace, input, job?.id) ?? madeForProblem(workspace, job?.id, lineId)
-
-  const save = () => {
-    setTried(true)
-    if (problem) return
-    update((w) => {
-      if (job) return setMadeFor(updateJob(w, job.id, input), job.id, was, lineId)
-      const [w1, id] = addJob(w, input)
-      return id && lineId ? setMadeFor(w1, id, undefined, lineId) : w1
-    })
-    onSaved?.(no.trim())
-    onClose()
-  }
-
-  return (
-    <Dialog open onClose={onClose} title={job ? `${word} ${job.no}` : `Open a ${word.toLowerCase()}`}>
-      <div className="space-y-3 px-4 py-4">
-        <Field label={`${word} number`} htmlFor="jf-no" error={tried ? problem ?? undefined : undefined}>
-          <TextInput id="jf-no" value={no} onChange={setNo} autoFocus onEnter={save} invalid={tried && !!problem} />
-        </Field>
-        <Field label="What it is" htmlFor="jf-name">
-          <TextInput id="jf-name" value={name} onChange={setName} onEnter={save} placeholder="Slim-fit jeans, 14 oz indigo" />
-        </Field>
-        <Field label="For sales order" htmlFor="jf-for"
-          hint={lines.length === 0 ? 'No open sales order line to make it for — it is made for stock.' : 'Blank is made for stock.'}>
-          <Select id="jf-for" value={lineId} onChange={setLineId}
-            options={[
-              { value: '', label: 'For stock — no sales order' },
-              ...lines.map((r) => ({ value: r.line.id, label: salesLineLabel(r) })),
-            ]} />
-        </Field>
-        {!lineId && job?.customer && (
-          <p className="text-[12px] text-ink-3">Typed before it could name a sales order: “{job.customer}”.</p>
-        )}
-      </div>
-      <Foot onClose={onClose} onSave={save} label={job ? 'Save' : `Open the ${word.toLowerCase()}`} />
-    </Dialog>
-  )
-}
+/*
+ * A job is opened on Production — its card is the floor's, and the store never
+ * invents one. What lives here is what the store does against it: the issue
+ * slip, the return slip, wastage, and the sheet that sums them.
+ */
 
 /**
  * Material out of the store, against a job.
@@ -121,15 +54,7 @@ export function IssueForm({ open, onClose, preset, onIssued }: {
   const [qty, setQty] = useState('')
   const [lotId, setLotId] = useState('')
   const [takenBy, setTakenBy] = useState('')
-  const [pendingNo, setPendingNo] = useState<string | null>(null)
   const [tried, setTried] = useState(false)
-
-  // a job opened from here is picked as soon as it exists
-  useEffect(() => {
-    if (!pendingNo || !workspace) return
-    const made = (workspace.jobs ?? []).find((j) => j.no === pendingNo)
-    if (made) { setJobId(made.id); setPendingNo(null) }
-  }, [pendingNo, workspace])
 
   useEffect(() => {
     if (!open || !workspace) return
@@ -168,15 +93,10 @@ export function IssueForm({ open, onClose, preset, onIssued }: {
       <Dialog open onClose={onClose} title="Issue material" sub={`Out of the store, against a ${word.one.toLowerCase()}.`}>
         <div className="space-y-3 px-4 py-4">
           <Field label={word.one} htmlFor="is-job">
+            {/* only what is open: the store issues against a job card, it never opens one */}
             <Select id="is-job" value={jobId} onChange={setJobId}
-              placeholder={openJobs(ws).length ? undefined : `No ${word.many.toLowerCase()} open yet`}
-              options={openJobs(ws).map((j) => ({ value: j.id, label: `${j.no}${j.name ? ` — ${j.name}` : ''}` }))}
-              addLabel={`New ${word.one.toLowerCase()} number, e.g. ${nextJobNo(ws)}`}
-              onAdd={(no) => {
-                // opened on the spot by its number; the rest can be filled in on the list
-                update((w) => addJob(w, { no, openedOn: today })[0])
-                setPendingNo(no.trim())
-              }} />
+              placeholder={openJobs(ws).length ? undefined : `No ${word.many.toLowerCase()} open — open one on Production › ${word.many}`}
+              options={openJobs(ws).map((j) => ({ value: j.id, label: `${j.no}${j.name ? ` — ${j.name}` : ''}` }))} />
           </Field>
           <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-2">
             <Field label="Material" htmlFor="is-item">
@@ -392,75 +312,92 @@ export function WasteForm({ open, onClose, preset }: {
   )
 }
 
-/** Everything a job has had, by material: issued, back, wasted, used, and what it was worth. */
+/**
+ * Everything a job has had, by material: issued, back, wasted, used, and what
+ * it was worth. The table alone — the store's sheet and the floor's job card
+ * both show it.
+ */
+export function JobMaterials({ materials, word }: { materials: JobMaterial[]; word: string }) {
+  if (materials.length === 0) return <p className="text-[12.5px] text-ink-3">Nothing has been issued against it yet.</p>
+  return (
+    <div className="space-y-2">
+      <div className="scroll-x relative overflow-x-auto rounded-lg border border-line">
+        <table className="w-full border-collapse text-[12.5px]">
+          <thead>
+            <tr className="border-b border-line text-left text-[12px] text-ink-3">
+              <th className="px-3 py-2 font-medium">Material</th>
+              <th className="px-3 py-2 text-right font-medium">Issued</th>
+              <th className="px-3 py-2 text-right font-medium">Back</th>
+              <th className="px-3 py-2 text-right font-medium">Wasted</th>
+              <th className="px-3 py-2 text-right font-medium">Used</th>
+              <th className="px-3 py-2 text-right font-medium">Worth</th>
+            </tr>
+          </thead>
+          <tbody>
+            {materials.map((m) => (
+              <tr key={m.itemId} className="border-b border-line-soft last:border-0">
+                <td className="px-3 py-2 font-medium text-ink">{m.name}</td>
+                <td className="num px-3 py-2 text-right">{num(m.issued, 3)} {m.uom}</td>
+                <td className="num px-3 py-2 text-right">{m.returned ? `${num(m.returned, 3)} ${m.uom}` : '—'}</td>
+                <td className={`num px-3 py-2 text-right ${m.wasted ? 'text-critical' : ''}`}>{m.wasted ? `${num(m.wasted, 3)} ${m.uom}` : '—'}</td>
+                <td className="num px-3 py-2 text-right font-semibold">{num(m.used, 3)} {m.uom}</td>
+                <td className="num px-3 py-2 text-right">{m.value > 0 ? money(m.value) : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[12px] text-ink-3">
+        Used is what was issued less what came back — waste included, because wasted material went into
+        the {word.toLowerCase()} too. Worth is at the last purchase price.
+      </p>
+    </div>
+  )
+}
+
+/** The slips and, where material is cut, the cuts made for a job — in the order they happened. Nothing, when there are none. */
+export function JobHistory({ jobId }: { jobId: string }) {
+  const { workspace } = useWorkspace()
+  if (!workspace) return null
+  const history = [
+    ...(workspace.issues ?? []).filter((s) => s.jobId === jobId).map((s) => ({ kind: 'slip' as const, on: s.on, id: s.id, s })),
+    ...(workspace.cuts ?? []).filter((c) => c.jobId === jobId).map((c) => ({ kind: 'cut' as const, on: c.on, id: c.id, c })),
+  ].sort((a, b) => a.on.localeCompare(b.on) || a.id.localeCompare(b.id))
+  if (history.length === 0) return null
+  const itemOf = (id?: string) => workspace.items.find((i) => i.id === id)
+  return (
+    <ul className="space-y-1 text-[12.5px] text-ink-2">
+      {history.map((h) => (h.kind === 'slip' ? (
+        <li key={h.s.id}>
+          <span className="mono">{h.s.no}</span> · {shortDate(h.s.on)} · {h.s.kind === 'issue' ? 'issued' : 'back'}{' '}
+          {num(h.s.lines.reduce((a, l) => a + l.qty, 0), 3)} {itemOf(h.s.lines[0]?.itemId)?.uom ?? ''}{' '}
+          of {itemOf(h.s.lines[0]?.itemId)?.name ?? 'material'}{h.s.takenBy ? ` · ${h.s.takenBy}` : ''}
+        </li>
+      ) : (
+        <li key={h.c.id}>
+          <span className="mono">{h.c.cutNo}</span> · {shortDate(h.c.on)} · cut {num(h.c.inputQty, 3)} {itemOf(h.c.itemId)?.uom ?? ''}{' '}
+          of {itemOf(h.c.itemId)?.name ?? 'material'} into {num(h.c.partsQty, 3)} of parts
+          {h.c.operator ? ` · ${h.c.operator}` : ''}
+        </li>
+      )))}
+    </ul>
+  )
+}
+
+/** The store's sheet on a job: what it has had, and the slips that moved it. Read-only — the job itself is the floor's. */
 export function JobSheet({ jobId, onClose }: { jobId: string | null; onClose: () => void }) {
   const { workspace } = useWorkspace()
   if (!jobId || !workspace) return null
   const row = jobRows(workspace).find((r) => r.job.id === jobId)
   if (!row) return null
   const word = jobWordCap(workspace).one
-  // slips and, where material is cut, the cuts made for it — in the order they happened
-  const history = [
-    ...(workspace.issues ?? []).filter((s) => s.jobId === jobId).map((s) => ({ kind: 'slip' as const, on: s.on, id: s.id, s })),
-    ...(workspace.cuts ?? []).filter((c) => c.jobId === jobId).map((c) => ({ kind: 'cut' as const, on: c.on, id: c.id, c })),
-  ].sort((a, b) => a.on.localeCompare(b.on) || a.id.localeCompare(b.id))
-  const itemOf = (id?: string) => workspace.items.find((i) => i.id === id)
 
   return (
     <Dialog open onClose={onClose} wide title={`${word} ${row.job.no}${row.job.name ? ` — ${row.job.name}` : ''}`}
       sub={`Opened ${shortDate(row.job.openedOn)}${madeForText(workspace, row.job) ? ` · for ${madeForText(workspace, row.job)}` : ''}${row.job.closedOn ? ` · closed ${shortDate(row.job.closedOn)}` : ''}`}>
       <div className="space-y-4 px-4 py-4">
-        {row.materials.length === 0 ? (
-          <p className="text-[12.5px] text-ink-3">Nothing has been issued against it yet.</p>
-        ) : (
-          <div className="scroll-x overflow-x-auto rounded-lg border border-line">
-            <table className="w-full border-collapse text-[12.5px]">
-              <thead>
-                <tr className="border-b border-line text-left text-[12px] text-ink-3">
-                  <th className="px-3 py-2 font-medium">Material</th>
-                  <th className="px-3 py-2 text-right font-medium">Issued</th>
-                  <th className="px-3 py-2 text-right font-medium">Back</th>
-                  <th className="px-3 py-2 text-right font-medium">Wasted</th>
-                  <th className="px-3 py-2 text-right font-medium">Used</th>
-                  <th className="px-3 py-2 text-right font-medium">Worth</th>
-                </tr>
-              </thead>
-              <tbody>
-                {row.materials.map((m) => (
-                  <tr key={m.itemId} className="border-b border-line-soft last:border-0">
-                    <td className="px-3 py-2 font-medium text-ink">{m.name}</td>
-                    <td className="num px-3 py-2 text-right">{num(m.issued, 3)} {m.uom}</td>
-                    <td className="num px-3 py-2 text-right">{m.returned ? `${num(m.returned, 3)} ${m.uom}` : '—'}</td>
-                    <td className={`num px-3 py-2 text-right ${m.wasted ? 'text-critical' : ''}`}>{m.wasted ? `${num(m.wasted, 3)} ${m.uom}` : '—'}</td>
-                    <td className="num px-3 py-2 text-right font-semibold">{num(m.used, 3)} {m.uom}</td>
-                    <td className="num px-3 py-2 text-right">{m.value > 0 ? money(m.value) : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <p className="text-[12px] text-ink-3">
-          Used is what was issued less what came back — waste included, because wasted material went into
-          the {word.toLowerCase()} too. Worth is at the last purchase price.
-        </p>
-        {history.length > 0 && (
-          <ul className="space-y-1 text-[12.5px] text-ink-2">
-            {history.map((h) => (h.kind === 'slip' ? (
-              <li key={h.s.id}>
-                <span className="mono">{h.s.no}</span> · {shortDate(h.s.on)} · {h.s.kind === 'issue' ? 'issued' : 'back'}{' '}
-                {num(h.s.lines.reduce((a, l) => a + l.qty, 0), 3)} {itemOf(h.s.lines[0]?.itemId)?.uom ?? ''}{' '}
-                of {itemOf(h.s.lines[0]?.itemId)?.name ?? 'material'}{h.s.takenBy ? ` · ${h.s.takenBy}` : ''}
-              </li>
-            ) : (
-              <li key={h.c.id}>
-                <span className="mono">{h.c.cutNo}</span> · {shortDate(h.c.on)} · cut {num(h.c.inputQty, 3)} {itemOf(h.c.itemId)?.uom ?? ''}{' '}
-                of {itemOf(h.c.itemId)?.name ?? 'material'} into {num(h.c.partsQty, 3)} of parts
-                {h.c.operator ? ` · ${h.c.operator}` : ''}
-              </li>
-            )))}
-          </ul>
-        )}
+        <JobMaterials materials={row.materials} word={word} />
+        <JobHistory jobId={jobId} />
       </div>
     </Dialog>
   )

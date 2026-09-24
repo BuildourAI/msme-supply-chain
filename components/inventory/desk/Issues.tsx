@@ -1,8 +1,8 @@
 'use client'
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { ListPage } from '@/components/ui/ListPage'
 import { DataTable, StatePill, Tag } from '@/components/ui/DataTable'
-import { Icon } from '@/components/ui/icons'
 import { Tabs } from '@/components/ui/Tabs'
 import { DeskTools } from '@/components/sheet/DeskTools'
 import { buildColumns, type DrawnColumn } from '@/components/sheet/columns'
@@ -10,12 +10,10 @@ import { ConfirmDelete } from '@/components/sourcing/ConfirmDelete'
 import { useWorkspace } from '@/components/workspace/store'
 import { money, num, shortDate } from '@/lib/domain/format'
 import {
-  closeJob, jobProblemToRemove, jobRows, jobWordCap, removeJob, removeSlip, removeSlipProblem,
-  reopenJob, slipRows, type JobRow, type SlipRow,
+  jobRows, jobWordCap, removeSlip, removeSlipProblem, slipRows, type JobRow, type SlipRow,
 } from '@/lib/workspace/jobs'
 import { madeForText } from '@/lib/workspace/sales'
-import type { Job } from '@/lib/workspace/types'
-import { IssueDocument, IssueForm, JobForm, JobSheet, ReturnForm, WasteForm } from './IssueDialogs'
+import { IssueDocument, IssueForm, JobSheet, ReturnForm, WasteForm } from './IssueDialogs'
 
 type View = 'jobs' | 'slips'
 
@@ -27,22 +25,23 @@ function Count({ n }: { n: number }) {
  * Issued to floor: what left the store for your own floor, and for what.
  *
  * Named for where the material went, like Sent for jobwork beside it on the
- * rail — material sent to somebody else's floor on a challan. Inside, the owner's word for the
- * thing itself — styles, jobs or orders — names the tab and every number. Two views:
- * each job with what it has used, and every slip that moved material, out or
- * back. A slip is the only way material leaves the store for the floor, so a
- * job's consumption here is a sum of slips rather than a figure somebody keeps.
+ * rail — material sent to somebody else's floor on a challan. A style or job
+ * card is opened in Production; here is what the store issued against it.
+ * Two views: each job card with what it has used, and every slip that moved
+ * material, out or back. A slip is the only way material leaves the store
+ * for the floor, so a job's consumption here is a sum of slips rather than a
+ * figure somebody keeps — and the store never invents a job card, so when
+ * none is open the screen says where one is opened.
  */
 export function Issues() {
-  const { workspace, update, today } = useWorkspace()
+  const { workspace, update } = useWorkspace()
+  const router = useRouter()
   const [view, setView] = useState<View>('jobs')
   const [issuing, setIssuing] = useState<{ jobId?: string } | null>(null)
   const [returning, setReturning] = useState<{ jobId?: string } | null>(null)
   const [wasting, setWasting] = useState<{ jobId?: string } | null>(null)
-  const [editing, setEditing] = useState<Job | null | undefined>(undefined)
   const [sheet, setSheet] = useState<string | null>(null)
   const [paper, setPaper] = useState<string | null>(null)
-  const [deletingJob, setDeletingJob] = useState<JobRow | null>(null)
   const [deletingSlip, setDeletingSlip] = useState<SlipRow | null>(null)
 
   if (!workspace) return null
@@ -133,22 +132,16 @@ export function Issues() {
         }}
         action={{ label: 'Issue material', icon: 'arrow-right', onClick: () => setIssuing({}) }}
         tools={
-          <>
-            <button type="button" onClick={() => setEditing(null)}
-              className="press inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-[13px] font-medium hover:bg-surface-2">
-              <Icon name="plus" className="size-3.5" /> Open a {word.one.toLowerCase()}
-            </button>
-            <DeskTools entity={view === 'jobs' ? 'job' : 'issue'} noun={view === 'jobs' ? word.one.toLowerCase() : 'slip'}
-              title={view === 'jobs' ? word.many : 'Issue slips'}
-              rows={() => (view === 'jobs' ? jobKit.toRows(jobs) : slipKit.toRows(slips))} />
-          </>
+          <DeskTools entity={view === 'jobs' ? 'job' : 'issue'} noun={view === 'jobs' ? word.one.toLowerCase() : 'slip'}
+            title={view === 'jobs' ? word.many : 'Issue slips'}
+            rows={() => (view === 'jobs' ? jobKit.toRows(jobs) : slipKit.toRows(slips))} />
         }
         empty={{
+          // nothing to issue against yet: the job card is opened on the floor, never here
           line: ws.jobNumbering
-            ? `Nothing open yet. Open a ${word.one.toLowerCase()} and material can be issued against it — every metre that leaves the store is then somebody’s.`
-            : `Say what material leaves the store against — a style, a job, an order — and open the first one. Every issue slip then names one.`,
-          cta: 'Issue material',
-          second: { label: `Open a ${word.one.toLowerCase()}`, onClick: () => setEditing(null) },
+            ? `No ${word.one.toLowerCase()} yet. Open one on Production › ${word.many}, then issue material against it — every metre that leaves the store is then somebody’s.`
+            : 'Production sets up its job numbers and opens the first style or job card; material is issued against it here, and every issue slip names one.',
+          second: { label: 'Open one on Production', onClick: () => router.push('/production/jobs') },
         }}>
         {(shown) => {
           const ids = new Set(shown.map((r) => r.job.id))
@@ -178,14 +171,10 @@ export function Issues() {
                   columns={jobKit.columns} rows={shown} keyOf={(r) => r.job.id}
                   extra={{ icon: 'doc', label: (r) => `${word.one} sheet for ${r.job.no}`, onClick: (r) => setSheet(r.job.id) }}
                   extra2={{
-                    icon: 'check',
-                    label: (r) => (r.open ? `Close ${r.job.no}` : `Reopen ${r.job.no}`),
-                    onClick: (r) => update((w) => (r.open ? closeJob(w, r.job.id, today) : reopenJob(w, r.job.id))),
+                    icon: 'arrow-right',
+                    label: (r) => (r.open ? `Issue material for ${r.job.no}` : `${r.job.no} is closed`),
+                    onClick: (r) => { if (r.open) setIssuing({ jobId: r.job.id }) },
                   }}
-                  onEdit={(r) => setEditing(r.job)}
-                  onDelete={(r) => setDeletingJob(r)}
-                  editLabel={(r) => `Edit ${r.job.no}`}
-                  deleteLabel={(r) => `Delete ${r.job.no}`}
                 />
               ) : shownSlips.length === 0 ? (
                 <p className="rounded-xl border border-line bg-surface px-6 py-10 text-center text-[13px] text-ink-2">
@@ -207,17 +196,8 @@ export function Issues() {
       <IssueForm open={issuing !== null} preset={issuing ?? undefined} onClose={() => setIssuing(null)} />
       <ReturnForm open={returning !== null} preset={returning ?? undefined} onClose={() => setReturning(null)} />
       <WasteForm open={wasting !== null} preset={wasting ?? undefined} onClose={() => setWasting(null)} />
-      <JobForm job={editing} onClose={() => setEditing(undefined)} />
       <JobSheet jobId={sheet} onClose={() => setSheet(null)} />
       <IssueDocument slipId={paper} onClose={() => setPaper(null)} />
-      <ConfirmDelete
-        open={deletingJob !== null}
-        what={deletingJob?.job.no ?? ''}
-        impact={{ losses: [], clean: true }}
-        blocked={deletingJob ? jobProblemToRemove(ws, deletingJob.job.id) : null}
-        onClose={() => setDeletingJob(null)}
-        onConfirm={() => { if (deletingJob) update((w) => removeJob(w, deletingJob.job.id)) }}
-      />
       <ConfirmDelete
         open={deletingSlip !== null}
         what={deletingSlip?.slip.no ?? ''}

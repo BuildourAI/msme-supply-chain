@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ListPage } from '@/components/ui/ListPage'
 import { DataTable, StatePill } from '@/components/ui/DataTable'
 import { Icon } from '@/components/ui/icons'
@@ -8,20 +8,21 @@ import { DeskTools } from '@/components/sheet/DeskTools'
 import { buildColumns, type DrawnColumn } from '@/components/sheet/columns'
 import { ConfirmDelete } from '@/components/sourcing/ConfirmDelete'
 import { useWorkspace } from '@/components/workspace/store'
+import { IssueForm, ReturnForm, WasteForm } from '@/components/inventory/desk/IssueDialogs'
+import { SendOutForm } from '@/components/inventory/desk/JobworkDialogs'
 import { addDays } from '@/lib/domain/calc'
 import { num, shortDate } from '@/lib/domain/format'
-import { closeJob, jobWordCap, reopenJob } from '@/lib/workspace/jobs'
+import { closeJob, jobProblemToRemove, jobWordCap, removeJob, reopenJob } from '@/lib/workspace/jobs'
 import { outputRows, removeOutput, removeOutputProblem, type OutputRow } from '@/lib/workspace/output'
 import {
-  PLAN_STATE_WORD, floorOf, isWorkingDay, jobPlanRows, type PlanState,
+  PLAN_STATE_TONE, PLAN_STATE_WORD, floorOf, isWorkingDay, jobPlanRows, type JobPlanRow, type PlanState,
 } from '@/lib/workspace/plan'
+import { madeForText } from '@/lib/workspace/sales'
+import type { Job } from '@/lib/workspace/types'
+import { JobCard, JobForm, type CardAct } from './JobDialogs'
 import { OutputForm, PlanForm } from './PlanDialogs'
 
 type View = 'jobs' | 'log' | 'days'
-
-const TONE: Record<PlanState, 'critical' | 'warn' | 'good' | 'neutral'> = {
-  unplanned: 'warn', not_started: 'neutral', running: 'good', behind: 'critical', late: 'critical', made: 'good', closed: 'neutral',
-}
 
 function Count({ n }: { n: number }) {
   return n > 0 ? <span className="mono rounded-full bg-surface-3 px-1.5 text-[10.5px] leading-[17px] text-ink-3">{n}</span> : null
@@ -30,19 +31,46 @@ function Count({ n }: { n: number }) {
 const pct = (v: number | null) => (v === null ? '—' : `${num(v, 1)}%`)
 
 /**
- * The plan against what came off the floor.
+ * One home for a job card: opened here, planned here, and from its card
+ * material goes to the floor or out on a challan — the slip and the challan
+ * land in the store's lists.
  *
- * Every style with its quantity, its dates and its pace, and what has been
- * booked against it: made, rejected, right first time, and how far ahead or
- * behind the target to date it is. The output log is every booking; by day
- * is the floor's own week, target against what came off.
+ * Every style with the sales order it is for, its quantity, its dates and
+ * its pace, and what has been booked against it: made, rejected, right first
+ * time, and how far ahead or behind the target to date it is. The output log
+ * is every booking; by day is the floor's own week, target against what came
+ * off. A sales order, a dashboard card or a figure lands on one card with
+ * ?card=<id>.
  */
-export function Plan() {
+export function Jobs() {
   const { workspace, update, today } = useWorkspace()
   const [view, setView] = useState<View>('jobs')
+  const [card, setCard] = useState<string | null>(null)
+  // the card a form was opened from, to come back to when the form closes
+  const [returnTo, setReturnTo] = useState<string | null>(null)
+  const [pendingNo, setPendingNo] = useState<string | null>(null)
+  const [opening, setOpening] = useState<Job | null | undefined>(undefined)
   const [planning, setPlanning] = useState<string | null | undefined>(undefined)
   const [booking, setBooking] = useState<{ jobId?: string } | null>(null)
+  const [issuing, setIssuing] = useState<{ jobId: string; itemId?: string } | null>(null)
+  const [returning, setReturning] = useState<{ jobId: string } | null>(null)
+  const [wasting, setWasting] = useState<{ jobId: string } | null>(null)
+  const [sending, setSending] = useState<{ jobId: string } | null>(null)
+  const [deletingJob, setDeletingJob] = useState<JobPlanRow | null>(null)
   const [deleting, setDeleting] = useState<OutputRow | null>(null)
+
+  useEffect(() => {
+    // a sales order line, a dashboard card or a figure links here with ?card=<job>
+    const id = new URLSearchParams(window.location.search).get('card')
+    if (id) setCard(id)
+  }, [])
+
+  useEffect(() => {
+    // a job card just opened is shown as soon as it exists
+    if (!pendingNo || !workspace) return
+    const made = (workspace.jobs ?? []).find((j) => j.no === pendingNo)
+    if (made) { setCard(made.id); setPendingNo(null) }
+  }, [pendingNo, workspace])
 
   if (!workspace) return null
   const ws = workspace
@@ -50,6 +78,22 @@ export function Plan() {
   const rows = jobPlanRows(ws, today)
   const log = outputRows(ws)
   const floor = floorOf(ws)
+
+  // the card steps aside for a form, and comes back when the form closes
+  const leave = (id: string) => { setCard(null); setReturnTo(id) }
+  const back = () => { if (returnTo) { setCard(returnTo); setReturnTo(null) } }
+  const act = (kind: CardAct, id: string, itemId?: string) => {
+    if (kind === 'close') { update((w) => closeJob(w, id, today)); return }
+    if (kind === 'reopen') { update((w) => reopenJob(w, id)); return }
+    leave(id)
+    if (kind === 'edit') setOpening((ws.jobs ?? []).find((j) => j.id === id) ?? null)
+    else if (kind === 'plan') setPlanning(id)
+    else if (kind === 'output') setBooking({ jobId: id })
+    else if (kind === 'issue') setIssuing({ jobId: id, itemId })
+    else if (kind === 'return') setReturning({ jobId: id })
+    else if (kind === 'waste') setWasting({ jobId: id })
+    else if (kind === 'sendout') setSending({ jobId: id })
+  }
 
   const logDrawn: Record<string, DrawnColumn<OutputRow>> = {
     on: { cell: (r) => shortDate(r.output.on), text: (r) => r.output.on },
@@ -86,8 +130,8 @@ export function Plan() {
   return (
     <>
       <ListPage
-        title="Plan vs actual" noun={word.one.toLowerCase()} rows={rows}
-        search={(r) => `${r.job.no} ${r.job.name ?? ''} ${r.product?.name ?? ''} ${PLAN_STATE_WORD[r.state]}`}
+        title={word.many} noun={word.one.toLowerCase()} rows={rows}
+        search={(r) => `${r.job.no} ${r.job.name ?? ''} ${r.product?.name ?? ''} ${madeForText(ws, r.job)} ${PLAN_STATE_WORD[r.state]}`}
         filter={{
           label: 'Every state',
           options: (Object.keys(PLAN_STATE_WORD) as PlanState[])
@@ -95,26 +139,26 @@ export function Plan() {
             .map((s) => ({ value: s, label: PLAN_STATE_WORD[s] })),
           of: (r) => r.state,
         }}
-        action={{ label: 'Book output', icon: 'plus', onClick: () => setBooking({}) }}
+        action={{ label: `Open a ${word.one.toLowerCase()}`, icon: 'plus', onClick: () => setOpening(null) }}
         tools={
           <>
-            <button type="button" onClick={() => setPlanning(null)}
+            <button type="button" onClick={() => setBooking({})}
               className="press inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-[13px] font-medium hover:bg-surface-2">
-              <Icon name="calendar" className="size-3.5" /> Plan a {word.one.toLowerCase()}
+              <Icon name="check" className="size-3.5" /> Book output
             </button>
             {view === 'log' && <DeskTools entity="output" noun="booking" title="Output log" rows={() => logKit.toRows(log)} />}
           </>
         }
         empty={{
-          line: `Nothing to plan yet. Open a ${word.one.toLowerCase()} and give it a product, a quantity and dates — then book what comes off it each day.`,
-          cta: `Plan a ${word.one.toLowerCase()}`,
+          line: `No ${word.one.toLowerCase()} yet. Open one — for a sales order or for stock — plan it, and issue its material from its card.`,
+          cta: `Open a ${word.one.toLowerCase()}`,
         }}>
         {(shown) => {
           const ids = new Set(shown.map((r) => r.job.id))
           const shownLog = log.filter((r) => ids.has(r.output.jobId))
           return (
             <div className="space-y-3">
-              <Tabs<View> label="Jobs, output log or by day" value={view} onChange={setView}
+              <Tabs<View> label={`${word.many}, output log or by day`} value={view} onChange={setView}
                 items={[
                   { id: 'jobs', label: word.many, badge: <Count n={shown.filter((r) => r.state === 'behind' || r.state === 'late').length} /> },
                   { id: 'log', label: 'Output log', badge: <Count n={shownLog.length} /> },
@@ -132,6 +176,13 @@ export function Plan() {
                           <span className="block text-[11.5px] text-ink-3">{r.product?.name ?? 'no product yet'}</span>
                         </span>
                       ),
+                    },
+                    {
+                      key: 'for', head: 'For sales order',
+                      cell: (r) => {
+                        const t = madeForText(ws, r.job)
+                        return t ? <span className="text-ink-2">{t}</span> : <span className="text-ink-4">For stock</span>
+                      },
                     },
                     { key: 'qty', head: 'Planned', align: 'right', cell: (r) => (r.planned ? num(r.job.qty!, 0) : '—') },
                     {
@@ -160,20 +211,22 @@ export function Plan() {
                         : r.vsTarget < 0 ? <span className="text-critical">{r.vsTarget}</span>
                           : <span className="text-good">+{r.vsTarget}</span>),
                     },
-                    { key: 'state', head: 'State', cell: (r) => <StatePill label={PLAN_STATE_WORD[r.state]} tone={TONE[r.state]} /> },
+                    { key: 'state', head: 'State', cell: (r) => <StatePill label={PLAN_STATE_WORD[r.state]} tone={PLAN_STATE_TONE[r.state]} /> },
                   ]}
                   extra={{
+                    icon: 'doc',
+                    label: (r) => `${word.one} card ${r.job.no}`,
+                    onClick: (r) => setCard(r.job.id),
+                  }}
+                  extra2={{
                     icon: 'plus',
                     label: (r) => (r.planned && !r.job.closedOn ? `Book output on ${r.job.no}` : 'Nothing to book'),
                     onClick: (r) => { if (r.planned && !r.job.closedOn) setBooking({ jobId: r.job.id }) },
                   }}
-                  extra2={{
-                    icon: 'check',
-                    label: (r) => (r.job.closedOn ? `Reopen ${r.job.no}` : `Close ${r.job.no}`),
-                    onClick: (r) => update((w) => (r.job.closedOn ? reopenJob(w, r.job.id) : closeJob(w, r.job.id, today))),
-                  }}
                   onEdit={(r) => { if (!r.job.closedOn) setPlanning(r.job.id) }}
-                  editLabel={(r) => (r.planned ? `Re-plan ${r.job.no}` : `Plan ${r.job.no}`)} />
+                  editLabel={(r) => (r.planned ? `Re-plan ${r.job.no}` : `Plan ${r.job.no}`)}
+                  onDelete={(r) => setDeletingJob(r)}
+                  deleteLabel={(r) => `Delete ${r.job.no}`} />
               )}
 
               {view === 'log' && (shownLog.length === 0
@@ -218,8 +271,22 @@ export function Plan() {
         }}
       </ListPage>
 
-      <PlanForm jobId={planning} onClose={() => setPlanning(undefined)} />
-      <OutputForm open={booking !== null} preset={booking ?? undefined} onClose={() => setBooking(null)} />
+      <JobCard jobId={card} onClose={() => setCard(null)} onAct={act} />
+      <JobForm job={opening} onSaved={(no) => setPendingNo(no)} onClose={() => { setOpening(undefined); back() }} />
+      <PlanForm jobId={planning} onClose={() => { setPlanning(undefined); back() }} />
+      <OutputForm open={booking !== null} preset={booking ?? undefined} onClose={() => { setBooking(null); back() }} />
+      <IssueForm open={issuing !== null} preset={issuing ?? undefined} onClose={() => { setIssuing(null); back() }} />
+      <ReturnForm open={returning !== null} preset={returning ?? undefined} onClose={() => { setReturning(null); back() }} />
+      <WasteForm open={wasting !== null} preset={wasting ?? undefined} onClose={() => { setWasting(null); back() }} />
+      <SendOutForm open={sending !== null} preset={sending ?? undefined} onClose={() => { setSending(null); back() }} />
+      <ConfirmDelete
+        open={deletingJob !== null}
+        what={deletingJob ? `${word.one.toLowerCase()} ${deletingJob.job.no}` : ''}
+        impact={{ clean: true, losses: [] }}
+        blocked={deletingJob ? jobProblemToRemove(ws, deletingJob.job.id) : null}
+        onClose={() => setDeletingJob(null)}
+        onConfirm={() => { if (deletingJob) update((w) => removeJob(w, deletingJob.job.id)) }}
+      />
       <ConfirmDelete
         open={deleting !== null}
         what={deleting ? `the booking on ${deleting.job?.no ?? ''}` : ''}

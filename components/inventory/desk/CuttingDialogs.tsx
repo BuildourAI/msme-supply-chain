@@ -9,7 +9,7 @@ import {
   cutLot, cutProblem, isUsableRemnant, minRemnantOf, piecesQty, recordCut, scrapRemnant,
   scrapRemnantProblem, useRemnant, useRemnantProblem, type CutInput,
 } from '@/lib/workspace/cutting'
-import { addJob, jobWordCap, nextJobNo, openJobs } from '@/lib/workspace/jobs'
+import { jobWordCap, openJobs } from '@/lib/workspace/jobs'
 import { fifo, isRemnant, lotOf, round3 } from '@/lib/workspace/ledger'
 import { scrapRateOf } from '@/lib/workspace/losses'
 import { RackSelect } from './RackSelect'
@@ -30,37 +30,24 @@ function Foot({ onClose, label, onSave }: { onClose: () => void; label: string; 
 }
 
 /**
- * The job select, with a new number addable on the spot — the same as the
- * issue form, so a cut for a style nobody has opened yet does not mean
- * leaving the table.
+ * The job select — open job cards only, the same as the issue form. A cut
+ * for a style nobody has opened yet waits for Production to open it: the
+ * store never invents a job card.
  */
 function JobPick({ id, value, onChange, none }: {
   id: string; value: string; onChange: (v: string) => void; none?: string
 }) {
-  const { workspace, update, today } = useWorkspace()
-  const [pendingNo, setPendingNo] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!pendingNo || !workspace) return
-    const made = (workspace.jobs ?? []).find((j) => j.no === pendingNo)
-    if (made) { onChange(made.id); setPendingNo(null) }
-  }, [pendingNo, workspace]) // eslint-disable-line react-hooks/exhaustive-deps
-
+  const { workspace } = useWorkspace()
   if (!workspace) return null
   const word = jobWordCap(workspace)
   const jobs = openJobs(workspace)
   return (
     <Select id={id} value={value} onChange={onChange}
-      placeholder={!none && jobs.length === 0 ? `No ${word.many.toLowerCase()} open yet` : undefined}
+      placeholder={!none && jobs.length === 0 ? `No ${word.many.toLowerCase()} open — open one on Production › ${word.many}` : undefined}
       options={[
         ...(none ? [{ value: '', label: none }] : []),
         ...jobs.map((j) => ({ value: j.id, label: `${j.no}${j.name ? ` — ${j.name}` : ''}` })),
-      ]}
-      addLabel={`New ${word.one.toLowerCase()} number, e.g. ${nextJobNo(workspace)}`}
-      onAdd={(no) => {
-        update((w) => addJob(w, { no, openedOn: today })[0])
-        setPendingNo(no.trim())
-      }} />
+      ]} />
   )
 }
 

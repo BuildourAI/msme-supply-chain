@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import Link from 'next/link'
 import { ListPage } from '@/components/ui/ListPage'
 import { DataTable, StatePill, type PillTone } from '@/components/ui/DataTable'
 import { DeskTools } from '@/components/sheet/DeskTools'
@@ -54,7 +55,12 @@ export function Orders() {
             <span key={l.line.id} className="block">
               <span className="text-ink">{l.product?.name ?? 'Unknown product'}</span>{' '}
               <span className="num text-ink-2">× {num(l.line.qty, 0)}</span>
-              {l.job && <span className="mono text-[11px] text-ink-3"> · {l.job.no}</span>}
+              {/* this order → this job card: the card is where it is made, issued and sent out from */}
+              {l.job && (
+                <Link href={`/production/jobs?card=${l.job.id}`} className="mono text-[11px] text-ink-3 hover:text-ink hover:underline">
+                  {' '}· {l.job.no}
+                </Link>
+              )}
             </span>
           ))}
         </span>

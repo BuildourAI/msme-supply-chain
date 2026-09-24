@@ -51,8 +51,8 @@ export function JobsWizard({ open, onClose }: { open: boolean; onClose: () => vo
   const steps: WizardStep[] = [
     {
       label: 'Numbering',
-      title: 'What does material leave the store against?',
-      why: 'Every issue slip names one, so every metre that leaves is somebody’s — and what each one used is a sum, not a guess.',
+      title: 'What does the floor work from?',
+      why: 'The card the floor makes against, and the store issues against. Every issue slip names one, so every metre that leaves is somebody’s — and what each one used is a sum, not a guess.',
       invalid: /^[A-Za-z0-9/]{1,8}$/.test(prefix.trim())
         ? null : 'Keep the prefix short — letters and numbers, up to eight.',
       body: (
@@ -78,7 +78,7 @@ export function JobsWizard({ open, onClose }: { open: boolean; onClose: () => vo
     {
       label: 'The first one',
       title: `Open your first ${w.one}?`,
-      why: `Optional. Material can only be issued against an open ${w.one}, so opening one now means the store can issue today.`,
+      why: `Optional. Material can only be issued against an open ${w.one}, so opening one now means the store can issue today — and Line watch has something to plan.`,
       invalid: firstProblem,
       body: (
         <div className="space-y-3.5">

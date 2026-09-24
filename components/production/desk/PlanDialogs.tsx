@@ -5,7 +5,7 @@ import { Field, NumberInput, Select, TextInput } from '@/components/ui/Field'
 import { useWorkspace } from '@/components/workspace/store'
 import { num, shortDate } from '@/lib/domain/format'
 import { addJob, jobWordCap, nextJobNo, openJobs } from '@/lib/workspace/jobs'
-import { lineWatch } from '@/lib/workspace/linewatch'
+import { lineWatch, type NeedRow } from '@/lib/workspace/linewatch'
 import {
   bookOutput, countFinished, countFinishedProblem, outputProblem,
 } from '@/lib/workspace/output'
@@ -266,6 +266,71 @@ export function OutputForm({ open, preset, onClose }: {
   )
 }
 
+/**
+ * What a job needs, what has gone to it, and where the rest is coming from —
+ * the table alone, so Line watch's dialog and the job card show one thing.
+ */
+export function NeedsTable({ needs, reasons = [], onIssue }: {
+  needs: NeedRow[]
+  reasons?: string[]
+  onIssue?: (itemId: string) => void
+}) {
+  return (
+    <div className="space-y-3">
+      {needs.length === 0 ? (
+        <p className="text-[12.5px] text-ink-3">Nothing on its material list has a quantity, so it needs nothing from the store.</p>
+      ) : (
+        <div className="scroll-x relative overflow-x-auto rounded-lg border border-line">
+          <table className="w-full border-collapse text-[12.5px]">
+            <thead>
+              <tr className="border-b border-line text-left text-[12px] text-ink-3">
+                <th className="px-3 py-2 font-medium">Material</th>
+                <th className="px-3 py-2 text-right font-medium">Needs</th>
+                <th className="px-3 py-2 text-right font-medium">Gone to it</th>
+                <th className="px-3 py-2 text-right font-medium">From the shelf</th>
+                <th className="px-3 py-2 font-medium">Still to come</th>
+                <th className="px-3 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {needs.map((nd) => (
+                <tr key={nd.itemId} className="border-b border-line-soft last:border-0 align-top">
+                  <td className="px-3 py-2 font-medium text-ink">{nd.item?.name ?? nd.itemId}</td>
+                  <td className="num px-3 py-2 text-right">{num(nd.need, 3)} {nd.uom}</td>
+                  <td className="num px-3 py-2 text-right">{nd.gone ? `${num(nd.gone, 3)} ${nd.uom}` : '—'}</td>
+                  <td className="num px-3 py-2 text-right">{nd.fromShelf ? `${num(nd.fromShelf, 3)} ${nd.uom}` : '—'}</td>
+                  <td className="px-3 py-2">
+                    {nd.claims.map((c, i) => (
+                      <span key={i} className={`block ${c.late ? 'text-warn' : 'text-ink-2'}`}>
+                        {num(c.qty, 3)} {nd.uom} · {c.what} · {shortDate(c.on)}
+                      </span>
+                    ))}
+                    {nd.short > 0 && <span className="block font-semibold text-critical">{num(nd.short, 3)} {nd.uom} covered by nothing</span>}
+                    {nd.claims.length === 0 && nd.short === 0 && <span className="text-ink-4">—</span>}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    {onIssue && nd.fromShelf > 0 && (
+                      <button type="button" onClick={() => onIssue(nd.itemId)}
+                        className="press rounded-md border border-line bg-surface px-2 py-1 text-[12px] font-medium hover:bg-surface-2">
+                        Issue {nd.item?.name ?? 'it'}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {reasons.length > 0 && (
+        <ul className="space-y-1 text-[12.5px] text-ink-2">
+          {reasons.map((r, i) => <li key={i}>{r}</li>)}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 /** What a job needs, what has gone to it, and where the rest is coming from. */
 export function NeedsDialog({ jobId, onClose, onIssue }: {
   jobId: string | null
@@ -279,57 +344,8 @@ export function NeedsDialog({ jobId, onClose, onIssue }: {
   return (
     <Dialog open onClose={onClose} wide title={`What ${w.job.no} needs`}
       sub={`${w.product?.name ?? ''} · ${w.job.qty} to make, ${shortDate(w.job.plannedStart!)} – ${shortDate(w.job.plannedFinish!)}`}>
-      <div className="space-y-3 px-4 py-4">
-        {w.needs.length === 0 ? (
-          <p className="text-[12.5px] text-ink-3">Nothing on its material list has a quantity, so it needs nothing from the store.</p>
-        ) : (
-          <div className="scroll-x overflow-x-auto rounded-lg border border-line">
-            <table className="w-full border-collapse text-[12.5px]">
-              <thead>
-                <tr className="border-b border-line text-left text-[12px] text-ink-3">
-                  <th className="px-3 py-2 font-medium">Material</th>
-                  <th className="px-3 py-2 text-right font-medium">Needs</th>
-                  <th className="px-3 py-2 text-right font-medium">Gone to it</th>
-                  <th className="px-3 py-2 text-right font-medium">From the shelf</th>
-                  <th className="px-3 py-2 font-medium">Still to come</th>
-                  <th className="px-3 py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {w.needs.map((nd) => (
-                  <tr key={nd.itemId} className="border-b border-line-soft last:border-0 align-top">
-                    <td className="px-3 py-2 font-medium text-ink">{nd.item?.name ?? nd.itemId}</td>
-                    <td className="num px-3 py-2 text-right">{num(nd.need, 3)} {nd.uom}</td>
-                    <td className="num px-3 py-2 text-right">{nd.gone ? `${num(nd.gone, 3)} ${nd.uom}` : '—'}</td>
-                    <td className="num px-3 py-2 text-right">{nd.fromShelf ? `${num(nd.fromShelf, 3)} ${nd.uom}` : '—'}</td>
-                    <td className="px-3 py-2">
-                      {nd.claims.map((c, i) => (
-                        <span key={i} className={`block ${c.late ? 'text-warn' : 'text-ink-2'}`}>
-                          {num(c.qty, 3)} {nd.uom} · {c.what} · {shortDate(c.on)}
-                        </span>
-                      ))}
-                      {nd.short > 0 && <span className="block font-semibold text-critical">{num(nd.short, 3)} {nd.uom} covered by nothing</span>}
-                      {nd.claims.length === 0 && nd.short === 0 && <span className="text-ink-4">—</span>}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {onIssue && nd.fromShelf > 0 && (
-                        <button type="button" onClick={() => onIssue(nd.itemId)}
-                          className="press rounded-md border border-line bg-surface px-2 py-1 text-[12px] font-medium hover:bg-surface-2">
-                          Issue {nd.item?.name ?? 'it'}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {w.reasons.length > 0 && (
-          <ul className="space-y-1 text-[12.5px] text-ink-2">
-            {w.reasons.map((r, i) => <li key={i}>{r}</li>)}
-          </ul>
-        )}
+      <div className="px-4 py-4">
+        <NeedsTable needs={w.needs} reasons={w.reasons} onIssue={onIssue} />
       </div>
     </Dialog>
   )

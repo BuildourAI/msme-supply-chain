@@ -250,7 +250,8 @@ export function Jobwork() {
   )
 }
 
-function statePill(r: ChallanRow): { label: string; tone: PillTone } {
+/** The one line on a challan's state — the register and the job card say it the same way. */
+export function statePill(r: ChallanRow): { label: string; tone: PillTone } {
   if (r.challan.status === 'closed') {
     return (r.challan.writtenOff ?? 0) > 0
       ? { label: `Closed · ${num(r.challan.writtenOff!, 3)} written off`, tone: 'critical' }

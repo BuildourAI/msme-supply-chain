@@ -49,8 +49,10 @@ function Foot({ onClose, onSave, label, danger }: {
  * style, saying which keeps it that style's: Line watch gives it that style
  * first when it comes back, and no other counts on it.
  */
-export function SendOutForm({ open, onClose, onAddJobworker }: {
+export function SendOutForm({ open, onClose, onAddJobworker, preset }: {
   open: boolean; onClose: () => void; onAddJobworker?: () => void
+  /** opened from a job card: that job is picked already */
+  preset?: { jobId?: string }
 }) {
   const { workspace, update, today, session } = useWorkspace()
   const [vendorId, setVendorId] = useState('')
@@ -68,7 +70,7 @@ export function SendOutForm({ open, onClose, onAddJobworker }: {
     const firstItem = workspace.items.find((i) => usableOnHand(workspace, i.id) > 0) ?? workspace.items[0]
     setVendorId(jobworkers(workspace)[0]?.id ?? ''); setItemId(firstItem?.id ?? '')
     setQty(''); setYieldPct('100'); setSentOn(today); setDue(addDays(today, 7)); setProcess('')
-    setJobId(''); setTried(false)
+    setJobId(preset?.jobId ?? ''); setTried(false)
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open || !workspace) return null
