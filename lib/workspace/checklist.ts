@@ -156,11 +156,11 @@ const JOBWORKERS_STEP: Step = {
   },
 }
 
-/** Shared by the store and the floor: a style is what material leaves against, and what the floor makes. */
+/** The floor's: a style or job card is what it makes, and what the store issues material against. */
 const JOBS_STEP: Step = {
   id: 'jobs',
-  title: 'How material leaves the store',
-  why: 'Nothing leaves without a job, style or order number on the slip — so every metre is somebody’s, and what each one used is a sum, not a guess.',
+  title: 'Your styles or job cards',
+  why: 'The card the floor works from, numbered ST-1 or JC-1. Opened for a sales order it names it; material leaves the store against it, so what each one used is a sum, not a guess.',
   cta: 'Set up job numbers',
   done: (ws) => ws.jobNumbering !== undefined,
   summary: (ws) => {
@@ -190,8 +190,10 @@ export const PRODUCTS_STEP: Step = {
  * Materials and the stock count are sourcing's own step objects again — a
  * company that has counted its stock for sourcing has counted it for the
  * store — and the count now asks which rack each material sits on. The other
- * four are the store's: where things sit, what material leaves against, who
- * it goes out to for jobwork, and the rules a count and a loss are judged by.
+ * three are the store's: where things sit, who it goes out to for jobwork,
+ * and the rules a count and a loss are judged by. What material leaves
+ * against — a style or job card — is opened on the floor, so that step is
+ * Production's.
  */
 export const INVENTORY_STEPS: Step[] = [
   byId('materials'),
@@ -214,7 +216,6 @@ export const INVENTORY_STEPS: Step[] = [
     },
   },
   byId('stock'),
-  JOBS_STEP,
   JOBWORKERS_STEP,
   {
     id: 'storeRules',
@@ -230,10 +231,10 @@ export const INVENTORY_STEPS: Step[] = [
 /**
  * Setting up the floor.
  *
- * Materials and job numbers are other stages' own step objects: the floor
- * makes styles out of the materials sourcing buys, numbered the way the store
- * issues against them. Its own three are what it makes, the first plan, and
- * the rules a day's output is judged by.
+ * Materials are sourcing's own step object: the floor makes styles out of
+ * what sourcing buys. Its own four are what it makes, its styles or job
+ * cards (which the store then issues against), the first plan, and the rules
+ * a day's output is judged by.
  */
 export const PRODUCTION_STEPS: Step[] = [
   byId('materials'),

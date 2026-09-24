@@ -136,6 +136,11 @@ export const PLAN_STATE_WORD: Record<PlanState, string> = {
   closed: 'Closed',
 }
 
+/** How a state reads on a pill: the list and the job card colour it the same way. */
+export const PLAN_STATE_TONE: Record<PlanState, 'critical' | 'warn' | 'good' | 'neutral'> = {
+  unplanned: 'warn', not_started: 'neutral', running: 'good', behind: 'critical', late: 'critical', made: 'good', closed: 'neutral',
+}
+
 export interface JobPlanRow {
   job: Job
   product?: Product

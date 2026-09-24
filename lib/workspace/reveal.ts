@@ -29,7 +29,7 @@ import { overdueInTransit } from './consignments'
 import { overdueReturns } from './returns'
 import { dispatchOpenCount } from './dispatch-decisions'
 import { cutRows, offcutRows } from './cutting'
-import { openJobs } from './jobs'
+import { jobWordCap, openJobs } from './jobs'
 import { lotRows } from './ledger'
 import { unsoldPast } from './losses'
 import { unplacedLots } from './racks'
@@ -209,9 +209,9 @@ export function inventoryNav(ws: Workspace, today = ''): NavRow[] {
     },
     { label: 'Stock ledger', href: '/inventory/ledger', icon: 'boxes', badge: count(due) },
     /*
-     * Work done on your own floor, against a style, job or order number, with
-     * how many are open — material issued to your own floor. Sent for
-     * jobwork, beside it, is material sent to somebody else's on a challan.
+     * Material issued to your own floor against a style or job card opened
+     * in Production, with how many are open. Sent for jobwork, beside it, is
+     * material sent to somebody else's floor on a challan.
      */
     { label: 'Issued to floor', href: '/inventory/issues', icon: 'factory', badge: count(openJobs(ws).length) },
     /*
@@ -236,10 +236,13 @@ export function inventoryNav(ws: Workspace, today = ''): NavRow[] {
 }
 
 /**
- * The floor's rows: the week, the plan against what came off, and what it
- * makes. Every badge is work a person can take off: jobs that will not run as
- * planned, jobs behind or unplanned, products whose material list has no
- * quantities.
+ * The floor's rows: its styles or job cards, the week, and what it makes.
+ * Every badge is work a person can take off: job cards behind, late or
+ * unplanned, jobs that will not run as planned, products whose material list
+ * has no quantities.
+ *
+ * The job cards row carries the owner's own word, because it is the thing
+ * itself — opened, planned and closed here — not a report on it.
  */
 export function productionNav(ws: Workspace, today = ''): NavRow[] {
   const plans = today ? jobPlanRows(ws, today) : []
@@ -251,8 +254,8 @@ export function productionNav(ws: Workspace, today = ''): NavRow[] {
       icon: 'activity',
       badge: count(productionOpenCount(ws, today)),
     },
+    { label: jobWordCap(ws).many, href: '/production/jobs', icon: 'factory', badge: count(pace) },
     { label: 'Line watch', href: '/production/line-watch', icon: 'eye', badge: count(today ? stoppingThisWeek(lineWatch(ws, today)).length : 0) },
-    { label: 'Plan vs actual', href: '/production/plan', icon: 'calendar', badge: count(pace) },
     // a reading, not a queue: nothing on it goes down when somebody acts
     { label: 'Turnaround', href: '/production/turnaround', icon: 'clock' },
     { label: 'Products', href: '/production/products', icon: 'boxes', badge: count(productsWanting(ws).length), tucked: true },

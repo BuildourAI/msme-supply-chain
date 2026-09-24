@@ -920,7 +920,7 @@ function productionMetrics(
         key: 'attainment', label: METRIC_LABEL.attainment, value: pct1((made / target) * 100),
         sub: `${made} made of ${target} due by today, over ${running.length} running job${running.length === 1 ? '' : 's'}`,
         tone: made >= target * 0.95 ? 'good' : made >= target * 0.8 ? 'warn' : 'critical',
-        measured: true, href: '/production/plan',
+        measured: true, href: '/production/jobs',
         how: 'Σ good pieces ÷ Σ target to date (pieces a day × working days since the start, never past the quantity)',
         chart: { kind: 'ring', pct: Math.min(100, (made / target) * 100) },
       }
@@ -931,7 +931,7 @@ function productionMetrics(
         key: 'firstPass', label: METRIC_LABEL.firstPass, value: pct1((good / (good + bad)) * 100),
         sub: `${good} good, ${bad} rejected this month`,
         tone: bad / (good + bad) <= 0.02 ? 'good' : bad / (good + bad) <= 0.05 ? 'warn' : 'critical',
-        measured: true, href: '/production/plan',
+        measured: true, href: '/production/jobs',
         how: 'good ÷ (good + rejected) over this month’s bookings',
         chart: { kind: 'split', good, bad },
       }

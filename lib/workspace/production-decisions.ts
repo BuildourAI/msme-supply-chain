@@ -131,7 +131,7 @@ export function productionDecisionsFor(ws: Workspace, today: string): Decision[]
         act: 'output',
         actLabel: 'Book output',
         alt: { act: 'keep', label: 'Noted for today' },
-        href: '/production/plan',
+        href: `/production/jobs?card=${r.job.id}`,
         refs: { jobId: r.job.id },
         weight: -r.vsTarget,
       })
@@ -147,7 +147,7 @@ export function productionDecisionsFor(ws: Workspace, today: string): Decision[]
         act: 'plan',
         actLabel: 'Re-plan it',
         alt: { act: 'close', label: 'Close it' },
-        href: '/production/plan',
+        href: `/production/jobs?card=${r.job.id}`,
         refs: { jobId: r.job.id },
         weight: days,
       })
@@ -167,7 +167,8 @@ export function productionDecisionsFor(ws: Workspace, today: string): Decision[]
       act: 'plan',
       actLabel: unplanned.length === 1 ? `Plan ${first.no}` : 'Plan the first',
       alt: unplanned.length > 1 ? { act: 'open', label: 'See them all' } : undefined,
-      href: '/production/plan',
+      // one card lands on it; several land on the list, where each has its card
+      href: unplanned.length === 1 ? `/production/jobs?card=${first.id}` : '/production/jobs',
       refs: { jobId: first.id },
       weight: unplanned.length,
     })

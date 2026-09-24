@@ -59,11 +59,11 @@ const plan = (ws: Workspace, jobId: string, qty: number, start: string, finish: 
   planJob(ws, jobId, { productId: 'PR-001', qty, plannedStart: start, plannedFinish: finish, perDay })
 
 describe('the floor’s set-up', () => {
-  it('has five steps, sharing materials with sourcing and job numbers with the store', () => {
+  it('has five steps, sharing materials with sourcing; the job cards are its own', () => {
     expect(stepsFor('production')).toBe(PRODUCTION_STEPS)
     expect(PRODUCTION_STEPS.map((s) => s.id)).toEqual(['materials', 'products', 'jobs', 'plan', 'floorRules'])
     expect(PRODUCTION_STEPS[0]).toBe(SOURCING_STEPS.find((s) => s.id === 'materials'))
-    expect(PRODUCTION_STEPS[2]).toBe(INVENTORY_STEPS.find((s) => s.id === 'jobs'))
+    expect(INVENTORY_STEPS.some((s) => s.id === 'jobs')).toBe(false)
     const p = progressOf(base(), PRODUCTION_STEPS)
     expect(p.steps.map((s) => s.done)).toEqual([true, true, true, false, false])
     expect(p.next?.id).toBe('plan')
@@ -72,14 +72,25 @@ describe('the floor’s set-up', () => {
     expect(PRODUCTION_STEPS[3].summary(planned)).toBe('1 planned · 1 open without a plan')
   })
 
+  it('ticks the job-cards step once the owner has said what they call one', () => {
+    const jobs = PRODUCTION_STEPS[2]
+    expect(jobs.title).toBe('Your styles or job cards')
+    expect(jobs.done(fresh())).toBe(false)
+    const ws = setJobNumbering(fresh(), { word: 'style', prefix: 'st' })
+    expect(jobs.done(ws)).toBe(true)
+    expect(ws.jobNumbering).toEqual({ word: 'style', prefix: 'ST' })
+    expect(jobs.summary(ws)).toBe('styles numbered ST-…')
+    expect(jobs.summary(base())).toBe('styles numbered ST-… · 2 open')
+  })
+
   it('opens the stage on its dashboard, with a rail whose badges are work', () => {
     expect(BUILT).toContain('production')
     expect(STAGE_HOME.production).toBe('/production/dashboard')
     const rows = productionNav(base(), TODAY)
-    expect(rows.map((r) => r.label)).toEqual(['Dashboard', 'Line watch', 'Plan vs actual', 'Turnaround', 'Products'])
+    expect(rows.map((r) => r.label)).toEqual(['Dashboard', 'Styles', 'Line watch', 'Turnaround', 'Products'])
     expect(rows.filter((r) => r.tucked).map((r) => r.label)).toEqual(['Products'])
     // two styles open, neither planned
-    expect(rows.find((r) => r.label === 'Plan vs actual')?.badge).toBe('2')
+    expect(rows.find((r) => r.label === 'Styles')).toMatchObject({ href: '/production/jobs', badge: '2' })
     expect(navFor('production', base(), TODAY)).toEqual(rows)
   })
 
@@ -217,6 +228,17 @@ describe('line watch', () => {
     }] }
     expect(productionDecisionsFor(due, '2026-09-21').find((d) => d.kind === 'job-at-risk'))
       .toMatchObject({ actLabel: 'See what is due', href: '/inbound/due' })
+  })
+
+  it('lands a card about one style on that style\'s own card', () => {
+    const both = plan(plan(base(), 'JB-001', 200, '2026-09-21', '2026-09-26'), 'JB-002', 100, '2026-09-14', '2026-09-18')
+    const q = productionDecisionsFor(both, TODAY)
+    expect(q.find((d) => d.kind === 'job-behind')?.href).toBe('/production/jobs?card=JB-001')
+    expect(q.find((d) => d.kind === 'job-late')?.href).toBe('/production/jobs?card=JB-002')
+    // two open with no plan land on the list, where each has its card; one lands on its own
+    expect(productionDecisionsFor(base(), TODAY).find((d) => d.kind === 'no-plan')?.href).toBe('/production/jobs')
+    expect(productionDecisionsFor(plan(base(), 'JB-001', 200, '2026-09-21', '2026-09-26'), TODAY).find((d) => d.kind === 'no-plan')?.href)
+      .toBe('/production/jobs?card=JB-002')
   })
 
   it('gives a style what went out to a jobworker for it first, before an earlier delivery', () => {

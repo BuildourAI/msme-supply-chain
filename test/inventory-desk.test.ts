@@ -65,8 +65,8 @@ const adds = (ws: Workspace) => expect(drift(ws)).toEqual([])
 /* ================================================================ the steps */
 
 describe('setting up the store', () => {
-  it('is six steps, two of them sourcing\'s own', () => {
-    expect(INVENTORY_STEPS.map((s) => s.id)).toEqual(['materials', 'racks', 'stock', 'jobs', 'jobworkers', 'storeRules'])
+  it('is five steps, two of them sourcing\'s own', () => {
+    expect(INVENTORY_STEPS.map((s) => s.id)).toEqual(['materials', 'racks', 'stock', 'jobworkers', 'storeRules'])
     expect(INVENTORY_STEPS[0]).toBe(SOURCING_STEPS.find((s) => s.id === 'materials'))
     expect(INVENTORY_STEPS[2]).toBe(SOURCING_STEPS.find((s) => s.id === 'stock'))
     expect(stepsFor('inventory')).toBe(INVENTORY_STEPS)
@@ -86,15 +86,6 @@ describe('setting up the store', () => {
     expect(racks.summary({ ...set(), drafts: { 'inventory.oneRack': true } })).toBe('one store, no racks')
     const [ws] = addRack(set(), { name: 'A-1' })
     expect(racks.done(ws)).toBe(true)
-  })
-
-  it('ticks the job step once the owner has said what they call a job', () => {
-    const jobs = INVENTORY_STEPS.find((s) => s.id === 'jobs')!
-    expect(jobs.done(set())).toBe(false)
-    const ws = setJobNumbering(set(), { word: 'style', prefix: 'st' })
-    expect(jobs.done(ws)).toBe(true)
-    expect(ws.jobNumbering).toEqual({ word: 'style', prefix: 'ST' })
-    expect(jobs.summary(ws)).toBe('styles numbered ST-…')
   })
 
   it('ticks the store rules only once they are agreed', () => {

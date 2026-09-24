@@ -138,7 +138,7 @@ export function dispatchDecisionsFor(ws: Workspace, today: string): Decision[] {
           act: 'open',
           actLabel: 'See the plan',
           alt: { act: 'keep', label: 'Noted' },
-          href: '/production/plan',
+          href: `/production/jobs?card=${line.job.id}`,
           refs: { orderId: r.order.id, lineId: c.lineId, jobId: line.job.id },
           weight: c.short,
         })

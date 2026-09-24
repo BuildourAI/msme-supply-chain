@@ -17,8 +17,8 @@ import {
   addOrder, cancelOrder, linesMadeOn, linkableLines, madeForProblem, madeForText, salesLineLabel, setMadeFor,
 } from '@/lib/workspace/sales'
 import { parseStored } from '@/lib/workspace/storage'
-import { dispatchNav, inventoryNav } from '@/lib/workspace/reveal'
-import { DISPATCH_STEPS } from '@/lib/workspace/checklist'
+import { dispatchNav, inventoryNav, productionNav } from '@/lib/workspace/reveal'
+import { DISPATCH_STEPS, stepsFor } from '@/lib/workspace/checklist'
 import type { Workspace } from '@/lib/workspace/types'
 import { TODAY, bay, booked, line } from './dispatch-fixture'
 
@@ -148,5 +148,14 @@ describe('the rails say where things are', () => {
   it('names the store\'s two ways out by where the material went', () => {
     const labels = inventoryNav(bay(), TODAY).map((r) => r.label)
     expect(labels.slice(2, 4)).toEqual(['Issued to floor', 'Sent for jobwork'])
+  })
+
+  it('names the floor\'s job cards by the owner\'s word, and keeps their set-up step there', () => {
+    const rows = productionNav(bay(), TODAY)
+    expect(rows[1]).toMatchObject({ label: 'Styles', href: '/production/jobs' })
+    expect(rows.map((r) => r.label)).not.toContain('Plan vs actual')
+    expect(productionNav(setJobNumbering(bay(), { word: 'job', prefix: 'JC' }), TODAY)[1].label).toBe('Job cards')
+    expect(stepsFor('production').map((s) => s.id)).toContain('jobs')
+    expect(stepsFor('inventory').map((s) => s.id)).not.toContain('jobs')
   })
 })
