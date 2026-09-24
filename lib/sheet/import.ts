@@ -28,9 +28,14 @@ import type { Item, SpecCheck, Vendor } from '@/lib/domain/types'
 import {
   addCheck, checkProblem, checksFor, readBucket, readCheckKind, updateCheck, type CheckInput,
 } from '@/lib/workspace/checks'
+import {
+  addCarrier, addCustomer, carrierProblem, customerProblem, readCarrierMode, readState, updateCarrier,
+  updateCustomer, type CarrierInput, type CustomerInput,
+} from '@/lib/workspace/customers'
+import { stateOfGstin } from '@/lib/workspace/gst'
 import type {
   FieldDef, FieldKind, ImportUndo, OrderState, PurchaseOrder, QuoteLine, Rfq, SheetEntity,
-  TableView, Workspace,
+  TableView, Workspace, WsCarrier, WsCustomer,
 } from '@/lib/workspace/types'
 
 /**
@@ -143,6 +148,58 @@ function checkFromRow(itemId: string, get: (target: string) => string): CheckInp
 }
 
 /**
+ * A customer or a carrier, as a sheet row describes it.
+ *
+ * Shared by plan and apply, like `checkFromRow`, so the preview never promises
+ * a row the apply then changes. On an update a blank cell keeps what is there,
+ * and the name keeps the spelling already on the list. The words a sheet uses
+ * for a state or for how a carrier moves goods are read here; one that cannot
+ * be read is the row's reason for being left out, never a guess.
+ */
+function customerFromRow(get: (target: string) => string, before?: WsCustomer): { input: CustomerInput; why: string | null } {
+  const text = (k: string, was?: string) => get(k).trim() || was
+  const num = (k: string, was?: number) => (get(k).trim() === '' ? was : parseNumber(get(k)) ?? undefined)
+  const gstin = text('gstin', before?.gstin)
+  const word = get('state').trim()
+  const read = word ? readState(word) : undefined
+  const why = word && !read && !stateOfGstin(gstin) ? `“${word}” is not an Indian state or union territory` : null
+  return {
+    why,
+    input: {
+      name: before?.name ?? get('name').trim(),
+      gstin,
+      // a valid GSTIN already says the state, as it does on the form
+      state: stateOfGstin(gstin) ? undefined : read ?? before?.state,
+      shipTo: text('shipTo', before?.shipTo),
+      phone: text('phone', before?.phone),
+      email: text('email', before?.email),
+      distanceKm: num('distance', before?.distanceKm),
+      paymentTerms: num('terms', before?.paymentTerms),
+      note: before?.note,
+    },
+  }
+}
+
+function carrierFromRow(get: (target: string) => string, before?: WsCarrier): { input: CarrierInput; why: string | null } {
+  const word = get('mode').trim()
+  const mode = word ? readCarrierMode(word) : before?.mode ?? 'part'
+  const rate = get('rate').trim() === '' ? before?.ratePerKgKm : parseNumber(get('rate')) ?? undefined
+  return {
+    why: mode ? null : `“${word}” is not own vehicle, part load, full truck, courier or other`,
+    input: {
+      name: before?.name ?? get('name').trim(),
+      mode: mode ?? 'part',
+      ratePerKgKm: rate,
+      phone: get('phone').trim() || before?.phone,
+      note: before?.note,
+    },
+  }
+}
+
+/** Lists where a name is used once, so a row can update one or leave it alone — never add it twice. */
+export const namedOnce = (entity: SheetEntity): boolean => entity === 'customer' || entity === 'carrier' || entity === 'check'
+
+/**
  * The lists a sheet can fill.
  *
  * A receipt and a challan are records of things that happened — material at
@@ -153,7 +210,7 @@ function checkFromRow(itemId: string, get: (target: string) => string): CheckInp
  */
 export const importable = (entity: SheetEntity): boolean =>
   !['receipt', 'challan', 'rack', 'lot', 'count', 'move', 'job', 'issue', 'loss', 'cut', 'offcut',
-    'product', 'output', 'halt', 'customer', 'carrier', 'salesOrder', 'dispatchNote', 'consignment', 'rma'].includes(entity)
+    'product', 'output', 'halt', 'salesOrder', 'dispatchNote', 'consignment', 'rma'].includes(entity)
 
 /**
  * Whether a value fits the column it was matched to.
@@ -199,6 +256,8 @@ export function planImport(
   const hasIdentity = used.some((m) => m.target === identity)
   const second = SECOND[entity]
   const hasSecond = second !== undefined && used.some((m) => m.target === second)
+  // names already planned in this sheet, for the lists that use a name once
+  const seen = new Set<string>()
 
   return body.map((row, i) => {
     const line = i + 1
@@ -260,6 +319,35 @@ export function planImport(
       if (policy === 'skip') return plan('skip', { reason: `${item.name} already has “${label}”` })
       if (policy === 'add') return plan('skip', { reason: `${item.name} already has “${label}” — a check is named once per material` })
       return plan('update', { matchId: existing.id, links: { vendorId: '', itemId: item.id } })
+    }
+
+    if (entity === 'customer' || entity === 'carrier') {
+      /*
+       * A customer and a carrier are named once — two rows for the same name
+       * would be one of them wrong — so a repeat within the sheet is left out
+       * and a name already on the list is updated or left alone, never added
+       * again. The form's own refusals then decide the rest.
+       */
+      const key = name.toLowerCase()
+      if (seen.has(key)) return plan('skip', { reason: `${name} is on this sheet twice — the first row is used` })
+      seen.add(key)
+      const get = (t: string) => raw[keyOf(t)] ?? ''
+      if (entity === 'customer') {
+        const existing = (ws.customers ?? []).find((c) => c.name.trim().toLowerCase() === key)
+        if (existing && policy !== 'update') return plan('skip', { reason: `${existing.name} is already here` })
+        const { input, why } = customerFromRow(get, existing)
+        if (why) return plan('skip', { reason: why })
+        const problem = customerProblem(ws, input, existing?.id)
+        if (problem) return plan('skip', { reason: problem })
+        return existing ? plan('update', { matchId: existing.id }) : plan('new')
+      }
+      const existing = (ws.carriers ?? []).find((c) => c.name.trim().toLowerCase() === key)
+      if (existing && policy !== 'update') return plan('skip', { reason: `${existing.name} is already here` })
+      const { input, why } = carrierFromRow(get, existing)
+      if (why) return plan('skip', { reason: why })
+      const problem = carrierProblem(ws, input, existing?.id)
+      if (problem) return plan('skip', { reason: problem })
+      return existing ? plan('update', { matchId: existing.id }) : plan('new')
     }
 
     if (entity === 'rfq') {
@@ -566,6 +654,34 @@ export function applyImport(
         created.push(id)
         recordId = id
       }
+    } else if (entity === 'customer') {
+      const before = plan.matchId ? (w.customers ?? []).find((c) => c.id === plan.matchId) : undefined
+      const { input } = customerFromRow((t) => values[t] ?? '', before)
+      if (before) {
+        updated.push({ id: before.id, before: { ...before } as unknown as Record<string, unknown> })
+        w = updateCustomer(w, before.id, input)
+        recordId = before.id
+      } else {
+        const [next, id] = addCustomer(w, input)
+        if (!id) continue
+        w = next
+        created.push(id)
+        recordId = id
+      }
+    } else if (entity === 'carrier') {
+      const before = plan.matchId ? (w.carriers ?? []).find((c) => c.id === plan.matchId) : undefined
+      const { input } = carrierFromRow((t) => values[t] ?? '', before)
+      if (before) {
+        updated.push({ id: before.id, before: { ...before } as unknown as Record<string, unknown> })
+        w = updateCarrier(w, before.id, input)
+        recordId = before.id
+      } else {
+        const [next, id] = addCarrier(w, input)
+        if (!id) continue
+        w = next
+        created.push(id)
+        recordId = id
+      }
     } else if (entity === 'rfq') {
       // a request, against a material that planImport already resolved
       const [next, id] = issueId(w, 'RF')
@@ -675,6 +791,8 @@ export function undoImport(ws: Workspace): Workspace {
       && !gone.has(o.vendorId) && !gone.has(o.itemId)),
     specChecks: (w.specChecks ?? []).filter((c) => !gone.has(c.id) && !gone.has(c.itemId)),
     challans: (w.challans ?? []).filter((c) => !gone.has(c.vendorId) && !gone.has(c.itemId)),
+    customers: (w.customers ?? []).filter((c) => !gone.has(c.id)),
+    carriers: (w.carriers ?? []).filter((c) => !gone.has(c.id)),
   }
 
   for (const { id, before } of undo.updated) {
@@ -687,6 +805,10 @@ export function undoImport(ws: Workspace): Workspace {
         ...w,
         specChecks: (w.specChecks ?? []).map((c) => (c.id === id ? (before as unknown as SpecCheck) : c)),
       }
+    } else if (undo.entity === 'customer') {
+      w = { ...w, customers: (w.customers ?? []).map((c) => (c.id === id ? (before as unknown as WsCustomer) : c)) }
+    } else if (undo.entity === 'carrier') {
+      w = { ...w, carriers: (w.carriers ?? []).map((c) => (c.id === id ? (before as unknown as WsCarrier) : c)) }
     }
   }
 

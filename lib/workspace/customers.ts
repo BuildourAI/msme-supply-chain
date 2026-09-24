@@ -9,7 +9,7 @@
  * like any other.
  */
 import { issueId } from './defaults'
-import { customerState, isGstin } from './gst'
+import { GST_STATE, STATES, customerState, isGstin } from './gst'
 import type { CarrierMode, DispatchRules, Workspace, WsCarrier, WsCustomer } from './types'
 
 /* ------------------------------------------------------------ the rules -- */
@@ -113,6 +113,40 @@ export const CARRIER_MODE: Record<CarrierMode, string> = {
   full: 'Full truck',
   courier: 'Courier',
   other: 'Other',
+}
+
+const squash = (s: string) => s.trim().toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]/g, '')
+
+/** The words people write for how a carrier moves goods, squashed. */
+const MODE_WORDS: Record<CarrierMode, string[]> = {
+  own: ['own', 'ownvehicle', 'ourownvehicle', 'ourvehicle', 'self', 'companyvehicle', 'inhouse', 'owntempo'],
+  part: ['part', 'partload', 'ptl', 'ltl', 'parttruckload', 'lessthantruckload', 'sharedtruck'],
+  full: ['full', 'fulltruck', 'fulltruckload', 'ftl', 'fullload', 'truck', 'fullvehicle'],
+  courier: ['courier', 'couriers', 'express', 'parcel'],
+  other: ['other', 'others'],
+}
+
+/** "FTL", "Part load", "our own vehicle" → a mode; anything else is not guessed at. */
+export function readCarrierMode(word: string): CarrierMode | undefined {
+  const w = squash(word)
+  if (!w) return undefined
+  return (Object.keys(MODE_WORDS) as CarrierMode[]).find((m) => MODE_WORDS[m].includes(w) || squash(CARRIER_MODE[m]) === w)
+}
+
+/** Old names people still write on a sheet. */
+const STATE_ALIASES: Record<string, string> = {
+  orissa: 'Odisha', pondicherry: 'Puducherry', newdelhi: 'Delhi', nctofdelhi: 'Delhi',
+  uttaranchal: 'Uttarakhand', jk: 'Jammu and Kashmir', jandk: 'Jammu and Kashmir', andamanandnicobar: 'Andaman and Nicobar Islands',
+  damananddiu: 'Dadra and Nagar Haveli and Daman and Diu', dadraandnagarhaveli: 'Dadra and Nagar Haveli and Daman and Diu',
+}
+
+/** A state as written on a sheet — its name, an old name, or its two-digit GST code. */
+export function readState(word: string): string | undefined {
+  const raw = word.trim()
+  if (!raw) return undefined
+  if (/^\d{1,2}$/.test(raw)) return GST_STATE[raw.padStart(2, '0')]
+  const w = squash(raw)
+  return STATES.find((s) => squash(s) === w) ?? STATE_ALIASES[w]
 }
 
 export const carrierOf = (ws: Workspace, id?: string): WsCarrier | undefined =>

@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { ListPage } from '@/components/ui/ListPage'
 import { DataTable, StatePill } from '@/components/ui/DataTable'
 import { DeskTools } from '@/components/sheet/DeskTools'
+import { ImportDialog } from '@/components/sheet/ImportDialog'
 import { buildColumns, type DrawnColumn } from '@/components/sheet/columns'
 import { ConfirmDelete } from '@/components/sourcing/ConfirmDelete'
 import { useWorkspace } from '@/components/workspace/store'
@@ -20,6 +21,7 @@ export function Customers() {
   const { workspace, update, today } = useWorkspace()
   const [editing, setEditing] = useState<WsCustomer | null | undefined>(undefined)
   const [deleting, setDeleting] = useState<CustomerRow | null>(null)
+  const [importing, setImporting] = useState(false)
   if (!workspace) return null
   const ws = workspace
   const rows = customerRows(ws, today)
@@ -38,6 +40,13 @@ export function Customers() {
       text: (r) => String(r.customer.paymentTerms ?? ''),
     },
     open: { align: 'right', cell: (r) => (r.openOrders ? num(r.openOrders, 0) : <span className="text-ink-4">—</span>), text: (r) => String(r.openOrders) },
+    phone: { cell: (r) => <span className="whitespace-nowrap text-ink-2">{r.customer.phone ?? '—'}</span>, text: (r) => r.customer.phone ?? '' },
+    email: { cell: (r) => <span className="text-ink-2">{r.customer.email ?? '—'}</span>, text: (r) => r.customer.email ?? '' },
+    distance: {
+      align: 'right',
+      cell: (r) => (r.customer.distanceKm !== undefined ? `${num(r.customer.distanceKm, 0)} km` : <span className="text-ink-4">—</span>),
+      text: (r) => String(r.customer.distanceKm ?? ''),
+    },
   }
   const kit = buildColumns<CustomerRow>(ws, 'customer', (r) => r.customer.id, drawn)
 
@@ -48,7 +57,11 @@ export function Customers() {
         search={(r) => `${r.customer.name} ${r.customer.gstin ?? ''} ${r.state ?? ''} ${r.customer.shipTo ?? ''} ${kit.searchText(r)}`}
         action={{ label: 'Add a customer', onClick: () => setEditing(null) }}
         tools={<DeskTools entity="customer" noun="customer" title="Customers" rows={() => kit.toRows(rows)} />}
-        empty={{ line: 'Nobody yet. A customer is a name; the GSTIN and ship-to address are what the delivery challan carries.', cta: 'Add a customer' }}>
+        empty={{
+          line: 'Nobody yet. A customer is a name; the GSTIN and ship-to address are what the delivery challan carries.',
+          cta: 'Add a customer',
+          second: { label: 'Bring them in from Excel', onClick: () => setImporting(true) },
+        }}>
         {(shown) => (
           <DataTable columns={kit.columns} rows={shown} keyOf={(r) => r.customer.id}
             onEdit={(r) => setEditing(r.customer)} onDelete={(r) => setDeleting(r)}
@@ -56,6 +69,7 @@ export function Customers() {
         )}
       </ListPage>
       <CustomerForm customer={editing} onClose={() => setEditing(undefined)} />
+      <ImportDialog open={importing} onClose={() => setImporting(false)} entity="customer" title="Customers" />
       <ConfirmDelete
         open={deleting !== null} what={deleting?.customer.name ?? ''} impact={{ losses: [], clean: true }}
         blocked={deleting ? removeCustomerProblem(ws, deleting.customer.id) : null}
@@ -70,6 +84,7 @@ export function Carriers() {
   const { workspace, update, today } = useWorkspace()
   const [editing, setEditing] = useState<WsCarrier | null | undefined>(undefined)
   const [deleting, setDeleting] = useState<CarrierRow | null>(null)
+  const [importing, setImporting] = useState(false)
   if (!workspace) return null
   const ws = workspace
   const rows = carrierRows(ws, today)
@@ -90,6 +105,7 @@ export function Carriers() {
           : <span className="text-critical">{r.late} of {r.delivered}{(r.drift.value as number) > 0 ? ` · ${r.drift.value} days behind` : ''}</span>),
       text: (r) => `${r.late}/${r.delivered}`,
     },
+    phone: { cell: (r) => <span className="whitespace-nowrap text-ink-2">{r.carrier.phone ?? '—'}</span>, text: (r) => r.carrier.phone ?? '' },
   }
   const kit = buildColumns<CarrierRow>(ws, 'carrier', (r) => r.carrier.id, drawn)
 
@@ -100,7 +116,11 @@ export function Carriers() {
         search={(r) => `${r.carrier.name} ${CARRIER_MODE[r.carrier.mode]} ${kit.searchText(r)}`}
         action={{ label: 'Add a carrier', onClick: () => setEditing(null) }}
         tools={<DeskTools entity="carrier" noun="carrier" title="Carriers" rows={() => kit.toRows(rows)} />}
-        empty={{ line: 'Nobody yet. A transporter, a courier or your own vehicle — each consignment is booked with one.', cta: 'Add a carrier' }}>
+        empty={{
+          line: 'Nobody yet. A transporter, a courier or your own vehicle — each consignment is booked with one.',
+          cta: 'Add a carrier',
+          second: { label: 'Bring them in from Excel', onClick: () => setImporting(true) },
+        }}>
         {(shown) => (
           <DataTable columns={kit.columns} rows={shown} keyOf={(r) => r.carrier.id}
             onEdit={(r) => setEditing(r.carrier)} onDelete={(r) => setDeleting(r)}
@@ -108,6 +128,7 @@ export function Carriers() {
         )}
       </ListPage>
       <CarrierForm carrier={editing} onClose={() => setEditing(undefined)} />
+      <ImportDialog open={importing} onClose={() => setImporting(false)} entity="carrier" title="Carriers" />
       <ConfirmDelete
         open={deleting !== null} what={deleting?.carrier.name ?? ''} impact={{ losses: [], clean: true }}
         blocked={deleting ? removeCarrierProblem(ws, deleting.carrier.id) : null}

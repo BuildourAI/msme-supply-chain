@@ -10,8 +10,7 @@ import { canReadXlsx } from '@/lib/sheet/unzip'
 import { readFile, readPasted, splitHeader, type Sheet } from '@/lib/sheet/read'
 import { choicesOf, guessKind, matchHeader, type Target } from '@/lib/sheet/match'
 import {
-  NEW_FIELD, applyImport, planImport, summarise, type DupPolicy, type Mapping,
-} from '@/lib/sheet/import'
+  NEW_FIELD, applyImport, planImport, summarise, type DupPolicy, type Mapping, namedOnce } from '@/lib/sheet/import'
 import type { FieldKind, SheetEntity } from '@/lib/workspace/types'
 
 /**
@@ -47,6 +46,12 @@ function targetsFor(ws: ReturnType<typeof useWorkspace>['workspace'], entity: Sh
 }
 
 const MAX_ROWS = 2000
+
+/** What a pasted block looks like, for the lists whose headings are not a supplier's. */
+const PASTE_EXAMPLE: Partial<Record<SheetEntity, string>> = {
+  customer: 'Customer\tGSTIN\tShip to\tCredit days\nBharat Panels\t27AABCB1234K1Z2\tChakan MIDC, Pune\t30',
+  carrier: 'Transporter\tLoad type\tRate per kg km\nVRL Logistics\tPart load\t0.05',
+}
 
 export function ImportDialog({ open, onClose, entity, title }: {
   open: boolean
@@ -122,7 +127,7 @@ export function ImportDialog({ open, onClose, entity, title }: {
       invalid: sheet ? null : 'Pick a file or paste some cells.',
       body: (
         <Source
-          sheet={sheet} paste={paste} error={error} headerRow={headerRow}
+          sheet={sheet} paste={paste} error={error} headerRow={headerRow} example={PASTE_EXAMPLE[entity]}
           onPaste={setPaste} onUsePaste={usePaste} onPick={pick}
           onHeaderRow={(n) => { setHeaderRow(n); if (sheet) setMappings(autoMatch(sheet.rows[n] ?? [], sheet.rows.slice(n + 1), targets)) }}
           onTab={(path) => { if (sheet?.switchTab) load(sheet.switchTab(path)) }}
@@ -200,9 +205,11 @@ function autoMatch(header: string[], body: string[][], targets: Target[]): Mappi
 /* ------------------------------------------------------------------ step 1 -- */
 
 function Source({
-  sheet, paste, error, headerRow, onPaste, onUsePaste, onPick, onHeaderRow, onTab, onClear,
+  sheet, paste, error, headerRow, example, onPaste, onUsePaste, onPick, onHeaderRow, onTab, onClear,
 }: {
   sheet: Sheet | null
+  /** what a pasted block looks like for this list */
+  example?: string
   paste: string
   error: string | null
   headerRow: number
@@ -283,7 +290,7 @@ function Source({
       <Field label="Paste the cells"
         hint="In Google Sheets or Excel, select the block including its headings, copy, and paste here.">
         <Textarea value={paste} onChange={onPaste} rows={5} mono
-          placeholder={'Supplier name\tType\tPayment terms\nShah Metals\tMill\t30'} />
+          placeholder={example ?? 'Supplier name\tType\tPayment terms\nShah Metals\tMill\t30'} />
       </Field>
       {paste.trim() !== '' && (
         <button type="button" onClick={onUsePaste}
@@ -377,7 +384,8 @@ function Check({ plans, report, policy, onPolicy, entity }: {
             options={[
               { value: 'update', label: 'Update what is already there' },
               { value: 'skip', label: 'Leave the existing one alone' },
-              { value: 'add', label: 'Add it again as a separate row' },
+              // a customer, a carrier or a check is named once — a second one is a mistake
+              ...(namedOnce(entity) ? [] : [{ value: 'add', label: 'Add it again as a separate row' }]),
             ]} />
         </Field>
       )}

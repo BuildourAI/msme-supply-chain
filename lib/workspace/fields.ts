@@ -323,19 +323,23 @@ export const BUILTIN: Record<SheetEntity, BuiltinColumn[]> = {
   ],
   /* the shipping bay's */
   customer: [
-    { key: 'name', label: 'Customer', identity: true, derived: true },
-    { key: 'gstin', label: 'GSTIN', derived: true },
-    { key: 'state', label: 'State', derived: true },
-    { key: 'shipTo', label: 'Ship to', derived: true },
-    { key: 'terms', label: 'Payment', derived: true },
+    { key: 'name', label: 'Customer', kind: 'text', identity: true, aliases: ['name', 'customer name', 'party', 'party name', 'buyer', 'client', 'consignee'] },
+    { key: 'gstin', label: 'GSTIN', kind: 'text', aliases: ['gst', 'gst no', 'gst number', 'gstin no', 'gstin/uin', 'gst registration'] },
+    { key: 'state', label: 'State', kind: 'text', aliases: ['place of supply', 'state name'] },
+    { key: 'shipTo', label: 'Ship to', kind: 'text', aliases: ['shipping address', 'delivery address', 'ship to address', 'address', 'consignee address'] },
+    { key: 'terms', label: 'Payment', kind: 'number', aliases: ['payment terms', 'terms', 'credit days', 'credit period', 'payment days'] },
     { key: 'open', label: 'Open orders', derived: true },
+    { key: 'phone', label: 'Phone', kind: 'text', aliases: ['mobile', 'whatsapp', 'contact number', 'phone number'] },
+    { key: 'email', label: 'Email', kind: 'text', aliases: ['e-mail', 'mail', 'email id'] },
+    { key: 'distance', label: 'Distance (km)', kind: 'number', aliases: ['distance', 'km', 'kms', 'distance in km'] },
   ],
   carrier: [
-    { key: 'name', label: 'Carrier', identity: true, derived: true },
-    { key: 'mode', label: 'How', derived: true },
-    { key: 'rate', label: 'Rate', derived: true },
+    { key: 'name', label: 'Carrier', kind: 'text', identity: true, aliases: ['name', 'carrier name', 'transporter', 'transporter name', 'transport', 'logistics'] },
+    { key: 'mode', label: 'How', kind: 'text', aliases: ['mode', 'type', 'load type', 'vehicle', 'how they carry it'] },
+    { key: 'rate', label: 'Rate', kind: 'number', aliases: ['rate per kg km', 'rate/kg/km', 'per kg km', 'rate per kg-km'] },
     { key: 'shipped', label: 'Shipped', derived: true },
     { key: 'late', label: 'Late', derived: true },
+    { key: 'phone', label: 'Phone', kind: 'text', aliases: ['mobile', 'whatsapp', 'contact number', 'phone number'] },
   ],
   salesOrder: [
     { key: 'no', label: 'Order', identity: true, derived: true },
@@ -422,11 +426,18 @@ export const EMPTY_VIEWS: Record<SheetEntity, TableView> = {
  * Phone and email exist so a request can be handed to a supplier, but a brand
  * new company has neither, and two empty columns on the first screen somebody
  * sees is exactly the clutter this desk was rebuilt to remove. They appear the
- * moment any supplier has one — or the moment the owner shows them by hand.
+ * moment any record on that list has one — or the moment the owner shows them
+ * by hand. A customer and a carrier keep their own numbers, so theirs are asked
+ * of their own list, not of the supplier book.
  */
-const HIDDEN_UNTIL_USED: Record<string, (ws: Workspace) => boolean> = {
-  phone: (ws) => Object.values(ws.vendorContact ?? {}).some((c) => Boolean(c?.phone)),
-  email: (ws) => Object.values(ws.vendorContact ?? {}).some((c) => Boolean(c?.email)),
+const HIDDEN_UNTIL_USED: Record<string, (ws: Workspace, entity: SheetEntity) => boolean> = {
+  phone: (ws, entity) => (entity === 'customer' ? (ws.customers ?? []).some((c) => Boolean(c.phone))
+    : entity === 'carrier' ? (ws.carriers ?? []).some((c) => Boolean(c.phone))
+      : Object.values(ws.vendorContact ?? {}).some((c) => Boolean(c?.phone))),
+  email: (ws, entity) => (entity === 'customer' ? (ws.customers ?? []).some((c) => Boolean(c.email))
+    : Object.values(ws.vendorContact ?? {}).some((c) => Boolean(c?.email))),
+  // most customers are near enough that nobody writes the distance down
+  distance: (ws) => (ws.customers ?? []).some((c) => c.distanceKm !== undefined),
   // most quotes arrive on WhatsApp with no reference number on them at all
   ref: (ws) => (ws.quotes ?? []).some((q) => Boolean(q.ref)),
   /*
@@ -491,7 +502,7 @@ export function resolveColumns(ws: Workspace, entity: SheetEntity): ResolvedColu
       // a column nobody has decided about is left to the rule; one somebody
       // has decided about is in `hidden` or in `shown`, and the rule is over
       hidden: (view.hidden ?? []).includes(b.key)
-        || (auto !== undefined && !(view.shown ?? []).includes(b.key) && !auto(ws)),
+        || (auto !== undefined && !(view.shown ?? []).includes(b.key) && !auto(ws, entity)),
       identity: Boolean(b.identity),
     })
   }

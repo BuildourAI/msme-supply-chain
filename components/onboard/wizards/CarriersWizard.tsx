@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { Wizard, type WizardStep } from '@/components/ui/Wizard'
 import { useWorkspace } from '@/components/workspace/store'
+import { ImportDialog } from '@/components/sheet/ImportDialog'
 import { CarrierFields, carrierDraftOf, carrierInput, type CarrierDraft } from '@/components/dispatch/desk/PartyForms'
 import { addCarrier, carrierProblem } from '@/lib/workspace/customers'
 
@@ -15,10 +16,12 @@ import { addCarrier, carrierProblem } from '@/lib/workspace/customers'
 export function CarriersWizard({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { workspace, update } = useWorkspace()
   const [d, setD] = useState<CarrierDraft>(carrierDraftOf())
+  const [importing, setImporting] = useState(false)
 
-  useEffect(() => { if (open) setD(carrierDraftOf()) }, [open])
+  useEffect(() => { if (open) { setD(carrierDraftOf()); setImporting(false) } }, [open])
 
   if (!open || !workspace) return null
+  if (importing) return <ImportDialog open onClose={onClose} entity="carrier" title="Carriers" />
   const have = workspace.carriers ?? []
   const input = carrierInput(d)
   const hasOwn = have.some((c) => c.mode === 'own')
@@ -39,6 +42,10 @@ export function CarriersWizard({ open, onClose }: { open: boolean; onClose: () =
           <p className="text-[12px] text-ink-3">Already added: {have.map((c) => c.name).join(', ')}.</p>
         )}
         <CarrierFields d={d} set={(p) => setD((x) => ({ ...x, ...p }))} idp="crw" />
+        <button type="button" onClick={() => setImporting(true)}
+          className="press text-[12.5px] text-ink-3 underline underline-offset-2 hover:text-ink">
+          Bring them in from Excel
+        </button>
         {!hasOwn && (
           <div className="border-t border-line-soft pt-3">
             <button type="button" onClick={ownVehicle}
