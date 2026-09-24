@@ -117,6 +117,7 @@ const KIND: Record<DecisionKind, IconName> = {
   'challan-overdue': 'factory',
   'challan-unaccounted': 'factory',
   'over-ceiling': 'cash',
+  'challan-gst': 'calendar',
   // the store's
   'count-due': 'hash',
   'no-rack': 'columns',

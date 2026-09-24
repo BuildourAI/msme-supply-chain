@@ -365,6 +365,11 @@ export interface Challan {
   writtenOff?: number
   /** every time the promised date moved, kept rather than written over */
   extensions?: { from: string; to: string; on: string; reason: string }[]
+  /**
+   * The style, job or order it went out for. Line watch gives that one its
+   * material first when it comes back; blank is material out for stock.
+   */
+  jobId?: string
 }
 
 /* -------------------------------------------------------------- the store -- */

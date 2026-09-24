@@ -109,7 +109,7 @@ export function productionDecisionsFor(ws: Workspace, today: string): Decision[]
         act: 'open',
         actLabel: late ? 'Chase the jobworker' : 'See what is due',
         alt: { act: 'keep', label: 'Noted' },
-        href: late ? '/inbound/jobwork' : '/inbound/orders',
+        href: late ? '/inventory/jobwork' : '/inbound/due',
         refs: { jobId: job.id },
         weight: late ? 200 : 100,
       })

@@ -7,8 +7,7 @@ import { useInbound } from '@/components/inbound/store'
 import { Note } from '@/components/ui/Note'
 import { lakh, longDate } from '@/lib/domain/format'
 import { useWorkspace } from '@/components/workspace/store'
-import { Jobwork } from '@/components/inbound/desk/Jobwork'
-import { DeskOnly } from '@/components/sourcing/DeskOnly'
+import { Moved } from '@/components/shell/Moved'
 
 function PageBody() {
   const { challanRows, jobworkTotal, today } = useInbound()
@@ -45,5 +44,6 @@ function PageBody() {
 export default function Page() {
   const { mode, ready } = useWorkspace()
   if (!ready) return <div className="min-h-[50vh]" aria-hidden />
-  return mode === 'mine' ? <DeskOnly><Jobwork /></DeskOnly> : <PageBody />
+  // an owner's jobwork is the store's now — their own material in somebody else's shed
+  return mode === 'mine' ? <Moved to="/inventory/jobwork" /> : <PageBody />
 }

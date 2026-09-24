@@ -4,16 +4,19 @@
  * Same shape as the sourcing and inbound queues — a band, a sentence naming
  * the thing, one button — so the dashboard reads the same in every stage. The
  * store's questions are few and plain: which rack is due a count, which lots
- * nobody can find, where the book has gone below nothing.
+ * nobody can find, where the book has gone below nothing — and where the
+ * store's own material is, when it is in somebody else's shed.
  *
  * Pure, and empty without a date: every card here is about how long something
  * has been true.
  */
 import { daysBetween } from '@/lib/domain/calc'
-import { num } from '@/lib/domain/format'
+import { longDate, money, num } from '@/lib/domain/format'
 import { openVariances } from './counting'
 import { cutRows, offcutRows, remnantEffects } from './cutting'
 import { sortDecisions, type Decision } from './decisions'
+import { challanRows, jobworkerHoldings } from './inbound'
+import { GST_JOBWORK_WARN_DAYS, gstDaysLeft } from './jobwork'
 import { STATE_WORD, lotRows, round3, type LotRow } from './ledger'
 import { scrapRows, unsoldPast } from './losses'
 import { unplacedLots } from './racks'
@@ -185,8 +188,99 @@ export function inventoryDecisionsFor(ws: Workspace, today: string): Decision[] 
   }
 
   if (ws.cutting) out.push(...cuttingDecisions(ws, today))
+  out.push(...jobworkDecisions(ws, today))
 
   return sortDecisions(out)
+}
+
+/**
+ * Material out at jobworkers — the store's own, in somebody else's shed.
+ *
+ * Past its date it is the worst band — the line may be waiting on it — and
+ * the answer is a chase, or booking in what came back. Once a challan is
+ * settling with material neither back nor explained, somebody has to close
+ * it against a reason. A jobworker holding more than the ceiling the owner
+ * set is money sitting where nobody can see it. And material nearing a year
+ * out is about to become, for GST, a sale nobody made.
+ */
+function jobworkDecisions(ws: Workspace, today: string): Decision[] {
+  const out: Decision[] = []
+  for (const r of challanRows(ws, today)) {
+    if (r.challan.status !== 'out') continue
+    const who = r.vendor?.name ?? 'Unknown jobworker'
+    const what = r.item?.name ?? 'Unknown material'
+    const refs = { challanId: r.challan.id, vendorId: r.challan.vendorId, itemId: r.challan.itemId }
+    if (r.overdue) {
+      const late = r.late.value
+      const out_ = Math.round((r.challan.qtySent - r.acct.returned.value - r.acct.inQc.value) * 1000) / 1000
+      out.push({
+        id: `challan-overdue:${r.challan.id}`,
+        band: 'stops',
+        kind: 'challan-overdue',
+        title: `${r.challan.no} · ${who}`,
+        detail: `${num(out_, 3)} ${r.uom} of ${what} ${late} day${late === 1 ? '' : 's'} past the date they promised`,
+        act: 'chase',
+        actLabel: 'Chase them',
+        alt: { act: 'return', label: 'It came back' },
+        href: '/inventory/jobwork',
+        refs,
+        weight: 500 + late,
+      })
+    }
+    if (r.acct.settling && r.acct.unaccounted.value > 0 && r.atGate.length === 0) {
+      out.push({
+        id: `challan-unaccounted:${r.challan.id}`,
+        band: 'costs',
+        kind: 'challan-unaccounted',
+        title: `${r.challan.no} · ${who}`,
+        detail: `${num(r.acct.unaccounted.value, 3)} ${r.uom} of ${what} neither back nor explained — ${money(r.valueLost.value)}`,
+        act: 'close-challan',
+        actLabel: 'Settle it',
+        href: '/inventory/jobwork',
+        refs,
+        weight: 250 + Math.min(199, Math.round(r.valueLost.value / 1000)),
+      })
+    }
+    /*
+     * The GST year. Asked from ninety days before, while a chase can still
+     * bring it back; past it, the worst band, because what is owed now is tax.
+     */
+    const left = gstDaysLeft(r.challan, today)
+    if (left <= GST_JOBWORK_WARN_DAYS) {
+      const past = left < 0
+      out.push({
+        id: `challan-gst:${r.challan.id}`,
+        band: past ? 'stops' : 'costs',
+        kind: 'challan-gst',
+        title: `${r.challan.no} · ${who}`,
+        detail: past
+          ? `left ${longDate(r.challan.sentOn)} — ${-left} day${left === -1 ? '' : 's'} past the year GST allows; it counts as supplied on the day it left`
+          : `left ${longDate(r.challan.sentOn)} — GST counts inputs not back within a year as supplied on the day they left; ${left} day${left === 1 ? '' : 's'} to go`,
+        act: 'chase',
+        actLabel: 'Chase them',
+        alt: { act: 'return', label: 'It came back' },
+        href: '/inventory/jobwork',
+        refs,
+        weight: past ? 450 - left : 240 + (GST_JOBWORK_WARN_DAYS - left),
+      })
+    }
+  }
+  for (const h of jobworkerHoldings(ws, today)) {
+    if (!h.over) continue
+    out.push({
+      id: `over-ceiling:${h.vendor.id}`,
+      band: 'costs',
+      kind: 'over-ceiling',
+      title: h.vendor.name,
+      detail: `holding ${money(h.held.value)} of your material — the most you allow one jobworker is ${money(ws.policy.jobworkerExposureCeiling)}`,
+      act: 'open',
+      actLabel: 'Look at it',
+      href: '/inventory/jobwork',
+      refs: { vendorId: h.vendor.id },
+      weight: 180 + Math.min(99, Math.round((h.held.value - ws.policy.jobworkerExposureCeiling) / 10000)),
+    })
+  }
+  return out
 }
 
 /**
@@ -197,7 +291,7 @@ export function inventoryDecisionsFor(ws: Workspace, today: string): Decision[] 
  */
 function cuttingDecisions(ws: Workspace, today: string): Decision[] {
   const out: Decision[] = []
-  const money = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`
+  const rs = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`
 
   for (const r of offcutRows(ws, today)) {
     if (!r.aged) continue
@@ -209,7 +303,7 @@ function cuttingDecisions(ws: Workspace, today: string): Decision[] {
       title: `A remnant of ${name} is ${r.age.value} days old`,
       detail: `${r.pieces ? `${plural(r.pieces, 'piece')} · ` : ''}${num(r.lot.qty, 3)} ${r.uom}${r.rack ? ` on ${r.rack.name}` : ''}${
         r.from ? `, from ${r.from}` : ''}. Past ${ws.policy.remnantAgeDays} days a remnant is rarely reached for — use it in a job, or scrap it${
-        r.value > 0 ? ` (worth ${money(r.value)})` : ''}.`,
+        r.value > 0 ? ` (worth ${rs(r.value)})` : ''}.`,
       act: 'use',
       actLabel: 'Use in a job',
       alt: { act: 'scrap', label: 'Scrap it' },

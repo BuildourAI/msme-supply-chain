@@ -14,7 +14,7 @@ import { isOpen } from '@/lib/workspace/receipts'
 import type { PurchaseOrder } from '@/lib/workspace/types'
 import { GrnDocument } from './GrnDocument'
 import { InspectForm } from './InspectForm'
-import { ReturnForm } from './JobworkDialogs'
+import { ReturnForm } from '@/components/inventory/desk/JobworkDialogs'
 
 /**
  * What the gate should expect.

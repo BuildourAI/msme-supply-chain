@@ -32,7 +32,7 @@ import type {
 } from '@/lib/domain/types'
 import { checksFor } from './checks'
 import { isOpen, measuredRejectionPct, openReceipts } from './receipts'
-import type { Challan, GoodsReceipt, PurchaseOrder, Workspace } from './types'
+import type { Challan, GoodsReceipt, Job, PurchaseOrder, Workspace } from './types'
 
 const uomOf = (ws: Workspace, itemId: string) => ws.items.find((i) => i.id === itemId)?.uom ?? ''
 
@@ -260,6 +260,8 @@ export interface ChallanRow {
   challan: Challan
   item?: Item
   vendor?: Vendor
+  /** the style, job or order it went out for */
+  job?: Job
   uom: string
   jc: JobworkChallan
   acct: Accounting
@@ -285,6 +287,7 @@ export function challanRow(ws: Workspace, c: Challan, today: string, grns = toGr
     challan: c,
     item: ws.items.find((i) => i.id === c.itemId),
     vendor: ws.vendors.find((v) => v.id === c.vendorId),
+    job: c.jobId ? (ws.jobs ?? []).find((j) => j.id === c.jobId) : undefined,
     uom: jc.uom,
     jc,
     acct,

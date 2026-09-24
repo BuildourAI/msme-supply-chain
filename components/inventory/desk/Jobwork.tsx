@@ -10,13 +10,15 @@ import { ConfirmDelete } from '@/components/sourcing/ConfirmDelete'
 import { JobworkerWizard } from '@/components/onboard/wizards/JobworkerWizard'
 import { useWorkspace } from '@/components/workspace/store'
 import { useApp } from '@/state/app-store'
-import { money, num, shortDate } from '@/lib/domain/format'
+import { longDate, money, num, shortDate } from '@/lib/domain/format'
 import { challanRows, jobworkerHoldings, type ChallanRow } from '@/lib/workspace/inbound'
-import { challanLedger, registerLedger, removeChallan, type LedgerKind } from '@/lib/workspace/jobwork'
+import {
+  GST_JOBWORK_WARN_DAYS, challanLedger, gstDaysLeft, gstDueBy, registerLedger, removeChallan, type LedgerKind,
+} from '@/lib/workspace/jobwork'
 import { isOpen } from '@/lib/workspace/receipts'
 import { ChaseDialog } from '@/components/sourcing/ChaseDialog'
-import { InspectForm } from './InspectForm'
-import { GrnDocument } from './GrnDocument'
+import { InspectForm } from '@/components/inbound/desk/InspectForm'
+import { GrnDocument } from '@/components/inbound/desk/GrnDocument'
 import { CloseChallanDialog, ExtendDueDialog, ReturnForm, SendOutForm } from './JobworkDialogs'
 
 /**
@@ -28,6 +30,12 @@ import { CloseChallanDialog, ExtendDueDialog, ReturnForm, SendOutForm } from './
  * still with the jobworker, allowed process loss, or unaccounted — and the
  * five always add up to what went out. It is the sample company's INB-03,
  * over the owner's own challans.
+ *
+ * It sits in the store, beside In-house: In-house is material issued to your
+ * own floor on a slip, this is material sent to somebody else's on a
+ * challan. Only what comes back passes the gate. A challan can say which
+ * style it went out for, and each one carries the GST year — inputs not back
+ * within a year of leaving count as supplied to the jobworker.
  *
  * Two views of one book. The register is a card per challan, with the split
  * as a bar. The ledger is every movement, dated, each naming the document it
@@ -95,6 +103,10 @@ export function Jobwork() {
       text: (r) => r.item?.name ?? '',
     },
     process: { cell: (r) => r.challan.process ?? <span className="text-ink-4">—</span>, text: (r) => r.challan.process ?? '' },
+    job: {
+      cell: (r) => (r.job ? <span className="mono text-[12px]">{r.job.no}</span> : <span className="text-ink-4">—</span>),
+      text: (r) => r.job?.no ?? '',
+    },
     sent: { align: 'right', cell: (r) => `${num(r.challan.qtySent, 3)} ${r.uom}`, text: (r) => String(r.challan.qtySent) },
     sentOn: { align: 'right', cell: (r) => shortDate(r.challan.sentOn), text: (r) => r.challan.sentOn },
     dueBack: { align: 'right', cell: (r) => shortDate(r.challan.dueBack), text: (r) => r.challan.dueBack },
@@ -120,7 +132,7 @@ export function Jobwork() {
     <>
       <ListPage
         title="Jobwork" noun="challan" rows={rows}
-        search={(r) => `${r.challan.no} ${r.vendor?.name ?? ''} ${r.item?.name ?? ''} ${r.challan.process ?? ''}`}
+        search={(r) => `${r.challan.no} ${r.vendor?.name ?? ''} ${r.item?.name ?? ''} ${r.challan.process ?? ''} ${r.job?.no ?? ''}`}
         filter={{
           label: 'Out and closed',
           options: [{ value: 'out', label: 'Out' }, { value: 'closed', label: 'Closed' }],
@@ -293,9 +305,10 @@ function ChallanCard({ r, i, onReturn, onChase, onExtend, onClose, onInspect, on
   onInspect: (receiptId: string) => void
   onDelete: () => void
 }) {
-  const { workspace } = useWorkspace()
+  const { workspace, today } = useWorkspace()
   const c = r.challan
   const segs = SPLIT(r)
+  const gstLeft = gstDaysLeft(c, today)
   const pill = statePill(r)
   const back = r.acct.returned.value + r.acct.inQc.value
   const fill = r.overdue ? 'bg-critical-soft' : r.atGate.length > 0 ? 'bg-warn-soft' : 'bg-surface-2'
@@ -315,6 +328,7 @@ function ChallanCard({ r, i, onReturn, onChase, onExtend, onClose, onInspect, on
           <span className="block truncate text-[11.5px] text-ink-2">
             {num(c.qtySent, 3)} {r.uom} to {r.vendor?.name ?? 'Unknown jobworker'}
             {c.process && <> · {c.process.toLowerCase()}</>}
+            {r.job && <> · for <span className="mono" data-for-job>{r.job.no}</span></>}
           </span>
         </span>
         <StatePill label={pill.label} tone={pill.tone} />
@@ -351,6 +365,16 @@ function ChallanCard({ r, i, onReturn, onChase, onExtend, onClose, onInspect, on
           <dd className="num font-semibold">{money(r.valueOut.value)}</dd>
         </div>
       </dl>
+
+      {/* the GST year, quiet until it is close */}
+      <p data-gst={gstLeft < 0 ? 'past' : gstLeft <= GST_JOBWORK_WARN_DAYS ? 'near' : 'far'}
+        title="Inputs sent for jobwork must be back within a year of leaving, or GST counts them as supplied to the jobworker on the day they left"
+        className={`mt-2 text-[11.5px] ${gstLeft < 0 ? 'font-semibold text-critical'
+          : gstLeft <= GST_JOBWORK_WARN_DAYS ? 'font-semibold text-warn' : 'text-ink-3'}`}>
+        GST: back by {longDate(gstDueBy(c))}
+        {gstLeft < 0 ? ` — ${-gstLeft} day${gstLeft === -1 ? '' : 's'} past; it counts as supplied`
+          : gstLeft <= GST_JOBWORK_WARN_DAYS ? ` — ${gstLeft} day${gstLeft === 1 ? '' : 's'} to go` : ''}
+      </p>
 
       {r.atGate.length > 0 && (
         <p className="mt-2.5 flex flex-wrap items-center gap-2 rounded-lg bg-surface/70 px-2.5 py-2 text-[11.5px] text-ink-2">

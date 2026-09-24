@@ -3,14 +3,16 @@ import { useEffect, useState } from 'react'
 import { Wizard, type WizardStep } from '@/components/ui/Wizard'
 import { Chips, Field, NumberInput } from '@/components/ui/Field'
 import { useWorkspace } from '@/components/workspace/store'
+import { money } from '@/lib/domain/format'
 import type { ItemClass } from '@/lib/domain/types'
+import { GST_JOBWORK_WARN_DAYS } from '@/lib/workspace/jobwork'
 
 type ByClass = Record<ItemClass, string>
 const CLASSES: ItemClass[] = ['A', 'B', 'C']
 const asText = (r: Record<ItemClass, number>): ByClass => ({ A: String(r.A), B: String(r.B), C: String(r.C) })
 
 /**
- * The rules a count and a loss are judged by.
+ * The rules a count, a loss and a jobworker are judged by.
  *
  * Every figure is already a policy value with the sample company's default;
  * this is where the owner says whether it is theirs. None of them stops
@@ -33,6 +35,8 @@ export function StoreRulesWizard({ open, onClose }: { open: boolean; onClose: ()
   const [age, setAge] = useState('90')
   const [yieldTol, setYieldTol] = useState('2')
   const [mins, setMins] = useState<Record<string, string>>({})
+  const [grace, setGrace] = useState('0')
+  const [ceiling, setCeiling] = useState('200000')
 
   useEffect(() => {
     if (!open || !workspace) return
@@ -42,6 +46,7 @@ export function StoreRulesWizard({ open, onClose }: { open: boolean; onClose: ()
     setTarget(asText(p.scrapTargetPct)); setOver(String(p.scrapTolerancePct))
     setUnsold(String(p.scrapUnrealisedDays)); setAge(String(p.remnantAgeDays))
     setYieldTol(String(p.yieldTolerancePct))
+    setGrace(String(p.jobworkGraceDays)); setCeiling(String(p.jobworkerExposureCeiling))
     setRates(Object.fromEntries(Object.entries(workspace.scrapRate ?? {}).map(([k, v]) => [k, String(v)])))
     setMins(Object.fromEntries(Object.entries(workspace.minRemnant ?? {}).map(([k, v]) => [k, String(v)])))
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -53,6 +58,7 @@ export function StoreRulesWizard({ open, onClose }: { open: boolean; onClose: ()
   const whole = (v: string) => Number.isInteger(n(v)) && n(v) >= 1
   const share = (v: string) => Number.isFinite(n(v)) && n(v) >= 0 && n(v) <= 100
   const blankOrMoney = (v: string) => v.trim() === '' || (Number.isFinite(n(v)) && n(v) >= 0)
+  const graceN = n(grace), ceilingN = n(ceiling)
 
   const byClass = (vals: ByClass, set: (b: ByClass) => void, unit: string, idp: string, step = '1') => (
     <div className="grid grid-cols-3 gap-2">
@@ -144,6 +150,35 @@ export function StoreRulesWizard({ open, onClose }: { open: boolean; onClose: ()
         </div>
       ),
     },
+    {
+      label: 'Jobwork',
+      title: 'How much slack do jobworkers get?',
+      why: 'Material at a jobworker is yours and out of your sight. These decide when that becomes something to look at.',
+      invalid: !(Number.isInteger(graceN) && graceN >= 0) ? 'Put in a whole number of days, zero for none.'
+        : !Number.isFinite(ceilingN) || ceilingN <= 0 ? 'Put in an amount in rupees.' : null,
+      body: (
+        <div className="space-y-3.5">
+          <Field label="Days past their promised date before a challan is raised" htmlFor="sr-grace">
+            <NumberInput id="sr-grace" value={grace} onChange={setGrace} unit="days" step="1" />
+          </Field>
+          <Field label="The most one jobworker should hold at once"
+            hint="Valued at what you last paid for the material. Past it, the dashboard says so; it never stops you sending."
+            htmlFor="sr-ceiling">
+            <NumberInput id="sr-ceiling" value={ceiling} onChange={setCeiling} unit="₹" step="10000" />
+          </Field>
+          {Number.isFinite(ceilingN) && ceilingN > 0 && (
+            <p className="text-[12px] text-ink-2">
+              That is <strong className="text-ink">{money(ceilingN)}</strong>
+              {ceilingN >= 100000 && <> — {(ceilingN / 100000).toFixed(2)} lakh</>}.
+            </p>
+          )}
+          <p className="text-[12px] leading-relaxed text-ink-3">
+            GST wants material sent for jobwork back within a year of leaving, or counts it as supplied to
+            the jobworker on the day it left. The store says so from {GST_JOBWORK_WARN_DAYS} days before.
+          </p>
+        </div>
+      ),
+    },
     ...(cuts === 'yes' ? [{
       label: 'Remnants',
       title: 'When is a remnant too small, and too old?',
@@ -186,6 +221,8 @@ export function StoreRulesWizard({ open, onClose }: { open: boolean; onClose: ()
         scrapTargetPct: cls(target),
         scrapTolerancePct: n(over),
         scrapUnrealisedDays: n(unsold),
+        jobworkGraceDays: graceN,
+        jobworkerExposureCeiling: ceilingN,
         ...(cuts === 'yes' ? { remnantAgeDays: n(age), yieldTolerancePct: n(yieldTol) } : {}),
       },
       scrapRate: numMap(rates),

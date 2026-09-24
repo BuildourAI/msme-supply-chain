@@ -69,7 +69,7 @@ describe('the switch', () => {
     const ws = base(false)
     expect(inventoryNav(ws, TODAY).map((r) => r.label)).not.toContain('Cutting & offcuts')
     expect(stageMetrics(ws, TODAY, 'inventory').map((m) => m.key)).not.toContain('remnants')
-    expect(pickedMetrics(ws, TODAY, 'inventory')).toHaveLength(6)
+    expect(pickedMetrics(ws, TODAY, 'inventory')).toHaveLength(7)
     expect(cutProblem(ws, lay())).toBe('Cutting is switched off in the store rules.')
     expect(recordCut(ws, lay())[0]).toBe(ws)
   })
@@ -77,7 +77,7 @@ describe('the switch', () => {
   it('on: the row sits after the jobs, and the remnants figure is offered and picked', () => {
     const ws = base()
     expect(inventoryNav(ws, TODAY).map((r) => r.label))
-      .toEqual(['Dashboard', 'Stock ledger', 'In-house', 'Cutting & offcuts', 'Wastage & loss', 'Racks'])
+      .toEqual(['Dashboard', 'Stock ledger', 'In-house', 'Jobwork', 'Cutting & offcuts', 'Wastage & loss', 'Racks'])
     expect(stageMetrics(ws, TODAY, 'inventory').map((m) => m.key)).toContain('remnants')
     const fig = pickedMetrics(ws, TODAY, 'inventory').find((m) => m.key === 'remnants')!
     expect(fig).toMatchObject({ measured: false, value: 'No remnants yet' })

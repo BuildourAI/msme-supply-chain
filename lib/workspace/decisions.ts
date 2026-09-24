@@ -66,9 +66,9 @@ export type Act =
   /* the gate's — see `inbound-decisions.ts` */
   | 'arrive'        // goods are at the gate: say what came
   | 'inspect'       // work down the checks and close the receipt
+  /* the store's — see `inventory-decisions.ts` */
   | 'return'        // material came back from a jobworker
   | 'close-challan' // settle a challan, and write off what never came back
-  /* the store's — see `inventory-decisions.ts` */
   | 'count'         // count a lot, or walk a rack
   | 'write-off'     // take held stock off the book, with a reason
   | 'release'       // held stock is fine after all
@@ -94,9 +94,9 @@ export type DecisionKind =
   | 'not-told' | 'awaiting-ack' | 'churn' | 'lands-late'
   /* the gate's */
   | 'to-receive' | 'at-gate' | 'qc-overdue' | 'spike'
-  | 'challan-overdue' | 'challan-unaccounted' | 'over-ceiling'
   /* the store's — see `inventory-decisions.ts` */
   | 'count-due' | 'no-rack' | 'negative-stock' | 'count-variance' | 'held-long'
+  | 'challan-overdue' | 'challan-unaccounted' | 'over-ceiling' | 'challan-gst'
   | 'scrap-unsold' | 'scrap-over'
   /* only with cutting switched on */
   | 'remnant-aged' | 'remnant-covers' | 'cut-below-plan'

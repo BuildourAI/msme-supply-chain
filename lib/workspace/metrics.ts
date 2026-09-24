@@ -122,8 +122,8 @@ export const STAGE_METRICS: Record<MetricStage, MetricKey[]> = {
     'onTime', 'lead', 'defects', 'flip', 'stale',
     'singleSource', 'concentration', 'priceMoves', 'outstanding', 'unacked',
   ],
-  inbound: ['qcHeld', 'inspectedOnTime', 'defects', 'onTime', 'atJobworkers', 'lead'],
-  inventory: ['stockValue', 'unconfirmed', 'accuracy', 'heldStock', 'netLoss', 'scrap', 'dio', 'remnants'],
+  inbound: ['qcHeld', 'inspectedOnTime', 'defects', 'onTime', 'lead'],
+  inventory: ['stockValue', 'unconfirmed', 'accuracy', 'heldStock', 'atJobworkers', 'netLoss', 'scrap', 'dio', 'remnants'],
   production: ['lineRunsFor', 'jobsStopping', 'attainment', 'firstPass', 'floorDays', 'rmToFg', 'haltDays'],
   dispatch: ['otif', 'orderToDock', 'pastPromise', 'fgValue', 'freightUnit', 'carrierLate', 'dispatchedMonth', 'returnRate'],
 }
@@ -152,15 +152,18 @@ export const DEFAULT_PICKS: MetricKey[] = [
  * something the gate can plan a day around, or not.
  */
 export const INBOUND_PICKS: MetricKey[] = [
-  'qcHeld', 'inspectedOnTime', 'defects', 'onTime', 'atJobworkers', 'lead',
+  'qcHeld', 'inspectedOnTime', 'defects', 'onTime', 'lead',
 ]
 
 /**
- * The store's, before anybody has chosen: what it is worth, and whether the
- * book can be believed. Remnants join them in a store that cuts — and are not
- * offered in one that does not, so there it is the first six.
+ * The store's, before anybody has chosen: what it is worth, whether the book
+ * can be believed, and how much of it is in somebody else's shed. Remnants
+ * join them in a store that cuts — and are not offered in one that does not,
+ * so there it is the first seven.
  */
-export const INVENTORY_PICKS: MetricKey[] = ['stockValue', 'unconfirmed', 'accuracy', 'heldStock', 'netLoss', 'scrap', 'remnants']
+export const INVENTORY_PICKS: MetricKey[] = [
+  'stockValue', 'unconfirmed', 'accuracy', 'heldStock', 'atJobworkers', 'netLoss', 'scrap', 'remnants',
+]
 
 export const DEFAULTS_FOR: Record<MetricStage, MetricKey[]> = {
   sourcing: DEFAULT_PICKS,
@@ -837,7 +840,7 @@ function gateMetrics(
         sub: out.length === 0 ? 'nothing out at the moment'
           : `on ${out.length} challan${out.length === 1 ? '' : 's'} out`,
         tone: atJw > ws.policy.jobworkerExposureCeiling ? 'warn' : 'neutral',
-        measured: true, href: '/inbound/jobwork',
+        measured: true, href: '/inventory/jobwork',
         how: 'what is still physically with each jobworker × the rate it left at — never counted as cover',
       }
       : nothing('atJobworkers', 'Nothing sent out',
@@ -1133,6 +1136,7 @@ const storedPicks = (ws: Workspace, stage: MetricStage): string[] | undefined =>
  */
 const MOVED: Partial<Record<MetricKey, { from: MetricStage; to: MetricStage }>> = {
   unacked: { from: 'inbound', to: 'sourcing' },
+  atJobworkers: { from: 'inbound', to: 'inventory' },
 }
 
 /** Where a desk keeps its owner's choice. Absent is "nobody has chosen yet". */

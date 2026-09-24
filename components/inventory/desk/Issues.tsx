@@ -25,9 +25,9 @@ function Count({ n }: { n: number }) {
 /**
  * In-house: what left the store for your own floor, and for what.
  *
- * Called In-house so it is never taken for Inbound's Jobwork, which is
- * material sent out to somebody else. Inside, the owner's word for the thing
- * itself — styles, jobs or orders — names the tab and every number. Two views:
+ * Called In-house because Jobwork, beside it on the rail, is material sent
+ * out to somebody else's floor on a challan. Inside, the owner's word for the
+ * thing itself — styles, jobs or orders — names the tab and every number. Two views:
  * each job with what it has used, and every slip that moved material, out or
  * back. A slip is the only way material leaves the store for the floor, so a
  * job's consumption here is a sum of slips rather than a figure somebody keeps.

@@ -10,6 +10,7 @@ import {
   bookReturn, closeChallan, closeChallanProblem, extendDue, jobworkers, sendOut, sendOutProblem,
   usableOnHand,
 } from '@/lib/workspace/jobwork'
+import { jobWord, openJobs } from '@/lib/workspace/jobs'
 
 /*
  * The four things that happen to a challan, each one a small dialog: material
@@ -44,7 +45,9 @@ function Foot({ onClose, onSave, label, danger }: {
  *
  * It comes off the usable shelf the moment it leaves — the challan is the
  * document it moves on — and it is shown as out with the jobworker, never as
- * cover, until it comes back through the gate.
+ * cover, until it comes back through the gate. When it goes out for one
+ * style, saying which keeps it that style's: Line watch gives it that style
+ * first when it comes back, and no other counts on it.
  */
 export function SendOutForm({ open, onClose, onAddJobworker }: {
   open: boolean; onClose: () => void; onAddJobworker?: () => void
@@ -57,6 +60,7 @@ export function SendOutForm({ open, onClose, onAddJobworker }: {
   const [sentOn, setSentOn] = useState('')
   const [due, setDue] = useState('')
   const [process, setProcess] = useState('')
+  const [jobId, setJobId] = useState('')
   const [tried, setTried] = useState(false)
 
   useEffect(() => {
@@ -64,7 +68,7 @@ export function SendOutForm({ open, onClose, onAddJobworker }: {
     const firstItem = workspace.items.find((i) => usableOnHand(workspace, i.id) > 0) ?? workspace.items[0]
     setVendorId(jobworkers(workspace)[0]?.id ?? ''); setItemId(firstItem?.id ?? '')
     setQty(''); setYieldPct('100'); setSentOn(today); setDue(addDays(today, 7)); setProcess('')
-    setTried(false)
+    setJobId(''); setTried(false)
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open || !workspace) return null
@@ -91,7 +95,10 @@ export function SendOutForm({ open, onClose, onAddJobworker }: {
   const s = {
     vendorId, itemId, qty: n(qty), sentOn, dueBack: due,
     expectedYield: n(yieldPct) / 100, process, actor: session?.actor ?? '',
+    jobId: jobId || undefined,
   }
+  const jobs = openJobs(ws)
+  const word = jobWord(ws).one
   const problem = sendOutProblem(ws, s)
 
   const save = () => {
@@ -124,6 +131,16 @@ export function SendOutForm({ open, onClose, onAddJobworker }: {
             <NumberInput id="jw-qty" value={qty} onChange={setQty} unit={item?.uom} />
           </Field>
         </div>
+        {jobs.length > 0 && (
+          <Field label={`For which ${word}`} htmlFor="jw-job"
+            hint="Optional. Line watch then gives it this material first when it comes back.">
+            <Select id="jw-job" value={jobId} onChange={setJobId}
+              options={[
+                { value: '', label: `No ${word} — for stock` },
+                ...jobs.map((j) => ({ value: j.id, label: j.name ? `${j.no} — ${j.name}` : j.no })),
+              ]} />
+          </Field>
+        )}
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Should come back" htmlFor="jw-yield"
             hint="Per 100 sent. Below 100 for cutting; above for galvanising, which adds weight.">

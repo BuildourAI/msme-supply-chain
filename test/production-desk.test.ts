@@ -204,6 +204,60 @@ describe('line watch', () => {
     expect(w.stockReasons.join(' ')).toMatch(/back from Shree Wash on JW-1, past its date/)
   })
 
+  it('sends a late jobworker to the store\'s Jobwork, and what is merely due to the gate\'s Due in', () => {
+    let ws = plan(base(), 'JB-001', 100, '2026-09-24', '2026-09-30')
+    ;[ws] = sendOut(ws, { vendorId: 'VN-002', itemId: 'IT-001', qty: 300, sentOn: '2026-09-10', dueBack: '2026-09-20', expectedYield: 1 })
+    expect(productionDecisionsFor(ws, TODAY).find((d) => d.kind === 'job-at-risk'))
+      .toMatchObject({ actLabel: 'Chase the jobworker', href: '/inventory/jobwork' })
+    let due = plan(base(), 'JB-001', 200, '2026-09-21', '2026-09-26')
+    due = plan(due, 'JB-002', 200, '2026-09-28', '2026-10-03')
+    due = { ...due, orders: [{
+      id: 'PO-001', no: 'PO-1', vendorId: 'VN-001', itemId: 'IT-001', qty: 150, unitPrice: 240,
+      orderedOn: '2026-09-15', expectedOn: '2026-09-25', state: 'confirmed',
+    }] }
+    expect(productionDecisionsFor(due, '2026-09-21').find((d) => d.kind === 'job-at-risk'))
+      .toMatchObject({ actLabel: 'See what is due', href: '/inbound/due' })
+  })
+
+  it('gives a style what went out to a jobworker for it first, before an earlier delivery', () => {
+    let ws = base()
+    // 100 m out to the washer for ST-2, due back after the order lands
+    ;[ws] = sendOut(ws, { vendorId: 'VN-002', itemId: 'IT-001', qty: 100, sentOn: '2026-09-15', dueBack: '2026-09-27', expectedYield: 1, jobId: 'JB-002' })
+    ws = plan(ws, 'JB-001', 200, '2026-09-21', '2026-09-26') // 300 m, all of it off the shelf
+    ws = plan(ws, 'JB-002', 200, '2026-09-24', '2026-09-30') // 300 m: 100 left on the shelf, 200 to come
+    const po: PurchaseOrder = {
+      id: 'PO-001', no: 'PO-1', vendorId: 'VN-001', itemId: 'IT-001', qty: 150, unitPrice: 240,
+      orderedOn: '2026-09-15', expectedOn: '2026-09-25', state: 'confirmed',
+    }
+    const second = lineWatch({ ...ws, orders: [po] }, '2026-09-21')[1]
+    expect(second.job.no).toBe('ST-2')
+    expect(second.needs[0].claims.map((c) => [c.what, c.qty])).toEqual([
+      ['back from Shree Wash on JW-1', 100],
+      ['PO-1 from Arvind Mills', 100],
+    ])
+  })
+
+  it('never counts another style\'s return from a jobworker', () => {
+    let ws = base()
+    // 300 m out for ST-2; 200 m left on the shelf
+    ;[ws] = sendOut(ws, { vendorId: 'VN-002', itemId: 'IT-001', qty: 300, sentOn: '2026-09-15', dueBack: '2026-09-25', expectedYield: 1, jobId: 'JB-002' })
+    ws = plan(ws, 'JB-001', 200, '2026-09-21', '2026-09-30') // 300 m
+    const [first] = lineWatch(ws, '2026-09-21')
+    expect(first.needs[0]).toMatchObject({ fromShelf: 200, short: 100, claims: [] })
+    expect(first.status).toBe('will_halt')
+  })
+
+  it('holds a late return against the style it went out for, and no other', () => {
+    let ws = base()
+    ;[ws] = sendOut(ws, { vendorId: 'VN-002', itemId: 'IT-001', qty: 100, sentOn: '2026-09-10', dueBack: '2026-09-20', expectedYield: 1, jobId: 'JB-002' })
+    ws = plan(ws, 'JB-001', 100, '2026-09-24', '2026-09-30') // 150 m, covered
+    ws = plan(ws, 'JB-002', 100, '2026-09-25', '2026-10-02') // 150 m, covered, but its washer is late
+    const [first, second] = lineWatch(ws, TODAY)
+    expect(first.status).toBe('will_run')
+    expect(second.status).toBe('at_risk')
+    expect(second.stockReasons.join(' ')).toMatch(/back from Shree Wash on JW-1, past its date/)
+  })
+
   it('says how long the line runs on the tightest material, and which jobs stop this week', () => {
     let ws = plan(base(), 'JB-001', 200, '2026-09-21', '2026-09-26')
     ws = plan(ws, 'JB-002', 200, '2026-09-24', '2026-09-30')

@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { emptyWorkspace } from '@/lib/workspace/defaults'
-import { INBOUND_STEPS, SOURCING_STEPS, progressOf, stepsFor } from '@/lib/workspace/checklist'
+import { INBOUND_STEPS, INVENTORY_STEPS, SOURCING_STEPS, progressOf, stepsFor } from '@/lib/workspace/checklist'
 import {
   addCheck, checkProblem, checksFor, readBucket, readCheckKind, removeCheck, setChecks,
   uncheckedItems, type CheckInput,
@@ -71,7 +71,7 @@ const gauge = (over: Partial<CheckInput> = {}): CheckInput => ({
 describe('setting up the gate', () => {
   it('asks for the masters first when a company starts here', () => {
     const p = progressOf(fresh(), INBOUND_STEPS)
-    expect(p.total).toBe(5)
+    expect(p.total).toBe(4)
     expect(p.doneCount).toBe(0)
     expect(p.next?.id).toBe('materials')
   })
@@ -90,9 +90,14 @@ describe('setting up the gate', () => {
     expect(progressOf(removeCheck(ws, id), INBOUND_STEPS).steps[2].done).toBe(false)
   })
 
-  it('accepts "we do not send material out" as a real answer', () => {
+  it('leaves who you send material out to to the store', () => {
+    expect(INBOUND_STEPS.map((s) => s.id)).toEqual(['materials', 'suppliers', 'checks', 'gateRules'])
+    expect(INVENTORY_STEPS.some((s) => s.id === 'jobworkers')).toBe(true)
+  })
+
+  it('accepts "we do not send material out" as a real answer, stored where it always was', () => {
     const ws = set()
-    const step = INBOUND_STEPS.find((s) => s.id === 'jobworkers')!
+    const step = INVENTORY_STEPS.find((s) => s.id === 'jobworkers')!
     expect(step.done(ws)).toBe(false)
     expect(step.done({ ...ws, drafts: { 'inbound.noJobwork': true } })).toBe(true)
     expect(step.summary({ ...ws, drafts: { 'inbound.noJobwork': true } })).toBe('no material sent out')
@@ -105,7 +110,7 @@ describe('setting up the gate', () => {
       vendorType: { 'VN-002': JOBWORKER },
     }
     expect(jobworkers(ws).map((v) => v.name)).toEqual(['Shree Galvanisers'])
-    expect(INBOUND_STEPS.find((s) => s.id === 'jobworkers')!.done(ws)).toBe(true)
+    expect(INVENTORY_STEPS.find((s) => s.id === 'jobworkers')!.done(ws)).toBe(true)
     // a jobworker's charge is for a process, never a rate against the steel
     expect(ws.vendorItems.some((vi) => vi.vendorId === 'VN-002')).toBe(false)
   })
@@ -245,8 +250,10 @@ describe('the inbound rail', () => {
 
   it('has the gate\'s rows, none of them "later" — orders are sourcing\'s', () => {
     const rows = inboundNav(set(), TODAY)
-    expect(rows.map((r) => r.label)).toEqual(['Dashboard', 'Receiving', 'Checks', 'Due in', 'Jobwork'])
+    expect(rows.map((r) => r.label)).toEqual(['Dashboard', 'Receiving', 'Checks', 'Due in'])
     expect(rows.map((r) => r.href)).not.toContain('/inbound/orders')
+    // jobwork is the store's: its own material in somebody else's shed
+    expect(rows.map((r) => r.href)).not.toContain('/inbound/jobwork')
     expect(rows.some((r) => r.later)).toBe(false)
     // short enough that nothing needs a "More"
     expect(rows.some((r) => r.tucked)).toBe(false)

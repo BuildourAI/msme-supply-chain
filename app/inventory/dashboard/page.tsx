@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Icon } from '@/components/ui/icons'
 import { DeskOnly } from '@/components/sourcing/DeskOnly'
 import { Queue } from '@/components/sourcing/Queue'
@@ -16,13 +16,20 @@ import { SellScrapDialog } from '@/components/inventory/desk/Wastage'
 import { CountDialog, CountSheetDialog, LotStateDialog } from '@/components/inventory/desk/LedgerDialogs'
 import { ScrapRemnantDialog, UseRemnantDialog } from '@/components/inventory/desk/CuttingDialogs'
 import { cutNotedKey, remnantNotedKey } from '@/lib/workspace/cutting'
+import { ChaseDialog } from '@/components/sourcing/ChaseDialog'
+import { CloseChallanDialog, ReturnForm } from '@/components/inventory/desk/JobworkDialogs'
+import { GrnDocument } from '@/components/inbound/desk/GrnDocument'
+import { InspectForm } from '@/components/inbound/desk/InspectForm'
+import { challanRows, type ChallanRow } from '@/lib/workspace/inbound'
+import { isOpen } from '@/lib/workspace/receipts'
 
 /**
  * The store's morning.
  *
  * The same two columns as the other desks: what is waiting on you, and what
  * is on its way. The left is the store's own work — which rack is due a
- * count, which lots nobody can find, where the book has gone below nothing.
+ * count, which lots nobody can find, where the book has gone below nothing,
+ * and the store's material out at a jobworker past its date or its GST year.
  * The right is what is landing, because that is what the store is about to
  * have to put somewhere.
  */
@@ -40,6 +47,21 @@ function Dashboard() {
   const [selling, setSelling] = useState<string | null>(null)
   const [using, setUsing] = useState<string | null>(null)
   const [scrapping, setScrapping] = useState<string | null>(null)
+  const [chasing, setChasing] = useState<ChallanRow | null>(null)
+  const [returning, setReturning] = useState<string | null>(null)
+  const [returned, setReturned] = useState<string | null>(null)
+  const [closing, setClosing] = useState<string | null>(null)
+  const [inspecting, setInspecting] = useState<string | null>(null)
+  const [papering, setPapering] = useState<string | null>(null)
+
+  // what came back from a jobworker goes straight on to its inspection
+  useEffect(() => {
+    if (!returned || !workspace) return
+    const made = (workspace.receipts ?? [])
+      .filter((r) => r.challanId === returned && isOpen(r))
+      .sort((a, b) => b.id.localeCompare(a.id))[0]
+    if (made) { setInspecting(made.id); setReturned(null) }
+  }, [returned, workspace])
 
   if (!workspace) return null
   const ws = workspace
@@ -49,6 +71,14 @@ function Dashboard() {
   const metrics = pickedMetrics(ws, today, 'inventory')
 
   const act = (d: Decision, kind: Act) => {
+    const { challanId } = d.refs
+    if (kind === 'chase' && challanId) {
+      const row = challanRows(ws, today).find((r) => r.challan.id === challanId)
+      if (row) setChasing(row)
+      return
+    }
+    if (kind === 'return' && challanId) { setReturning(challanId); return }
+    if (kind === 'close-challan' && challanId) { setClosing(challanId); return }
     const { rackId, itemId, lotId, countId } = d.refs
     if (kind === 'count') {
       // a variance is one lot counted again; a rack or a material is a walk
@@ -99,7 +129,7 @@ function Dashboard() {
 
       <Queue rows={queue} berths={berths} onAct={act} showAll={opened}
         onShowAll={(b) => setOpened((s) => new Set(s).add(b))}
-        clear="Every lot counted in time, every lot on a rack, nothing below nothing." />
+        clear="Every lot counted in time, every lot on a rack, nothing below nothing, nothing overdue at a jobworker." />
 
       {metrics.length > 0 && (
         <section className="mt-7">
@@ -119,6 +149,17 @@ function Dashboard() {
       <SellScrapDialog lossId={selling} onClose={() => setSelling(null)} />
       <UseRemnantDialog lotId={using} onClose={() => setUsing(null)} />
       <ScrapRemnantDialog lotId={scrapping} onClose={() => setScrapping(null)} />
+      {chasing && (
+        <ChaseDialog open onClose={() => setChasing(null)}
+          title={`Chase ${chasing.vendor?.name ?? 'the jobworker'} on ${chasing.challan.no}`}
+          vendorId={chasing.challan.vendorId}
+          subject={`Challan ${chasing.challan.no} — balance with you`}
+          text={chasing.chase} />
+      )}
+      <ReturnForm challanId={returning} onClose={() => setReturning(null)} onBooked={(id) => setReturned(id)} />
+      <CloseChallanDialog challanId={closing} onClose={() => setClosing(null)} />
+      <InspectForm receiptId={inspecting} onClose={() => setInspecting(null)} onClosed={(id) => setPapering(id)} />
+      <GrnDocument open={papering !== null} receiptId={papering} onClose={() => setPapering(null)} />
     </div>
   )
 }

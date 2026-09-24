@@ -14,9 +14,12 @@ import { bundleFor } from '@/lib/workspace/bundle'
 import { emptyWorkspace } from '@/lib/workspace/defaults'
 import { challanRow, challanRows, jobworkerHoldings } from '@/lib/workspace/inbound'
 import { inboundDecisionsFor } from '@/lib/workspace/inbound-decisions'
+import { inventoryDecisionsFor } from '@/lib/workspace/inventory-decisions'
+import { addJob, closeJob, jobProblemToRemove, setJobNumbering } from '@/lib/workspace/jobs'
+import { lossRows } from '@/lib/workspace/losses'
 import {
-  bookReturn, challanLedger, closeChallan, closeChallanProblem, extendDue, JOBWORKER,
-  registerLedger, removeChallan, sendOut, sendOutProblem, usableOnHand, type SendOut,
+  bookReturn, challanLedger, challansFor, closeChallan, closeChallanProblem, extendDue, gstDaysLeft, gstDueBy,
+  JOBWORKER, registerLedger, removeChallan, sendOut, sendOutProblem, usableOnHand, type SendOut,
 } from '@/lib/workspace/jobwork'
 import { closeReceipt, receiptsFor } from '@/lib/workspace/receipts'
 import { dueBackRows, dueInCount } from '@/lib/workspace/due'
@@ -273,16 +276,26 @@ describe('the ledger', () => {
 
 /* ========================================================== the decisions */
 
-describe('what the gate is asked about jobwork', () => {
-  const kinds = (ws: Workspace, today = TODAY) => inboundDecisionsFor(ws, today).map((d) => d.kind)
+describe('what the store is asked about jobwork', () => {
+  // the fixture's opening lot is due a count too — that card is the store's other business
+  const JOBWORK = ['challan-overdue', 'challan-unaccounted', 'over-ceiling', 'challan-gst']
+  const cards = (ws: Workspace, today = TODAY) =>
+    inventoryDecisionsFor(ws, today).filter((d) => JOBWORK.includes(d.kind))
+  const kinds = (ws: Workspace, today = TODAY) => cards(ws, today).map((d) => d.kind)
 
   it('nothing, while it is inside its date', () => {
     expect(kinds(sent()[0])).toEqual([])
   })
 
+  it('and none of it at the gate — only the return passes the gate', () => {
+    const [ws] = sent({ dueBack: '2026-09-15' })
+    expect(inboundDecisionsFor(ws, TODAY).filter((d) => JOBWORK.includes(d.kind))).toEqual([])
+    expect(cards(ws).every((d) => d.href === '/inventory/jobwork')).toBe(true)
+  })
+
   it('past its date, a chase — in the worst band', () => {
     const [ws] = sent({ dueBack: '2026-09-15' })
-    const d = inboundDecisionsFor(ws, TODAY).find((x) => x.kind === 'challan-overdue')!
+    const d = cards(ws).find((x) => x.kind === 'challan-overdue')!
     expect(d).toMatchObject({ band: 'stops', act: 'chase', alt: { act: 'return' }, refs: { challanId: 'JW-001' } })
     expect(d.detail).toMatch(/50 kg .* 5 days past/)
     expect(challanRows(ws, TODAY)[0].chase).toMatch(/Still with you: 50 kg/)
@@ -290,7 +303,7 @@ describe('what the gate is asked about jobwork', () => {
 
   it('settling with material unexplained, a close', () => {
     const { ws } = backClean({ dueBack: '2026-09-15', expectedYield: 0.98 })
-    const d = inboundDecisionsFor(ws, TODAY).find((x) => x.kind === 'challan-unaccounted')!
+    const d = cards(ws).find((x) => x.kind === 'challan-unaccounted')!
     expect(d).toMatchObject({ band: 'costs', act: 'close-challan' })
     expect(d.detail).toMatch(/4 kg/)
     const closed = closeChallan(ws, 'JW-001', { reason: 'Agreed as scrap', on: TODAY, unaccounted: 4 })
@@ -304,6 +317,78 @@ describe('what the gate is asked about jobwork', () => {
     expect(kinds(ws)).not.toContain('over-ceiling')
     const tight = { ...ws, policy: { ...ws.policy, jobworkerExposureCeiling: 30000 } }
     expect(kinds(tight)).toContain('over-ceiling')
+  })
+})
+
+describe('the GST year on material out', () => {
+  const gst = (ws: Workspace, today = TODAY) =>
+    inventoryDecisionsFor(ws, today).find((d) => d.kind === 'challan-gst')
+
+  it('is a year from the day it left', () => {
+    const [ws] = sent({ sentOn: '2025-12-30', dueBack: '2026-01-15' })
+    const c = ws.challans![0]
+    expect(gstDueBy(c)).toBe('2026-12-30')
+    expect(gstDaysLeft(c, TODAY)).toBe(101)
+  })
+
+  it('says nothing while it is further off than ninety days', () => {
+    expect(gst(sent({ sentOn: '2025-12-30', dueBack: '2026-01-15' })[0])).toBeUndefined()
+  })
+
+  it('warns inside ninety days, as money at stake', () => {
+    const d = gst(sent({ sentOn: '2025-12-01', dueBack: '2025-12-15' })[0])!
+    expect(d).toMatchObject({ band: 'costs', act: 'chase', alt: { act: 'return' }, href: '/inventory/jobwork' })
+    expect(d.detail).toMatch(/72 days to go/)
+    // a year apart, so the year is said
+    expect(d.detail).toMatch(/^left 1 Dec 2025 —/)
+  })
+
+  it('past the year, in the worst band — it now counts as supplied', () => {
+    const d = gst(sent({ sentOn: '2025-09-01', dueBack: '2025-09-15' })[0])!
+    expect(d.band).toBe('stops')
+    expect(d.detail).toMatch(/19 days past the year GST allows/)
+  })
+
+  it('stops asking once the challan is closed', () => {
+    const [ws, jw] = sent({ sentOn: '2025-09-01', dueBack: '2025-09-15' })
+    const closed = closeChallan(ws, jw, { reason: 'Agreed as consumed', on: TODAY, unaccounted: 50 })
+    expect(gst(closed)).toBeUndefined()
+  })
+})
+
+describe('the style it went out for', () => {
+  const styled = () => {
+    let ws = setJobNumbering(base(), { word: 'style', prefix: 'ST' })
+    ;[ws] = addJob(ws, { no: 'ST-1', name: 'Heater 2 kW', openedOn: '2026-09-01' })
+    return ws
+  }
+
+  it('is kept on the challan, and blank is material out for stock', () => {
+    const [ws, jw] = sendOut(styled(), out({ jobId: 'JB-001' }))
+    expect(ws.challans!.find((c) => c.id === jw)!.jobId).toBe('JB-001')
+    expect(challansFor(ws, 'JB-001').map((c) => c.no)).toEqual(['JW-1'])
+    expect(challanRows(ws, TODAY)[0].job?.no).toBe('ST-1')
+    const [plain] = sendOut(styled(), out())
+    expect(plain.challans![0].jobId).toBeUndefined()
+  })
+
+  it('has to be one that is open', () => {
+    expect(sendOutProblem(styled(), out({ jobId: 'JB-404' }))).toBe('Pick an open style, or leave it blank.')
+    const shut = closeJob(styled(), 'JB-001', TODAY)
+    expect(sendOutProblem(shut, out({ jobId: 'JB-001' }))).toBe('ST-1 is closed — pick an open style, or leave it blank.')
+  })
+
+  it('keeps the style from being deleted while a challan names it', () => {
+    const [ws] = sendOut(styled(), out({ jobId: 'JB-001' }))
+    expect(jobProblemToRemove(ws, 'JB-001')).toMatch(/1 challan/)
+  })
+
+  it('carries a write-off onto the style it went out for', () => {
+    const [ws, jw] = sendOut(styled(), out({ jobId: 'JB-001', dueBack: '2026-09-15' }))
+    const closed = closeChallan(ws, jw, { reason: 'Burnt at the plant', on: TODAY, unaccounted: 50 })
+    const loss = (closed.losses ?? []).find((l) => l.sourceRef === 'JW-1')!
+    expect(loss).toMatchObject({ cause: 'jobwork_loss', jobId: 'JB-001', workOrder: 'ST-1' })
+    expect(lossRows(closed).find((r) => r.loss.id === loss.id)?.job).toBe('ST-1')
   })
 })
 

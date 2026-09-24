@@ -8,9 +8,6 @@ import { MetricPicker } from '@/components/sourcing/MetricPicker'
 import { ReceiveForm } from '@/components/sourcing/ReceiveForm'
 import { GrnDocument } from '@/components/inbound/desk/GrnDocument'
 import { InspectForm } from '@/components/inbound/desk/InspectForm'
-import { ChaseDialog } from '@/components/sourcing/ChaseDialog'
-import { CloseChallanDialog, ReturnForm } from '@/components/inbound/desk/JobworkDialogs'
-import { challanRows, type ChallanRow } from '@/lib/workspace/inbound'
 import { isOpen } from '@/lib/workspace/receipts'
 import { useWorkspace } from '@/components/workspace/store'
 import { type Act, type Band, type Decision } from '@/lib/workspace/decisions'
@@ -27,7 +24,7 @@ import type { PurchaseOrder } from '@/lib/workspace/types'
  * column is literally the same list — orders out with suppliers, soonest first
  * — because that is exactly what the gate is waiting for. The left is the
  * gate's own work: goods due, receipts waiting on inspection, a rejection out
- * of pattern, material out at a jobworker past its date.
+ * of pattern.
  *
  * Nothing on this screen is also on the sourcing one. Chasing a late supplier,
  * and getting a change to an order confirmed, are sourcing's; saying what came
@@ -45,10 +42,6 @@ function Dashboard() {
   const [inspecting, setInspecting] = useState<string | null>(null)
   const [papering, setPapering] = useState<string | null>(null)
   const [opened, setOpened] = useState<Set<Band>>(new Set())
-  const [chasingChallan, setChasingChallan] = useState<ChallanRow | null>(null)
-  const [returning, setReturning] = useState<string | null>(null)
-  const [returned, setReturned] = useState<string | null>(null)
-  const [closing, setClosing] = useState<string | null>(null)
 
   // what just arrived goes straight on to its inspection
   useEffect(() => {
@@ -58,14 +51,6 @@ function Dashboard() {
       .sort((a, b) => b.id.localeCompare(a.id))[0]
     if (made) { setInspecting(made.id); setPending(null) }
   }, [pending, workspace])
-  // and so does what came back from a jobworker
-  useEffect(() => {
-    if (!returned || !workspace) return
-    const made = (workspace.receipts ?? [])
-      .filter((r) => r.challanId === returned && isOpen(r))
-      .sort((a, b) => b.id.localeCompare(a.id))[0]
-    if (made) { setInspecting(made.id); setReturned(null) }
-  }, [returned, workspace])
 
   if (!workspace) return null
   const ws = workspace
@@ -92,14 +77,6 @@ function Dashboard() {
       update((w) => ({ ...w, drafts: { ...w.drafts, [`inbound.spikeNoted.${receiptId}`]: true } }))
       return
     }
-    const { challanId } = d.refs
-    if (kind === 'chase' && challanId) {
-      const row = challanRows(ws, today).find((r) => r.challan.id === challanId)
-      if (row) setChasingChallan(row)
-      return
-    }
-    if (kind === 'return' && challanId) { setReturning(challanId); return }
-    if (kind === 'close-challan' && challanId) setClosing(challanId)
   }
 
   return (
@@ -119,7 +96,7 @@ function Dashboard() {
 
       <Queue rows={queue} berths={berths} onAct={act} showAll={opened}
         onShowAll={(b) => setOpened((s) => new Set(s).add(b))}
-        clear="Nothing at the gate, nothing waiting on inspection, nothing overdue at a jobworker." />
+        clear="Nothing at the gate, nothing waiting on inspection." />
 
       {metrics.length > 0 && (
         <section className="mt-7">
@@ -138,15 +115,6 @@ function Dashboard() {
       <InspectForm receiptId={inspecting} onClose={() => setInspecting(null)}
         onClosed={(id) => setPapering(id)} />
       <GrnDocument open={papering !== null} receiptId={papering} onClose={() => setPapering(null)} />
-      {chasingChallan && (
-        <ChaseDialog open onClose={() => setChasingChallan(null)}
-          title={`Chase ${chasingChallan.vendor?.name ?? 'the jobworker'} on ${chasingChallan.challan.no}`}
-          vendorId={chasingChallan.challan.vendorId}
-          subject={`Challan ${chasingChallan.challan.no} — balance with you`}
-          text={chasingChallan.chase} />
-      )}
-      <ReturnForm challanId={returning} onClose={() => setReturning(null)} onBooked={(id) => setReturned(id)} />
-      <CloseChallanDialog challanId={closing} onClose={() => setClosing(null)} />
     </div>
   )
 }

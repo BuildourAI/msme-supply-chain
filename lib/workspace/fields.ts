@@ -168,6 +168,7 @@ export const BUILTIN: Record<SheetEntity, BuiltinColumn[]> = {
     { key: 'vendor', label: 'Jobworker', derived: true },
     { key: 'item', label: 'Material', derived: true },
     { key: 'process', label: 'Process', derived: true },
+    { key: 'job', label: 'For', derived: true },
     { key: 'sent', label: 'Sent', derived: true },
     { key: 'sentOn', label: 'Sent on', derived: true },
     { key: 'dueBack', label: 'Due back', derived: true },

@@ -7,7 +7,7 @@ import { money } from '@/lib/domain/format'
 import { repriceTerms } from '@/lib/workspace/landed'
 
 /**
- * The five rules that decide what the system suggests.
+ * The six rules that decide what the system suggests, and when it asks.
  *
  * Every one of these already exists as a policy figure with a default, and §13
  * flags two of them as guesses a developer should not be making: the ordering
@@ -18,8 +18,12 @@ import { repriceTerms } from '@/lib/workspace/landed'
  * field. "What is the most one order should cover?" is answerable; "coverage
  * ceiling in months, per ABC class" is not, unless you already know the answer.
  *
- * The rules panel on the Sourcing Desk edits the same figures afterwards, so
- * nothing here is a one-time choice somebody is stuck with.
+ * The last is about orders already with a supplier: how long a change may go
+ * unconfirmed, and how often a line may move before it is a pattern. Those
+ * cards are the buyer's, so their rules are too.
+ *
+ * Nothing here is a one-time choice somebody is stuck with: the checklist's
+ * Change link opens this again, on the figures as they are now.
  */
 export function RulesWizard({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { workspace, update } = useWorkspace()
@@ -28,6 +32,8 @@ export function RulesWizard({ open, onClose }: { open: boolean; onClose: () => v
   const [threshold, setThreshold] = useState('200000')
   const [prefer, setPrefer] = useState<'lowest_landed_cost' | 'preferred'>('lowest_landed_cost')
   const [capital, setCapital] = useState('')
+  const [ack, setAck] = useState('2')
+  const [churn, setChurn] = useState('2')
 
   useEffect(() => {
     if (!open || !workspace) return
@@ -37,6 +43,7 @@ export function RulesWizard({ open, onClose }: { open: boolean; onClose: () => v
     setThreshold(String(p.ownerApprovalThreshold))
     setPrefer(p.supplierDefault)
     setCapital(p.costOfMoneyPct > 0 ? String(p.costOfMoneyPct) : '')
+    setAck(String(p.ackChaseDays)); setChurn(String(p.poChurnLimit))
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open || !workspace) return null
@@ -48,6 +55,8 @@ export function RulesWizard({ open, onClose }: { open: boolean; onClose: () => v
   const thresholdN = n(threshold)
   // blank is a real answer here, and it means zero rather than "not a number"
   const capitalN = positive(n(capital))
+  const ackN = n(ack), churnN = n(churn)
+  const whole = (v: number, least: number) => Number.isInteger(v) && v >= least
 
   const steps: WizardStep[] = [
     {
@@ -161,6 +170,27 @@ export function RulesWizard({ open, onClose }: { open: boolean; onClose: () => v
         </div>
       ),
     },
+    {
+      label: 'Changes',
+      title: 'When is a change overdue, and a line moving too often?',
+      why: 'Once an order is with its supplier, a change is a new version they have to confirm. These decide when the dashboard raises one.',
+      invalid: !whole(ackN, 0) ? 'Put in a whole number of days.'
+        : !whole(churnN, 1) ? 'Put in how many changes in 30 days is still normal — one or more.' : null,
+      body: (
+        <div className="space-y-3.5">
+          <Field label="Chase a change to an order they have not confirmed after…"
+            hint="The change is text for you to send. Until they confirm it, your stock figures use the order as they last agreed it."
+            htmlFor="rw-ack">
+            <NumberInput id="rw-ack" value={ack} onChange={setAck} unit="days" step="1" />
+          </Field>
+          <Field label="Raise a line changed more than … times in 30 days"
+            hint="A line that keeps moving gets re-planned by the supplier every time, and priced in next quarter."
+            htmlFor="rw-churn">
+            <NumberInput id="rw-churn" value={churn} onChange={setChurn} unit="times" step="1" />
+          </Field>
+        </div>
+      ),
+    },
   ]
 
   const save = () => {
@@ -180,6 +210,8 @@ export function RulesWizard({ open, onClose }: { open: boolean; onClose: () => v
         ownerApprovalThreshold: thresholdN,
         supplierDefault: prefer,
         costOfMoneyPct: capitalN > 0 ? capitalN : 0,
+        ackChaseDays: ackN,
+        poChurnLimit: churnN,
       },
       drafts: { ...w.drafts, 'rules.agreed': true },
     }))
@@ -189,7 +221,7 @@ export function RulesWizard({ open, onClose }: { open: boolean; onClose: () => v
   return (
     <Wizard open={open} onClose={onClose}
       title="Your rules"
-      sub="Five decisions. Every one can be changed later on the Sourcing Desk."
+      sub="Six decisions. Change any of them later from this checklist."
       steps={steps} onDone={save} doneLabel="Save my rules" />
   )
 }

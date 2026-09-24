@@ -10,7 +10,9 @@
  * its need less what has already gone to it (issued less returned, from the
  * store's own slips and cuts). What the store cannot cover may still be on its
  * way — an order due in, material due back from a jobworker — and those are
- * claimed in date order too, so two jobs never count the same delivery.
+ * claimed in date order too, so two jobs never count the same delivery. A
+ * return from a jobworker that went out for one job is that job's: it claims
+ * it first, and no other job counts on it.
  *
  *   halted      somebody recorded that the floor stopped on it, and it has not resumed
  *   will_halt   something it still needs is not in the store and nothing due in covers it
@@ -26,6 +28,7 @@ import { productionCoverDays } from '@/lib/domain/calc'
 import { STATUS_LABEL, num, shortDate } from '@/lib/domain/format'
 import type { Derived, Item } from '@/lib/domain/types'
 import { challanRow } from './inbound'
+import { stillExpected } from './due'
 import { onJob } from './jobs'
 import { usableOnHand } from './ledger'
 import { ackedDate, ackedQty } from './orders'
@@ -59,6 +62,8 @@ export interface Incoming {
   what: string
   /** a jobworker return already past its date */
   late: boolean
+  /** a jobworker return sent out for one job: that job's, and no other's */
+  jobId?: string
 }
 
 /** What is on its way, per material, earliest first. */
@@ -74,11 +79,11 @@ export function incomingOf(ws: Workspace, today: string): Incoming[] {
   const fromJobworkers: Incoming[] = (ws.challans ?? [])
     .filter((c) => c.status === 'out')
     .map((c) => {
-      const row = challanRow(ws, c, today)
-      const left = r3(Math.max(0, row.expected.value - row.acct.returned.value - row.acct.inQc.value))
+      const left = stillExpected(challanRow(ws, c, today))
       return {
         itemId: c.itemId, on: c.dueBack, qty: left,
         what: `back from ${vendorName(c.vendorId)} on ${c.no}`, late: c.dueBack < today,
+        jobId: c.jobId,
       }
     })
     .filter((x) => x.qty > 0)
@@ -165,13 +170,26 @@ export function lineWatch(ws: Workspace, today: string): JobWatch[] {
       shelf.set(n.itemId, r3(shelfOf(n.itemId) - fromShelf))
       let rest = r3(still - fromShelf)
       const claims: NeedRow['claims'] = []
-      for (const x of incoming) {
-        if (rest <= 0) break
-        if (x.itemId !== n.itemId || x.left <= 0 || x.on > job.plannedFinish!) continue
+      const claim = (x: typeof incoming[number]) => {
         const take = r3(Math.min(x.left, rest))
         x.left = r3(x.left - take)
         rest = r3(rest - take)
         claims.push({ what: x.what, on: x.on, qty: take, late: x.late || x.on > needBy })
+      }
+      /*
+       * What went out to a jobworker for this job comes back to it first,
+       * whatever its date; a return sent for another job is that job's and
+       * never counted here. Then everything else, in date order.
+       */
+      for (const x of incoming) {
+        if (rest <= 0) break
+        if (x.jobId !== job.id || x.itemId !== n.itemId || x.left <= 0 || x.on > job.plannedFinish!) continue
+        claim(x)
+      }
+      for (const x of incoming) {
+        if (rest <= 0) break
+        if (x.jobId || x.itemId !== n.itemId || x.left <= 0 || x.on > job.plannedFinish!) continue
+        claim(x)
       }
       return { itemId: n.itemId, item, uom: item?.uom ?? '', need: n.qty, gone, still, fromShelf, claims, short: rest }
     })
@@ -204,6 +222,7 @@ export function lineWatch(ws: Workspace, today: string): JobWatch[] {
     // a jobworker late with something this job still needs, even if the shelf covers it today
     for (const x of incoming) {
       if (!x.late) continue // only a jobworker's return is ever late here
+      if (x.jobId && x.jobId !== job.id) continue // another job's, not this one's to wait on
       const n = needs.find((m) => m.itemId === x.itemId && m.still > 0)
       if (!n || n.claims.some((c) => c.what === x.what)) continue
       worse('at_risk')

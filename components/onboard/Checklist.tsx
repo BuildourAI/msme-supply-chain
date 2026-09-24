@@ -24,7 +24,7 @@ import { RulesWizard } from './wizards/RulesWizard'
 import { TeamWizard } from './wizards/TeamWizard'
 
 /**
- * Setting up a stage, as five steps that go green.
+ * Setting up a stage, as a handful of steps that go green.
  *
  * The shape is taken straight from what works: a numbered list, one live
  * button, and a tick that arrives the moment the underlying data does. The tick
@@ -33,12 +33,16 @@ import { TeamWizard } from './wizards/TeamWizard'
  * the last supplier un-ticks the supplier step by itself.
  *
  * Only the next step gets a primary button. Five buttons of equal weight is a
- * menu; one is an instruction.
+ * menu; one is an instruction. The count in the words is the stage's own —
+ * the gate has four, the store six.
  *
  * One component for every stage: the stage picks the list, and the list is
  * data in `checklist.ts`. The steps two stages share are the same objects, so
  * adding a material from the inbound card ticks it on the sourcing one too.
  */
+const WORDS = ['none', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine']
+const cap = (w: string) => w.charAt(0).toUpperCase() + w.slice(1)
+
 export function Checklist({ compact = false, stage = 'sourcing' }: {
   compact?: boolean
   stage?: StageId
@@ -72,7 +76,7 @@ export function Checklist({ compact = false, stage = 'sourcing' }: {
           </button>
         ) : (
           <p className="mt-1 text-[10.5px] leading-snug text-ink-2">
-            All five done. Your desk is running on your own numbers.
+            All {WORDS[p.total] ?? p.total} done. Your desk is running on your own numbers.
           </p>
         )}
         <Wizards open={openStep} onClose={() => setOpenStep(null)} />
@@ -90,7 +94,7 @@ export function Checklist({ compact = false, stage = 'sourcing' }: {
           <p className="mt-0.5 text-[12px] leading-snug text-ink-2">
             {p.complete
               ? 'Every screen in the desk is running on your own numbers. Change any of it here.'
-              : 'Five short steps. Each one turns a screen on.'}
+              : `${cap(WORDS[p.total] ?? String(p.total))} short steps. Each one turns a screen on.`}
           </p>
         </div>
         <span className="mono ml-auto shrink-0 rounded-full border border-line bg-surface px-2.5 py-0.5 text-[11px] text-ink-2">

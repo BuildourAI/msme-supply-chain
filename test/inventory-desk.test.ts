@@ -65,8 +65,8 @@ const adds = (ws: Workspace) => expect(drift(ws)).toEqual([])
 /* ================================================================ the steps */
 
 describe('setting up the store', () => {
-  it('is five steps, two of them sourcing\'s own', () => {
-    expect(INVENTORY_STEPS.map((s) => s.id)).toEqual(['materials', 'racks', 'stock', 'jobs', 'storeRules'])
+  it('is six steps, two of them sourcing\'s own', () => {
+    expect(INVENTORY_STEPS.map((s) => s.id)).toEqual(['materials', 'racks', 'stock', 'jobs', 'jobworkers', 'storeRules'])
     expect(INVENTORY_STEPS[0]).toBe(SOURCING_STEPS.find((s) => s.id === 'materials'))
     expect(INVENTORY_STEPS[2]).toBe(SOURCING_STEPS.find((s) => s.id === 'stock'))
     expect(stepsFor('inventory')).toBe(INVENTORY_STEPS)
@@ -115,7 +115,7 @@ describe('the store\'s rail', () => {
 
   it('keeps racks under More, and badges only work waiting', () => {
     const rows = inventoryNav(set(), TODAY)
-    expect(rows.map((r) => r.label)).toEqual(['Dashboard', 'Stock ledger', 'In-house', 'Wastage & loss', 'Racks'])
+    expect(rows.map((r) => r.label)).toEqual(['Dashboard', 'Stock ledger', 'In-house', 'Jobwork', 'Wastage & loss', 'Racks'])
     expect(rows.filter((r) => r.tucked).map((r) => r.label)).toEqual(['Racks'])
     expect(rows.every((r) => r.badge === undefined)).toBe(true)
     expect(navFor('inventory', set(), TODAY)).toEqual(rows)
@@ -445,8 +445,14 @@ describe('the store\'s queue', () => {
 describe('the store\'s figures', () => {
   it('are unmeasured on day one, and say what they wait for', () => {
     const m = pickedMetrics(set(), TODAY, 'inventory')
-    expect(m.map((x) => x.key)).toEqual(['stockValue', 'unconfirmed', 'accuracy', 'heldStock', 'netLoss', 'scrap'])
+    expect(m.map((x) => x.key)).toEqual(['stockValue', 'unconfirmed', 'accuracy', 'heldStock', 'atJobworkers', 'netLoss', 'scrap'])
     expect(m.every((x) => !x.measured)).toBe(true)
+  })
+
+  it('counts material at jobworkers as the store\'s, and takes an owner\'s choice of it from the gate', () => {
+    expect(pickedMetrics(set(), TODAY, 'inbound').map((x) => x.key)).not.toContain('atJobworkers')
+    const kept = { ...set(), inventoryMetricPicks: ['stockValue'], inboundMetricPicks: ['qcHeld', 'atJobworkers'] }
+    expect(pickedMetrics(kept, TODAY, 'inventory').map((x) => x.key)).toEqual(['stockValue', 'atJobworkers'])
   })
 
   it('value usable stock at the last price, leave remnants and held stock out, and say what is unverified', () => {

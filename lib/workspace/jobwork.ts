@@ -8,8 +8,10 @@
  * is for a process, and letting it into the landed-cost ranking would let a
  * galvaniser win a comparison for the steel.
  */
+import { addDays, daysBetween } from '@/lib/domain/calc'
 import type { Vendor } from '@/lib/domain/types'
 import { issueId } from './defaults'
+import { jobWord } from './jobs'
 import { allocate, dropLots, postMany, reverse, round3, usableOnHand } from './ledger'
 import { arrive } from './receipts'
 import { nextNo } from './sourcing'
@@ -27,6 +29,26 @@ export const jobworkers = (ws: Workspace): Vendor[] =>
 /** Challans still out, for the Jobwork row's badge. */
 export const challansOut = (ws: Workspace) =>
   (ws.challans ?? []).filter((c) => c.status === 'out')
+
+/** Challans still out that went for one style, job or order. */
+export const challansFor = (ws: Workspace, jobId: string) =>
+  challansOut(ws).filter((c) => c.jobId === jobId)
+
+/*
+ * The GST clock on material out for jobwork. Inputs sent to a jobworker have
+ * to be back within a year of the day they left; past that, GST treats them
+ * as supplied to the jobworker on the day they left — tax on a sale nobody
+ * made. (Machinery and tools get three years; a challan here is material.)
+ * The store is told from ninety days before, while a chase can still fix it.
+ */
+export const GST_JOBWORK_DAYS = 365
+export const GST_JOBWORK_WARN_DAYS = 90
+
+/** The last day it can come back before GST counts it as supplied. */
+export const gstDueBy = (c: Challan): string => addDays(c.sentOn, GST_JOBWORK_DAYS)
+
+/** Days until that day; negative once it has passed. */
+export const gstDaysLeft = (c: Challan, today: string): number => daysBetween(today, gstDueBy(c))
 
 /* ------------------------------------------------------------ the challan -- */
 
@@ -47,6 +69,8 @@ export interface SendOut {
   lotId?: string
   /** who sent it, for the journal */
   actor?: string
+  /** the style, job or order it goes out for; blank when it is for stock */
+  jobId?: string
 }
 
 /** Why material cannot go out as described, or null. */
@@ -65,6 +89,12 @@ export function sendOutProblem(ws: Workspace, s: SendOut): string | null {
   if (s.dueBack.length !== 10 || s.dueBack < s.sentOn) return 'Put in the day they promised it back, on or after it left.'
   if (!Number.isFinite(s.expectedYield) || s.expectedYield <= 0 || s.expectedYield > 2) {
     return 'Put in what should come back per 100 sent, as a percentage.'
+  }
+  if (s.jobId) {
+    const word = jobWord(ws).one
+    const job = (ws.jobs ?? []).find((j) => j.id === s.jobId)
+    if (!job) return `Pick an open ${word}, or leave it blank.`
+    if (job.closedOn) return `${job.no} is closed — pick an open ${word}, or leave it blank.`
   }
   return null
 }
@@ -97,6 +127,7 @@ export function sendOut(ws: Workspace, s: SendOut): [Workspace, string] {
     process: s.process?.trim() || undefined,
     note: s.note?.trim() || undefined,
     status: 'out',
+    jobId: s.jobId || undefined,
   }
   const from = allocate(issued, s.itemId, s.qty, { lotId: s.lotId })
   if (!from) return [ws, '']
@@ -173,12 +204,15 @@ export function closeChallan(
    */
   if (writtenOff > 0) {
     const [issued, lossId] = issueId(w, 'LS')
+    // on the style it went out for, when it went out for one
+    const job = ch.jobId ? (ws.jobs ?? []).find((j) => j.id === ch.jobId) : undefined
     w = {
       ...issued,
       losses: [...(issued.losses ?? []), {
         id: lossId, on: c.on, itemId: ch.itemId, qty: writtenOff, cause: 'jobwork_loss',
         source: 'challan', sourceRef: ch.no, recoveryRate: 0, actor: c.actor ?? '',
         note: c.reason.trim(),
+        ...(job ? { jobId: job.id, workOrder: job.no } : {}),
       }],
     }
   }

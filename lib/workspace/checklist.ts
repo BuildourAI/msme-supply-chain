@@ -93,7 +93,7 @@ export const SOURCING_STEPS: Step[] = [
   {
     id: 'rules',
     title: 'Your rules',
-    why: 'When to buy, how much at a time, and what needs your sign-off. Yours to set, not ours to assume.',
+    why: 'When to buy, how much at a time, what needs your sign-off, and how long a change to an order may go unconfirmed. Yours to set, not ours to assume.',
     cta: 'Set your rules',
     done: (ws) => ws.drafts['rules.agreed'] === true,
     summary: (ws) => `buy at ${ws.policy.cycleDays.B} days' cover · sign-off above ${
@@ -102,12 +102,12 @@ export const SOURCING_STEPS: Step[] = [
 ]
 
 /**
- * Setting up the gate, as five steps.
+ * Setting up the gate, as four steps.
  *
  * The first two are sourcing's own step objects, not copies: a receipt is of a
  * material and from a supplier, so a company that has set up sourcing opens
- * this list at two of five, and one that starts here is asked for its masters
- * first. The other three are the gate's own.
+ * this list at two of four, and one that starts here is asked for its masters
+ * first. The other two are the gate's own: what to check, and its rules.
  */
 const byId = (id: StepId) => SOURCING_STEPS.find((s) => s.id === id)!
 
@@ -124,31 +124,37 @@ export const INBOUND_STEPS: Step[] = [
       coveredItems(ws).length} of ${plural(ws.items.length, 'material')}`,
   },
   {
-    id: 'jobworkers',
-    title: 'Who you send material out to',
-    why: 'Galvanisers, platers, machine shops. Material with them is still yours, and never counted as stock you can use.',
-    cta: 'Add a jobworker',
-    /*
-     * "We don't send anything out" is a real answer and ticks the step. A step
-     * that could only go green by inventing a jobworker would teach people to
-     * invent one.
-     */
-    done: (ws) => jobworkers(ws).length > 0 || ws.drafts['inbound.noJobwork'] === true,
-    summary: (ws) => {
-      const n = jobworkers(ws).length
-      return n > 0 ? plural(n, 'jobworker') : 'no material sent out'
-    },
-  },
-  {
     id: 'gateRules',
     title: 'The gate rules',
-    why: 'How long material may wait uninspected, when a rejection is a pattern rather than a bad batch, how long a change may go unconfirmed.',
+    why: 'How long material may wait uninspected, and when a rejection is a pattern rather than a bad batch.',
     cta: 'Set the gate rules',
     done: (ws) => ws.drafts['inbound.rules.agreed'] === true,
     summary: (ws) => `inspect within ${plural(ws.policy.inboundQcDays, 'day')} · escalate at ${
       ws.policy.qcOverdueDays}`,
   },
 ]
+
+/**
+ * The store's: material out at a jobworker is the store's own stock in
+ * somebody else's shed. Only what comes back passes the gate.
+ */
+const JOBWORKERS_STEP: Step = {
+  id: 'jobworkers',
+  title: 'Who you send material out to',
+  why: 'Galvanisers, platers, machine shops. Material with them is still yours, and never counted as stock you can use.',
+  cta: 'Add a jobworker',
+  /*
+   * "We don't send anything out" is a real answer and ticks the step. A step
+   * that could only go green by inventing a jobworker would teach people to
+   * invent one. The answer is kept under the key it was first stored with,
+   * when this step was the gate's.
+   */
+  done: (ws) => jobworkers(ws).length > 0 || ws.drafts['inbound.noJobwork'] === true,
+  summary: (ws) => {
+    const n = jobworkers(ws).length
+    return n > 0 ? plural(n, 'jobworker') : 'no material sent out'
+  },
+}
 
 /** Shared by the store and the floor: a style is what material leaves against, and what the floor makes. */
 const JOBS_STEP: Step = {
@@ -184,8 +190,8 @@ export const PRODUCTS_STEP: Step = {
  * Materials and the stock count are sourcing's own step objects again — a
  * company that has counted its stock for sourcing has counted it for the
  * store — and the count now asks which rack each material sits on. The other
- * three are the store's: where things sit, what material leaves against, and
- * the rules a count and a loss are judged by.
+ * four are the store's: where things sit, what material leaves against, who
+ * it goes out to for jobwork, and the rules a count and a loss are judged by.
  */
 export const INVENTORY_STEPS: Step[] = [
   byId('materials'),
@@ -209,10 +215,11 @@ export const INVENTORY_STEPS: Step[] = [
   },
   byId('stock'),
   JOBS_STEP,
+  JOBWORKERS_STEP,
   {
     id: 'storeRules',
     title: 'Your store rules',
-    why: 'How often each class is counted, what size of difference is a real one, what scrap you will accept — and whether you cut material at all.',
+    why: 'How often each class is counted, what size of difference is a real one, what scrap you will accept, how much slack a jobworker gets — and whether you cut material at all.',
     cta: 'Set the store rules',
     done: (ws) => ws.drafts['inventory.rules.agreed'] === true,
     summary: (ws) => `count A every ${plural(ws.policy.countCadenceDays.A, 'day')} · scrap target ${
