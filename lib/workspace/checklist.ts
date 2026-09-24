@@ -291,9 +291,9 @@ export const DISPATCH_STEPS: Step[] = [
   },
   {
     id: 'firstOrder',
-    title: 'Your first order',
+    title: 'Your first sales order',
     why: 'A customer, a promised date, the products and the rate — and the style making it, so a promise at risk shows before the customer rings.',
-    cta: 'Take an order',
+    cta: 'New sales order',
     done: (ws) => (ws.customerOrders ?? []).length > 0,
     summary: (ws) => {
       const open = (ws.customerOrders ?? []).filter((o) => o.state === 'open').length

@@ -50,7 +50,7 @@ export const dueByOf = (ws: Workspace, raisedOn: string): string => addDays(rais
 
 export function returnProblem(ws: Workspace, x: ReturnInput, today: string): string | null {
   const note = (ws.dispatchNotes ?? []).find((n) => n.id === x.noteId)
-  if (!note) return 'Pick the dispatch note it went out on.'
+  if (!note) return 'Pick the delivery challan it went out on.'
   const c = consignmentOf(ws, note.id)
   if (c && !c.deliveredOn) return `${note.no} is still on the road — it has to arrive before it can come back.`
   const p = productOf(ws, x.productId)

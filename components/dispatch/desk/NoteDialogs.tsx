@@ -118,7 +118,7 @@ export function NoteForm({ orderId, onClose, onRaised }: {
   }
 
   return (
-    <Dialog open onClose={onClose} wide title={order ? `Dispatch against ${order.no}` : 'Raise a dispatch note'}
+    <Dialog open onClose={onClose} wide title={order ? `Dispatch against ${order.no}` : 'Raise a delivery challan'}
       sub="What is leaving now, on whose say-so. Finished stock comes down by exactly this.">
       <div className="space-y-3 px-4 py-4">
         <div className="grid gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] sm:items-end">
@@ -203,7 +203,7 @@ export function NoteForm({ orderId, onClose, onRaised }: {
           className="press rounded-lg px-2.5 py-2 text-[13px] text-ink-2 hover:text-ink">Cancel</button>
         <button type="button" onClick={save}
           className="press rounded-lg border border-accent-ink bg-accent-ink px-3.5 py-2 text-[13px] font-semibold text-on-accent hover:bg-accent">
-          Raise the note
+          Raise the challan
         </button>
       </footer>
     </Dialog>

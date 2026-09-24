@@ -838,13 +838,13 @@ function gateMetrics(
       ? {
         key: 'atJobworkers', label: METRIC_LABEL.atJobworkers, value: money(atJw),
         sub: out.length === 0 ? 'nothing out at the moment'
-          : `on ${out.length} challan${out.length === 1 ? '' : 's'} out`,
+          : `on ${out.length} jobwork challan${out.length === 1 ? '' : 's'} out`,
         tone: atJw > ws.policy.jobworkerExposureCeiling ? 'warn' : 'neutral',
         measured: true, href: '/inventory/jobwork',
         how: 'what is still physically with each jobworker × the rate it left at — never counted as cover',
       }
       : nothing('atJobworkers', 'Nothing sent out',
-        'needs a challan for material sent to a jobworker'),
+        'needs a jobwork challan for material sent to a jobworker'),
 
     versioned
       ? {
@@ -1026,11 +1026,11 @@ function dispatchMetrics(
     notes.length > 0
       ? {
         key: 'orderToDock', label: METRIC_LABEL.orderToDock, value: `${dock.value} days`,
-        sub: `mean over ${plural(notes.length, 'dispatch note')}`,
+        sub: `mean over ${plural(notes.length, 'delivery challan')}`,
         tone: 'neutral', measured: true, href: '/dispatch/notes',
         how: 'mean(day the note was raised − day the order was taken), over every note',
       }
-      : nothing('orderToDock', 'Nothing dispatched yet', 'needs a dispatch note against an order'),
+      : nothing('orderToDock', 'Nothing dispatched yet', 'needs a delivery challan against a sales order'),
 
     orders.length > 0
       ? {
@@ -1082,15 +1082,15 @@ function dispatchMetrics(
         ? {
           key: 'dispatchedMonth', label: METRIC_LABEL.dispatchedMonth, value: `${outUnits} pcs`,
           sub: `on ${plural(out.length, 'note')} · no cost to make, so no value`, tone: 'neutral', measured: true, href: '/dispatch/notes',
-          how: 'Σ pieces on this month’s dispatch notes',
+          how: 'Σ pieces on this month’s delivery challans',
         }
         : {
           key: 'dispatchedMonth', label: METRIC_LABEL.dispatchedMonth, value: money(outValue.value as number),
           sub: `${outUnits} pieces on ${plural(out.length, 'note')}${outUnpriced ? ' · some with no cost' : ''}`,
           tone: 'neutral', measured: true, href: '/dispatch/notes',
-          how: 'Σ (pieces × cost to make one) over this month’s dispatch notes',
+          how: 'Σ (pieces × cost to make one) over this month’s delivery challans',
         }
-      : nothing('dispatchedMonth', 'Nothing out this month', 'needs a dispatch note raised this month'),
+      : nothing('dispatchedMonth', 'Nothing out this month', 'needs a delivery challan raised this month'),
 
     (ws.rmas ?? []).length > 0
       ? (() => {
@@ -1103,10 +1103,10 @@ function dispatchMetrics(
           sub: `${back} of ${shipped} pieces shipped${open ? ` · ${plural(open, 'return')} still to come back` : ''}`,
           tone: (rate <= 1 ? 'good' : rate <= 3 ? 'warn' : 'critical') as MetricTone,
           measured: true, href: '/dispatch/returns',
-          how: 'Σ pieces agreed to come back ÷ Σ pieces on dispatch notes — counted on authorisations, so one nobody chased still shows',
+          how: 'Σ pieces agreed to come back ÷ Σ pieces on delivery challans — counted on authorisations, so one nobody chased still shows',
         }
       })()
-      : nothing('returnRate', 'No return agreed', 'needs a return authorised against a dispatch note'),
+      : nothing('returnRate', 'No return agreed', 'needs a return authorised against a delivery challan'),
   ]
 }
 

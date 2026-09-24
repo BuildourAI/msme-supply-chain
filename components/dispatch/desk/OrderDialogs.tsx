@@ -101,7 +101,7 @@ export function OrderForm({ order, onClose, onSaved }: {
   const jobsFor = (productId: string) => openJobs(ws).filter((j) => !j.productId || j.productId === productId)
 
   return (
-    <Dialog open onClose={onClose} wide title={order ? `Edit ${order.no}` : 'New customer order'}
+    <Dialog open onClose={onClose} wide title={order ? `Edit ${order.no}` : 'New sales order'}
       sub={order && shipped > 0 ? 'Something has gone out against it, so it can no longer be changed — cancel it instead.'
         : 'Who ordered what, at what rate, and by when you promised it.'}>
       <div className="space-y-3 px-4 py-4">
@@ -143,7 +143,7 @@ export function OrderForm({ order, onClose, onSaved }: {
                     <NumberInput id={`of-r-${i}`} value={rateFor(l)} onChange={(v) => set(i, { rate: v, rateTouched: true })}
                       unit={unit ? `₹/${unit.replace(/s$/, '')}` : '₹'} placeholder={last !== undefined ? String(last) : undefined} />
                   </Field>
-                  <Field label={`Made by`} htmlFor={`of-j-${i}`} className="col-span-2 sm:col-span-1">
+                  <Field label="Made on" htmlFor={`of-j-${i}`} className="col-span-2 sm:col-span-1">
                     <Select id={`of-j-${i}`} value={l.jobId} onChange={(v) => set(i, { jobId: v })}
                       options={[
                         { value: '', label: `No ${word} yet` },
@@ -188,7 +188,7 @@ export function OrderForm({ order, onClose, onSaved }: {
           className="press rounded-lg px-2.5 py-2 text-[13px] text-ink-2 hover:text-ink">Cancel</button>
         <button type="button" onClick={save}
           className="press rounded-lg border border-accent-ink bg-accent-ink px-3.5 py-2 text-[13px] font-semibold text-on-accent hover:bg-accent">
-          {order ? 'Save' : 'Take the order'}
+          {order ? 'Save' : 'Save the sales order'}
         </button>
       </footer>
     </Dialog>

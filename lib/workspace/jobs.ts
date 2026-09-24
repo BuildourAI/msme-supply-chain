@@ -1,8 +1,10 @@
 /**
  * What material leaves the store against.
  *
- * A garment maker calls it a style, a machine shop a job, somebody making to
- * order an order — the owner says which, and what their numbers look like.
+ * A garment maker calls it a style, anybody else a job card — the owner says
+ * which, and what their numbers look like. It is never called an order: an
+ * order is a purchase order or a sales order, and a job card made for a
+ * sales order says so by naming it.
  * Every issue slip then names one, so every metre that left the store is
  * somebody's, and consumption per job is a sum rather than a guess.
  */
@@ -12,16 +14,27 @@ import { nextNo } from './sourcing'
 import type { IssueSlip, Job, JobNumbering, Workspace, WsLoss } from './types'
 
 export const JOB_WORD: Record<JobNumbering['word'], { one: string; many: string }> = {
-  job: { one: 'job', many: 'jobs' },
+  job: { one: 'job card', many: 'job cards' },
   style: { one: 'style', many: 'styles' },
-  order: { one: 'order', many: 'orders' },
 }
 
 export const DEFAULT_PREFIX: Record<JobNumbering['word'], string> = {
-  job: 'JOB', style: 'ST', order: 'ORD',
+  job: 'JC', style: 'ST',
 }
 
-export const jobWord = (ws: Workspace) => JOB_WORD[ws.jobNumbering?.word ?? 'job']
+/**
+ * A numbering saved before "a customer's order" was dropped reads as a job
+ * card. The prefix stays — ORD-3 is what is written on the floor's paper.
+ */
+export function readJobNumbering(raw: unknown): JobNumbering | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const r = raw as { word?: string; prefix?: string }
+  const word: JobNumbering['word'] = r.word === 'style' ? 'style' : 'job'
+  return { word, prefix: (r.prefix ?? '').trim() || DEFAULT_PREFIX[word] }
+}
+
+// a word this build no longer offers reads as a job card, never as nothing
+export const jobWord = (ws: Workspace) => JOB_WORD[ws.jobNumbering?.word ?? 'job'] ?? JOB_WORD.job
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 export const jobWordCap = (ws: Workspace) => {
@@ -30,7 +43,7 @@ export const jobWordCap = (ws: Workspace) => {
 }
 
 const prefixOf = (ws: Workspace) =>
-  (ws.jobNumbering?.prefix ?? DEFAULT_PREFIX[ws.jobNumbering?.word ?? 'job']).trim().toUpperCase()
+  (ws.jobNumbering?.prefix ?? DEFAULT_PREFIX[ws.jobNumbering?.word ?? 'job'] ?? DEFAULT_PREFIX.job).trim().toUpperCase()
 
 /** The next number in the owner's own style — ST-4, JOB-13 — counting up from the highest. */
 export function nextJobNo(ws: Workspace): string {

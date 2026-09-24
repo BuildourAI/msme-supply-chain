@@ -110,7 +110,7 @@ export function SendOutForm({ open, onClose, onAddJobworker }: {
 
   return (
     <Dialog open onClose={onClose} wide title="Send material out"
-      sub="A challan for what leaves — it comes off the shelf now and back through the gate">
+      sub="A jobwork challan for what leaves — it comes off the shelf now and back through the gate">
       <div className="space-y-4 px-4 py-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="To" htmlFor="jw-vendor">
@@ -338,7 +338,7 @@ export function CloseChallanDialog({ challanId, onClose }: { challanId: string |
         {tried && problem && <p className="text-[12.5px] text-critical">{problem}</p>}
       </div>
       <Foot onClose={onClose} onSave={save} danger={lost > 0}
-        label={lost > 0 ? `Close and write off ${money(settled.valueLost.value)}` : 'Close the challan'} />
+        label={lost > 0 ? `Close and write off ${money(settled.valueLost.value)}` : 'Close the jobwork challan'} />
     </Dialog>
   )
 }

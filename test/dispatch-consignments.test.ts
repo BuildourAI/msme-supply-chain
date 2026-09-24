@@ -40,7 +40,7 @@ describe('on the road', () => {
     expect(overdueInTransit(ws, TODAY)).toBe(4)
     expect(dispatchNav(ws, TODAY).find((r) => r.label === 'Consignments')?.badge).toBe('4')
     const card = dispatchDecisionsFor(ws, TODAY).find((d) => d.id === 'delivery-due:CN-001')!
-    expect(card.title).toBe('DN-1 to Bharat Panels was promised 20 Sep and nobody has confirmed delivery')
+    expect(card.title).toBe('DC-1 to Bharat Panels was promised 20 Sep and nobody has confirmed delivery')
     expect(card.detail).toMatch(/^With VRL Logistics, docket VRL 1, left 18 Sep\./)
     expect([card.band, card.act, card.alt?.act]).toEqual(['costs', 'delivered', 'chase'])
     // chased, the card says when
@@ -51,16 +51,16 @@ describe('on the road', () => {
   it('asks on the day it is due, more quietly', () => {
     let [ws] = raiseNote(booked(300), note({ on: TODAY, booking: { carrierId: 'CR-002', promisedDate: TODAY } }), TODAY)
     const card = dispatchDecisionsFor(ws, TODAY).find((d) => d.kind === 'delivery-due')!
-    expect(card.title).toBe('DN-1 to Bharat Panels is due today — has it arrived?')
+    expect(card.title).toBe('DC-1 to Bharat Panels is due today — has it arrived?')
     expect(card.band).toBe('unfinished')
     ws = markDelivered(ws, 'CN-001', { on: TODAY, by: 'Driver, with their stamp' }, TODAY)
     expect(dispatchDecisionsFor(ws, TODAY).some((d) => d.kind === 'delivery-due')).toBe(false)
   })
 
   it('puts the docket, the promise and the customer into the words a person sends', () => {
-    const r = consignmentRows(lane(), TODAY).find((x) => x.note.no === 'DN-1')!
+    const r = consignmentRows(lane(), TODAY).find((x) => x.note.no === 'DC-1')!
     expect(chaseText(r, 'Indigo Threads')).toBe([
-      'Indigo Threads — consignment DN-1, your docket VRL 1.',
+      'Indigo Threads — consignment DC-1, your docket VRL 1.',
       'It left on 2026-09-18 for Bharat Panels, Chakan MIDC, Pune, promised for 2026-09-20.',
       'Where is it, and when will it be delivered?',
     ].join('\n'))
@@ -104,7 +104,7 @@ describe('by carrier', () => {
   })
 
   it('keeps a carrier with nothing booked out of the figures', () => {
-    const [ws] = bookConsignment(booked(300), 'DN-999', { carrierId: 'CR-001', promisedDate: TODAY })
+    const [ws] = bookConsignment(booked(300), 'DC-999', { carrierId: 'CR-001', promisedDate: TODAY })
     expect(ws.consignments).toHaveLength(0)
     expect(carrierRows(booked(), TODAY).every((c) => c.shipped === 0 && c.delivered === 0)).toBe(true)
   })

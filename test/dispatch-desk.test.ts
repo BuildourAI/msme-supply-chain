@@ -41,10 +41,10 @@ describe('the bay’s set-up', () => {
     expect(BUILT).toContain('dispatch')
     expect(STAGE_HOME.dispatch).toBe('/dispatch/dashboard')
     const rows = dispatchNav(booked(), TODAY)
-    expect(rows.map((r) => r.label)).toEqual(['Dashboard', 'Order book', 'Dispatch notes', 'Consignments', 'Returns', 'Customers', 'Carriers'])
+    expect(rows.map((r) => r.label)).toEqual(['Dashboard', 'Sales orders', 'Delivery challans', 'Consignments', 'Returns', 'Customers', 'Carriers'])
     expect(rows.filter((r) => r.tucked).map((r) => r.label)).toEqual(['Customers', 'Carriers'])
     // SO-1 was promised the 20th and nothing has gone
-    expect(rows.find((r) => r.label === 'Order book')?.badge).toBe('1')
+    expect(rows.find((r) => r.label === 'Sales orders')?.badge).toBe('1')
     expect(navFor('dispatch', booked(), TODAY)).toEqual(rows)
   })
 

@@ -1,15 +1,15 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { Wizard, type WizardStep } from '@/components/ui/Wizard'
-import { Chips, Field, TextInput } from '@/components/ui/Field'
+import { Chips, Field, Select, TextInput } from '@/components/ui/Field'
 import { useWorkspace } from '@/components/workspace/store'
 import { addJob, DEFAULT_PREFIX, JOB_WORD, jobProblem, nextJobNo, setJobNumbering } from '@/lib/workspace/jobs'
+import { linkableLines, salesLineLabel, setMadeFor } from '@/lib/workspace/sales'
 import type { JobNumbering } from '@/lib/workspace/types'
 
 const WORDS: { value: JobNumbering['word']; label: string; hint: string }[] = [
   { value: 'style', label: 'A style', hint: 'Garments — ST-4521, the style being cut and stitched' },
-  { value: 'job', label: 'A job', hint: 'A job card or work order on the floor' },
-  { value: 'order', label: "A customer's order", hint: 'Made to order — the order it is for' },
+  { value: 'job', label: 'A job card', hint: 'The card that travels with the work on the floor — JC-12. Made for a sales order, it names it.' },
 ]
 
 /**
@@ -27,13 +27,13 @@ export function JobsWizard({ open, onClose }: { open: boolean; onClose: () => vo
   const [touched, setTouched] = useState(false)
   const [no, setNo] = useState('')
   const [name, setName] = useState('')
-  const [customer, setCustomer] = useState('')
+  const [lineId, setLineId] = useState('')
 
   useEffect(() => {
     if (!open || !workspace) return
     const n = workspace.jobNumbering
     setWord(n?.word ?? 'style'); setPrefix(n?.prefix ?? DEFAULT_PREFIX[n?.word ?? 'style'])
-    setTouched(Boolean(n)); setNo(''); setName(''); setCustomer('')
+    setTouched(Boolean(n)); setNo(''); setName(''); setLineId('')
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open || !workspace) return null
@@ -42,7 +42,8 @@ export function JobsWizard({ open, onClose }: { open: boolean; onClose: () => vo
   const preview = nextJobNo(setJobNumbering(ws, numbering))
   const w = JOB_WORD[word]
   const firstNo = no.trim() || preview
-  const opening = name.trim() !== '' || customer.trim() !== '' || no.trim() !== ''
+  const opening = name.trim() !== '' || lineId !== '' || no.trim() !== ''
+  const lines = linkableLines(ws)
   const firstProblem = opening
     ? jobProblem(setJobNumbering(ws, numbering), { no: firstNo, openedOn: today })
     : null
@@ -87,9 +88,15 @@ export function JobsWizard({ open, onClose }: { open: boolean; onClose: () => vo
           <Field label="What it is" hint="Leave everything blank to skip." htmlFor="jb-name">
             <TextInput id="jb-name" value={name} onChange={setName} placeholder="Slim-fit jeans, 14 oz indigo" />
           </Field>
-          <Field label="For" htmlFor="jb-customer">
-            <TextInput id="jb-customer" value={customer} onChange={setCustomer} placeholder="The customer, if there is one" />
-          </Field>
+          {lines.length > 0 && (
+            <Field label="For sales order" hint="Blank is made for stock." htmlFor="jb-for">
+              <Select id="jb-for" value={lineId} onChange={setLineId}
+                options={[
+                  { value: '', label: 'For stock — no sales order' },
+                  ...lines.map((r) => ({ value: r.line.id, label: salesLineLabel(r) })),
+                ]} />
+            </Field>
+          )}
         </div>
       ),
     },
@@ -99,7 +106,9 @@ export function JobsWizard({ open, onClose }: { open: boolean; onClose: () => vo
     update((w0) => {
       const w1 = setJobNumbering(w0, numbering)
       if (!opening) return w1
-      return addJob(w1, { no: no.trim() || nextJobNo(w1), name, customer, openedOn: today })[0]
+      const picked = linkableLines(w1).find((r) => r.line.id === lineId)
+      const [w2, id] = addJob(w1, { no: no.trim() || nextJobNo(w1), name, customer: picked?.customer?.name, openedOn: today })
+      return id && lineId ? setMadeFor(w2, id, undefined, lineId) : w2
     })
     onClose()
   }

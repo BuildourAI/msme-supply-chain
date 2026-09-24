@@ -222,9 +222,9 @@ export function closeChallan(
 /** Why a challan cannot be closed yet, or null. */
 export function closeChallanProblem(ws: Workspace, challanId: string, reason: string): string | null {
   if ((ws.receipts ?? []).some((r) => r.challanId === challanId && r.status === 'open')) {
-    return 'Something from this challan is still at the gate — inspect it first.'
+    return 'Something from this jobwork challan is still at the gate — inspect it first.'
   }
-  if (reason.trim().length < 4) return 'A challan closes against a written reason.'
+  if (reason.trim().length < 4) return 'A jobwork challan closes against a written reason.'
   return null
 }
 

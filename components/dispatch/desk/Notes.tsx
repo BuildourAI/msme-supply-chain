@@ -79,18 +79,18 @@ export function Notes() {
   return (
     <>
       <ListPage
-        title="Dispatch notes" noun="dispatch note" rows={rows}
+        title="Delivery challans" noun="delivery challan" rows={rows}
         search={(r) => `${r.note.no} ${r.order?.no ?? ''} ${r.customer?.name ?? ''} ${r.carrier?.name ?? ''} ${r.consignment?.lrNo ?? ''} ${kit.searchText(r)}`}
         filter={{
           label: 'Carrier',
           options: [{ value: 'unbooked', label: 'Not booked' }, { value: 'booked', label: 'Booked' }],
           of: (r) => (r.consignment ? 'booked' : 'unbooked'),
         }}
-        action={{ label: 'Raise a dispatch note', onClick: () => setRaising(null) }}
-        tools={<DeskTools entity="dispatchNote" noun="dispatch note" title="Dispatch notes" rows={() => kit.toRows(rows)} />}
+        action={{ label: 'Raise a delivery challan', onClick: () => setRaising(null) }}
+        tools={<DeskTools entity="dispatchNote" noun="delivery challan" title="Delivery challans" rows={() => kit.toRows(rows)} />}
         empty={{
-          line: 'Nothing has gone out yet. A dispatch note is raised against an order, takes the pieces off the finished-goods shelf, and prints as a delivery challan.',
-          cta: 'Raise a dispatch note',
+          line: 'Nothing has gone out yet. A delivery challan is raised against a sales order, takes the pieces off the finished-goods shelf, and travels with the goods.',
+          cta: 'Raise a delivery challan',
         }}>
         {(shown) => (
           <DataTable columns={kit.columns} rows={shown} keyOf={(r) => r.note.id}

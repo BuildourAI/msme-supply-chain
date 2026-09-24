@@ -37,7 +37,7 @@ export function suggestFreight(ws: Workspace, noteId: string, carrierId: string)
 export function bookProblem(ws: Workspace, noteId: string, b: Booking, noteOn?: string): string | null {
   const note = (ws.dispatchNotes ?? []).find((n) => n.id === noteId)
   const on = note?.on ?? noteOn
-  if (!on) return 'That note is not on the register.'
+  if (!on) return 'That delivery challan is not on the register.'
   if (note && consignmentOf(ws, noteId)) return 'It is already booked with a carrier.'
   if (!carrierOf(ws, b.carrierId)) return 'Pick the carrier.'
   if (!b.promisedDate) return 'Put in the day the customer was told it would arrive.'

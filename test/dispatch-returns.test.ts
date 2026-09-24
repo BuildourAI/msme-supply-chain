@@ -33,9 +33,9 @@ const ret = (over: Partial<ReturnInput> = {}): ReturnInput => ({
 
 describe('agreeing a return', () => {
   it('refuses a return before the goods arrived, more than went, and one with no reason', () => {
-    expect(returnProblem(sent(false), ret(), TODAY)).toBe('DN-1 is still on the road — it has to arrive before it can come back.')
+    expect(returnProblem(sent(false), ret(), TODAY)).toBe('DC-1 is still on the road — it has to arrive before it can come back.')
     const ws = sent()
-    expect(returnProblem(ws, ret({ qty: 101 }), TODAY)).toBe('Only 100 Slim-fit jeans went on DN-1 that are not already coming back.')
+    expect(returnProblem(ws, ret({ qty: 101 }), TODAY)).toBe('Only 100 Slim-fit jeans went on DC-1 that are not already coming back.')
     expect(returnProblem(ws, ret({ reason: '' }), TODAY)).toBe('Say why it is coming back.')
     expect(returnProblem(ws, ret({ raisedOn: '2026-09-17' }), TODAY)).toBe('It cannot be agreed before the goods went out.')
     expect(returnProblem(ws, ret({ owner: '' }), TODAY)).toBe('Say who agreed it.')
@@ -47,8 +47,8 @@ describe('agreeing a return', () => {
     expect(id).toBe('RM-001')
     expect(ws.rmas[0]).toMatchObject({ no: 'RMA-1', orderId: 'SO-001', customerId: 'CU-001', dueBy: '2026-09-27', state: 'authorised' })
     ;[ws] = authoriseReturn(ws, ret({ qty: 80, dueBy: '2026-09-22' }), TODAY)
-    expect(returnProblem(ws, ret({ qty: 9 }), TODAY)).toBe('Only 8 Slim-fit jeans went on DN-1 that are not already coming back.')
-    expect(returnableNotes(ws).map((n) => n.no)).toEqual(['DN-1'])
+    expect(returnProblem(ws, ret({ qty: 9 }), TODAY)).toBe('Only 8 Slim-fit jeans went on DC-1 that are not already coming back.')
+    expect(returnableNotes(ws).map((n) => n.no)).toEqual(['DC-1'])
     // a note that is coming back cannot be taken back
     expect(removeNoteProblem(ws, 'DN-001')).not.toBeNull()
     expect(removeNote(ws, 'DN-001')).toBe(ws)
@@ -97,7 +97,7 @@ describe('the register, the card and the rate', () => {
     expect(dispatchNav(ws, TODAY).find((x) => x.label === 'Returns')?.badge).toBe('1')
     const card = dispatchDecisionsFor(ws, TODAY).find((d) => d.kind === 'return-overdue')!
     expect(card.title).toBe('RMA-1 from Bharat Panels was due back 21 Sep')
-    expect(card.detail).toBe('12 Slim-fit jeans against DN-1 — Wrong wash. Agreed by R. Mehta; 2 days past the date they were given.')
+    expect(card.detail).toBe('12 Slim-fit jeans against DC-1 — Wrong wash. Agreed by R. Mehta; 2 days past the date they were given.')
     expect([card.act, card.actLabel, card.refs.rmaId]).toEqual(['receive', 'Book it in', 'RM-001'])
     expect(dispatchDecisionsFor(noteDispatch(ws, card, TODAY), TODAY).some((d) => d.kind === 'return-overdue')).toBe(false)
   })

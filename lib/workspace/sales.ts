@@ -134,6 +134,78 @@ export function openJobForOrder(ws: Workspace, orderId: string, lineId: string, 
   }, jobId]
 }
 
+/* ------------------------------------------- what a style is made for -- */
+
+/** A sales order line, with what it is for: the order, its customer, its product. */
+export interface SalesLineRef {
+  order: CustomerOrder
+  line: OrderLine
+  customer?: WsCustomer
+  product?: Product
+}
+
+const refOf = (ws: Workspace, order: CustomerOrder, line: OrderLine): SalesLineRef =>
+  ({ order, line, customer: customerOf(ws, order.customerId), product: productOf(ws, line.productId) })
+
+/** "SO-3 · Bharat Panels · Slim-fit jeans × 500" */
+export const salesLineLabel = (r: SalesLineRef): string =>
+  `${r.order.no} · ${r.customer?.name ?? 'Unknown customer'} · ${r.product?.name ?? 'a product'} × ${r.line.qty}`
+
+/** The sales order lines a style or job card is being made for — the lines whose "Made on" names it. */
+export const linesMadeOn = (ws: Workspace, jobId: string): SalesLineRef[] =>
+  (ws.customerOrders ?? []).flatMap((o) => o.lines.filter((l) => l.jobId === jobId).map((l) => refOf(ws, o, l)))
+
+/**
+ * Lines a style or job card can be made for: on an open order, with something
+ * still to go out, made on nothing else yet — and of what it makes, once it
+ * has been planned. The ones it is already made for are offered too.
+ */
+export function linkableLines(ws: Workspace, jobId?: string): SalesLineRef[] {
+  const job = jobId ? (ws.jobs ?? []).find((j) => j.id === jobId) : undefined
+  return (ws.customerOrders ?? []).filter((o) => o.state === 'open').flatMap((o) => o.lines
+    .filter((l) => (l.jobId ? l.jobId === jobId : true))
+    .filter((l) => !job?.productId || job.productId === l.productId)
+    .filter((l) => (jobId !== undefined && l.jobId === jobId) || l.qty - dispatchedOn(ws, o.id, l.productId) > 0)
+    .map((l) => refOf(ws, o, l)))
+}
+
+/** Why a style or job card cannot be made for that line, or null. Blank is "for stock". */
+export function madeForProblem(ws: Workspace, jobId: string | undefined, lineId: string): string | null {
+  if (!lineId) return null
+  const ref = linkableLines(ws, jobId).find((r) => r.line.id === lineId)
+  return ref ? null : 'Pick a line on an open sales order that nothing else is being made for.'
+}
+
+/**
+ * Make a style or job card for a sales order line — the same link the line's
+ * "Made on" sets — moving it off the line it was made for before, if any. A
+ * style made for two orders keeps the other: only the line named in `from`
+ * lets go.
+ */
+export function setMadeFor(ws: Workspace, jobId: string, from: string | undefined, to: string): Workspace {
+  if (from === to || madeForProblem(ws, jobId, to)) return ws
+  return {
+    ...ws,
+    customerOrders: (ws.customerOrders ?? []).map((o) => ({
+      ...o,
+      lines: o.lines.map((l) => (l.id === to ? { ...l, jobId }
+        : l.id === from && l.jobId === jobId ? { ...l, jobId: undefined } : l)),
+    })),
+  }
+}
+
+/**
+ * What a style or job card is for, in words: the sales order and customer it
+ * is made on, or — for one opened before styles named their sales order —
+ * whatever was typed. Blank is made for stock.
+ */
+export function madeForText(ws: Workspace, job: Job): string {
+  const on = linesMadeOn(ws, job.id)
+  if (on.length === 0) return job.customer ?? ''
+  const first = `${on[0].order.no} · ${on[0].customer?.name ?? 'Unknown customer'}`
+  return on.length === 1 ? first : `${first} + ${on.length - 1} more`
+}
+
 /* -------------------------------------------------------------- reading -- */
 
 export type OrderStatus = 'not_out' | 'part' | 'full' | 'late' | 'cancelled'

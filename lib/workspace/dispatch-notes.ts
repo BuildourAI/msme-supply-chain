@@ -43,11 +43,11 @@ export const pendingOf = (ws: Workspace, order: CustomerOrder, productId: string
 
 export function noteProblem(ws: Workspace, x: NoteInput, today: string): string | null {
   const order = orderOf(ws, x.orderId)
-  if (!order) return 'Pick the order it goes against.'
+  if (!order) return 'Pick the sales order it goes against.'
   if (order.state !== 'open') return `${order.no} is cancelled.`
   if (!x.on) return 'Put in the day it went.'
   if (x.on > today) return 'That day has not happened yet.'
-  if (x.on < order.takenOn) return 'It cannot go before the order was taken.'
+  if (x.on < order.takenOn) return 'It cannot go before the sales order was taken.'
   const going = x.lines.filter((l) => l.qty > 0)
   if (going.length === 0) return 'Put in how many are going.'
   for (const l of going) {
@@ -69,7 +69,8 @@ export function raiseNote(ws: Workspace, x: NoteInput, today: string): [Workspac
   if (noteProblem(ws, x, today)) return [ws, '']
   const order = orderOf(ws, x.orderId)!
   const [w0, id] = issueId(ws, 'DN')
-  const no = nextNo('DN', w0.dispatchNotes ?? [])
+  // the delivery challan's own number — DC-1, DC-2 — which is what the paper says
+  const no = nextNo('DC', w0.dispatchNotes ?? [])
   const lines = x.lines.filter((l) => l.qty > 0).map((l) => ({ productId: l.productId, qty: l.qty }))
   const note: DispatchNote = {
     id, no, orderId: order.id, customerId: order.customerId, on: x.on, lines,
@@ -86,7 +87,7 @@ export function raiseNote(ws: Workspace, x: NoteInput, today: string): [Workspac
 
 /** Why a note cannot be taken back: the customer has it, or has sent some of it back. */
 export function removeNoteProblem(ws: Workspace, noteId: string): string | null {
-  if (consignmentOf(ws, noteId)?.deliveredOn) return 'It has been delivered. A note the customer has cannot be taken back.'
+  if (consignmentOf(ws, noteId)?.deliveredOn) return 'It has been delivered. A delivery challan the customer has cannot be taken back.'
   if ((ws.rmas ?? []).some((r) => r.noteId === noteId)) return 'A return has been raised against it.'
   return null
 }

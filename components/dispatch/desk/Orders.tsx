@@ -92,18 +92,18 @@ export function Orders() {
   return (
     <>
       <ListPage
-        title="Order book" noun="order" rows={rows}
+        title="Sales orders" noun="sales order" rows={rows}
         search={(r) => `${r.order.no} ${r.customer?.name ?? ''} ${r.lines.map((l) => `${l.product?.name ?? ''} ${l.job?.no ?? ''}`).join(' ')} ${kit.searchText(r)}`}
         filter={{
           label: 'Status',
           options: (Object.keys(ORDER_WORD) as OrderStatus[]).map((s) => ({ value: s, label: ORDER_WORD[s] })),
           of: (r) => r.status,
         }}
-        action={{ label: 'New order', onClick: () => setEditing(null) }}
-        tools={<DeskTools entity="salesOrder" noun="order" title="Order book" rows={() => kit.toRows(rows)} />}
+        action={{ label: 'New sales order', onClick: () => setEditing(null) }}
+        tools={<DeskTools entity="salesOrder" noun="sales order" title="Sales orders" rows={() => kit.toRows(rows)} />}
         empty={{
-          line: 'Nothing on the book yet. An order is a customer, a promised day and what they want — and a line can name the style making it, so a halt on the floor shows here as a promise at risk.',
-          cta: 'New order',
+          line: 'No sales orders yet. A sales order is a customer, a promised day and what they want — and a line can name the style or job card it is made on, so a halt on the floor shows here as a promise at risk.',
+          cta: 'New sales order',
         }}>
         {(shown) => (
           <DataTable columns={kit.columns} rows={shown} keyOf={(r) => r.order.id}

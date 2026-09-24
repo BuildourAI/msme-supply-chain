@@ -85,7 +85,7 @@ export function Returns() {
         action={{ label: 'Authorise a return', onClick: () => setRaising(null) }}
         tools={<DeskTools entity="rma" noun="return" title="Returns" rows={() => kit.toRows(rows)} />}
         empty={{
-          line: 'Nothing coming back. A return is agreed against the dispatch note the goods went out on, and booked in when it arrives — the good pieces go back on the shelf.',
+          line: 'Nothing coming back. A return is agreed against the delivery challan the goods went out on, and booked in when it arrives — the good pieces go back on the shelf.',
           cta: 'Authorise a return',
         }}>
         {(shown) => (

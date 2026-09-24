@@ -158,7 +158,7 @@ export function StoreRulesWizard({ open, onClose }: { open: boolean; onClose: ()
         : !Number.isFinite(ceilingN) || ceilingN <= 0 ? 'Put in an amount in rupees.' : null,
       body: (
         <div className="space-y-3.5">
-          <Field label="Days past their promised date before a challan is raised" htmlFor="sr-grace">
+          <Field label="Days past their promised date before a jobwork challan is raised on the dashboard" htmlFor="sr-grace">
             <NumberInput id="sr-grace" value={grace} onChange={setGrace} unit="days" step="1" />
           </Field>
           <Field label="The most one jobworker should hold at once"

@@ -163,7 +163,7 @@ export const BUILTIN: Record<SheetEntity, BuiltinColumn[]> = {
     { key: 'inspector', label: 'Inspected by', derived: true },
   ],
   challan: [
-    { key: 'no', label: 'Challan', identity: true, derived: true },
+    { key: 'no', label: 'Jobwork challan', identity: true, derived: true },
     { key: 'state', label: 'Status', derived: true },
     { key: 'vendor', label: 'Jobworker', derived: true },
     { key: 'item', label: 'Material', derived: true },
@@ -234,7 +234,7 @@ export const BUILTIN: Record<SheetEntity, BuiltinColumn[]> = {
   job: [
     { key: 'no', label: 'No.', identity: true, derived: true },
     { key: 'name', label: 'What it is', derived: true },
-    { key: 'customer', label: 'For', derived: true },
+    { key: 'customer', label: 'For sales order', derived: true },
     { key: 'opened', label: 'Opened', derived: true },
     { key: 'state', label: 'State', derived: true },
     { key: 'materials', label: 'Material used', derived: true },
@@ -343,7 +343,7 @@ export const BUILTIN: Record<SheetEntity, BuiltinColumn[]> = {
     { key: 'phone', label: 'Phone', kind: 'text', aliases: ['mobile', 'whatsapp', 'contact number', 'phone number'] },
   ],
   salesOrder: [
-    { key: 'no', label: 'Order', identity: true, derived: true },
+    { key: 'no', label: 'Sales order', identity: true, derived: true },
     { key: 'customer', label: 'Customer', derived: true },
     { key: 'taken', label: 'Taken', derived: true },
     { key: 'promised', label: 'Promised', derived: true },
@@ -355,9 +355,9 @@ export const BUILTIN: Record<SheetEntity, BuiltinColumn[]> = {
     { key: 'status', label: 'Status', derived: true },
   ],
   dispatchNote: [
-    { key: 'no', label: 'Note', identity: true, derived: true },
+    { key: 'no', label: 'Challan', identity: true, derived: true },
     { key: 'on', label: 'Date', derived: true },
-    { key: 'order', label: 'Order', derived: true },
+    { key: 'order', label: 'Sales order', derived: true },
     { key: 'customer', label: 'Customer', derived: true },
     { key: 'lines', label: 'What went', derived: true },
     { key: 'weight', label: 'Weight', derived: true },
@@ -367,7 +367,7 @@ export const BUILTIN: Record<SheetEntity, BuiltinColumn[]> = {
     { key: 'eway', label: 'E-way bill', derived: true },
   ],
   consignment: [
-    { key: 'note', label: 'Note', identity: true, derived: true },
+    { key: 'note', label: 'Challan', identity: true, derived: true },
     { key: 'customer', label: 'Customer', derived: true },
     { key: 'carrier', label: 'Carrier', derived: true },
     { key: 'lr', label: 'Docket', derived: true },

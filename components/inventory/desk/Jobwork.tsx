@@ -31,9 +31,9 @@ import { CloseChallanDialog, ExtendDueDialog, ReturnForm, SendOutForm } from './
  * five always add up to what went out. It is the sample company's INB-03,
  * over the owner's own challans.
  *
- * It sits in the store, beside In-house: In-house is material issued to your
- * own floor on a slip, this is material sent to somebody else's on a
- * challan. Only what comes back passes the gate. A challan can say which
+ * It sits in the store, beside Issued to floor: that is material issued to
+ * your own floor on a slip, this is material sent to somebody else's on a
+ * jobwork challan. Only what comes back passes the gate. A challan can say which
  * style it went out for, and each one carries the GST year — inputs not back
  * within a year of leaving count as supplied to the jobworker.
  *
@@ -124,14 +124,14 @@ export function Jobwork() {
   const kit = buildColumns<ChallanRow>(ws, 'challan', (r) => r.challan.id, drawn)
   const exportRows = (): string[][] => view === 'register'
     ? kit.toRows(rows)
-    : [['Date', 'Challan', 'Jobworker', 'Material', 'What happened', 'Quantity', 'Document', 'Still out', 'Note'],
+    : [['Date', 'Jobwork challan', 'Jobworker', 'Material', 'What happened', 'Quantity', 'Document', 'Still out', 'Note'],
       ...ledger.map((e) => [e.on, e.challanNo, e.jobworker, e.item, KIND_WORD[e.kind],
         e.qty === undefined ? '' : String(e.qty), e.doc, String(e.stillOut), e.note])]
 
   return (
     <>
       <ListPage
-        title="Jobwork" noun="challan" rows={rows}
+        title="Sent for jobwork" noun="jobwork challan" rows={rows}
         search={(r) => `${r.challan.no} ${r.vendor?.name ?? ''} ${r.item?.name ?? ''} ${r.challan.process ?? ''} ${r.job?.no ?? ''}`}
         filter={{
           label: 'Out and closed',
@@ -139,9 +139,9 @@ export function Jobwork() {
           of: (r) => r.challan.status,
         }}
         action={{ label: 'Send material out', icon: 'truck', onClick: () => setSending(true) }}
-        tools={<DeskTools entity="challan" noun="challan" title={view === 'register' ? 'Challans' : 'Jobwork ledger'} rows={exportRows} />}
+        tools={<DeskTools entity="challan" noun="jobwork challan" title={view === 'register' ? 'Jobwork challans' : 'Jobwork ledger'} rows={exportRows} />}
         empty={{
-          line: 'Nothing is out with a jobworker. When material leaves for cutting, bending or plating, write the challan here — it comes off the shelf, and back through the gate when it returns.',
+          line: 'Nothing is out with a jobworker. When material leaves for cutting, bending or plating, write the jobwork challan here — it comes off the shelf, and back through the gate when it returns.',
           cta: 'Send material out',
         }}>
         {(shown) => {
@@ -234,7 +234,7 @@ export function Jobwork() {
           title={`Chase ${chasing.vendor?.name ?? 'the jobworker'} on ${chasing.challan.no}`}
           sub={`${chasing.item?.name ?? 'Material'} · promised back ${shortDate(chasing.challan.dueBack)}`}
           vendorId={chasing.challan.vendorId}
-          subject={`Challan ${chasing.challan.no} — balance with you`}
+          subject={`Jobwork challan ${chasing.challan.no} — balance with you`}
           text={chasing.chase} />
       )}
       <ConfirmDelete
@@ -451,7 +451,7 @@ function LedgerTable({ entries, onDoc }: {
           <thead>
             <tr className="border-b border-line text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-3">
               <th className="whitespace-nowrap py-1.5 pr-2 font-semibold">Date</th>
-              <th className="whitespace-nowrap py-1.5 pr-2 font-semibold">Challan</th>
+              <th className="whitespace-nowrap py-1.5 pr-2 font-semibold">Jobwork challan</th>
               <th className="py-1.5 pr-2 font-semibold">What happened</th>
               <th className="whitespace-nowrap py-1.5 pr-2 text-right font-semibold">Quantity</th>
               <th className="whitespace-nowrap py-1.5 pr-2 font-semibold">Document</th>

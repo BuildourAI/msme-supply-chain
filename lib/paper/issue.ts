@@ -79,7 +79,7 @@ export function buildIssueSlip(ws: Workspace, slipId: string): IssueDoc | null {
 
 export async function renderIssueSlip(doc: IssueDoc): Promise<Blob> {
   const p = await page()
-  head(p, doc.company, doc.kind === 'issue' ? 'ISSUE SLIP' : 'RETURN TO STORE', doc.no, doc.on)
+  head(p, doc.company, doc.kind === 'issue' ? 'ISSUE SLIP' : 'RETURN SLIP', doc.no, doc.on)
   p.rule()
 
   p.text(doc.kind === 'issue' ? 'For' : 'Back from', MARGIN, { size: 9, grey: true })
@@ -131,7 +131,7 @@ export const issueFileName = (doc: IssueDoc): string => fileName(doc.no, doc.job
 /** The slip in words, for pasting into a message to the floor. */
 export function issueMessageFor(doc: IssueDoc): string {
   return [
-    `${doc.company.name} — ${doc.kind === 'issue' ? 'issue slip' : 'return to store'} ${doc.no}, ${doc.on}`,
+    `${doc.company.name} — ${doc.kind === 'issue' ? 'issue slip' : 'return slip'} ${doc.no}, ${doc.on}`,
     '',
     `${doc.kind === 'issue' ? 'For' : 'Back from'} ${doc.job}`,
     `${doc.material}: ${doc.total}`,

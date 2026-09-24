@@ -458,9 +458,15 @@ export interface Job {
   needs?: { itemId: string; qty: number }[]
 }
 
+/**
+ * What the owner calls a piece of work on their own floor: a style (garments)
+ * or a job card (everything else). "A customer's order" was a third choice
+ * once; it read as a second order book beside the sales orders, so a saved
+ * one is read back as a job card, its numbers kept.
+ */
 export interface JobNumbering {
   prefix: string
-  word: 'job' | 'style' | 'order'
+  word: 'job' | 'style'
 }
 
 /** A slip: material out of the store against a job, or back into it. */
@@ -595,7 +601,7 @@ export interface OrderLine {
 /** Goods out of the bay against an order — the domain's despatch note, on the owner's ids. */
 export interface DispatchNote {
   id: string
-  /** DN-1, DN-2 */
+  /** DC-1, DC-2 — the delivery challan's number; its id stays DN-… */
   no: string
   orderId: string
   customerId: string

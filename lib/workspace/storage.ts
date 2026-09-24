@@ -15,6 +15,7 @@
 import { DEFAULT_POLICY } from '@/lib/domain/policy'
 import type { Item, SpecCheck, Vendor } from '@/lib/domain/types'
 import { highestIssued } from './defaults'
+import { readJobNumbering } from './jobs'
 import { lotDate, openingMovesFor } from './ledger'
 import { SCHEMA } from './types'
 import type {
@@ -219,6 +220,25 @@ function remapCells(
  * decides whether somebody is signed in at all, and tightening it would sign
  * out every existing owner.
  */
+/**
+ * Delivery challans were dispatch notes, numbered DN-1, DN-2. They are DC-1,
+ * DC-2 now — the number printed on the challan — so a saved one is renumbered
+ * once, with the finished-goods ledger lines that name it, and reads the same
+ * everywhere. The id underneath (DN-001) never showed and does not change.
+ */
+function renumberChallans(notes: DispatchNote[], moves: FgMovement[]): [DispatchNote[], FgMovement[]] {
+  const was = new Map<string, string>()
+  const renamed = notes.map((n) => {
+    const m = /^DN-(\d+)$/.exec(n.no)
+    if (!m) return n
+    was.set(n.no, `DC-${m[1]}`)
+    return { ...n, no: `DC-${m[1]}` }
+  })
+  if (was.size === 0) return [notes, moves]
+  return [renamed, moves.map((m) => (m.kind === 'despatch' && was.has(m.sourceRef)
+    ? { ...m, sourceRef: was.get(m.sourceRef)! } : m))]
+}
+
 function migrate(raw: Partial<Workspace>): Workspace {
   const list = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
   const map = <T,>(v: unknown): Record<string, T> =>
@@ -260,11 +280,11 @@ function migrate(raw: Partial<Workspace>): Workspace {
   const products = list<Product>(raw.products)
   const outputs = list<Output>(raw.outputs)
   const halts = list<Halt>(raw.halts)
-  const fgMoves = list<FgMovement>(raw.fgMoves)
   const customers = list<WsCustomer>(raw.customers)
   const carriers = list<WsCarrier>(raw.carriers)
   const customerOrders = list<CustomerOrder>(raw.customerOrders)
-  const dispatchNotes = list<DispatchNote>(raw.dispatchNotes)
+  const [dispatchNotes, fgMoves] = renumberChallans(
+    list<DispatchNote>(raw.dispatchNotes), list<FgMovement>(raw.fgMoves))
   const consignments = list<WsConsignment>(raw.consignments)
   const rmas = list<WsRma>(raw.rmas)
 
@@ -448,7 +468,7 @@ function migrate(raw: Partial<Workspace>): Workspace {
     transfers,
     counts,
     jobs,
-    jobNumbering: raw.jobNumbering,
+    jobNumbering: readJobNumbering(raw.jobNumbering),
     issues,
     cutting: raw.cutting,
     cuts,

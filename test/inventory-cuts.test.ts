@@ -77,7 +77,7 @@ describe('the switch', () => {
   it('on: the row sits after the jobs, and the remnants figure is offered and picked', () => {
     const ws = base()
     expect(inventoryNav(ws, TODAY).map((r) => r.label))
-      .toEqual(['Dashboard', 'Stock ledger', 'In-house', 'Jobwork', 'Cutting & offcuts', 'Wastage & loss', 'Racks'])
+      .toEqual(['Dashboard', 'Stock ledger', 'Issued to floor', 'Sent for jobwork', 'Cutting & offcuts', 'Wastage & loss', 'Racks'])
     expect(stageMetrics(ws, TODAY, 'inventory').map((m) => m.key)).toContain('remnants')
     const fig = pickedMetrics(ws, TODAY, 'inventory').find((m) => m.key === 'remnants')!
     expect(fig).toMatchObject({ measured: false, value: 'No remnants yet' })

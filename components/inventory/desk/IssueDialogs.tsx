@@ -11,6 +11,7 @@ import {
   onJob, openJobs, returnProblem, returnToStore, updateJob, wasteOnJob, wasteProblem,
 } from '@/lib/workspace/jobs'
 import { fifo, usableOnHand } from '@/lib/workspace/ledger'
+import { linesMadeOn, linkableLines, madeForProblem, madeForText, salesLineLabel, setMadeFor } from '@/lib/workspace/sales'
 import type { Job } from '@/lib/workspace/types'
 import { RackSelect } from './RackSelect'
 
@@ -39,24 +40,38 @@ export function JobForm({ job, onClose, onSaved }: {
   const { workspace, update, today } = useWorkspace()
   const [no, setNo] = useState('')
   const [name, setName] = useState('')
-  const [customer, setCustomer] = useState('')
+  const [lineId, setLineId] = useState('')
+  const [was, setWas] = useState<string | undefined>(undefined)
   const [tried, setTried] = useState(false)
 
   useEffect(() => {
     if (job === undefined || !workspace) return
-    setNo(job?.no ?? nextJobNo(workspace)); setName(job?.name ?? ''); setCustomer(job?.customer ?? '')
+    setNo(job?.no ?? nextJobNo(workspace)); setName(job?.name ?? '')
+    // the line it is made for now, which a change here moves it off
+    const on = job ? linesMadeOn(workspace, job.id)[0]?.line.id : undefined
+    setLineId(on ?? ''); setWas(on)
     setTried(false)
   }, [job]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (job === undefined || !workspace) return null
   const word = jobWordCap(workspace).one
-  const input = { no, name, customer, openedOn: job?.openedOn ?? today }
-  const problem = jobProblem(workspace, input, job?.id)
+  const lines = linkableLines(workspace, job?.id)
+  const picked = lines.find((r) => r.line.id === lineId)
+  const input = {
+    no, name, openedOn: job?.openedOn ?? today,
+    // kept for an old one whose customer was typed; a new one's is its sales order's
+    customer: picked?.customer?.name ?? job?.customer,
+  }
+  const problem = jobProblem(workspace, input, job?.id) ?? madeForProblem(workspace, job?.id, lineId)
 
   const save = () => {
     setTried(true)
     if (problem) return
-    update((w) => (job ? updateJob(w, job.id, input) : addJob(w, input)[0]))
+    update((w) => {
+      if (job) return setMadeFor(updateJob(w, job.id, input), job.id, was, lineId)
+      const [w1, id] = addJob(w, input)
+      return id && lineId ? setMadeFor(w1, id, undefined, lineId) : w1
+    })
     onSaved?.(no.trim())
     onClose()
   }
@@ -70,9 +85,17 @@ export function JobForm({ job, onClose, onSaved }: {
         <Field label="What it is" htmlFor="jf-name">
           <TextInput id="jf-name" value={name} onChange={setName} onEnter={save} placeholder="Slim-fit jeans, 14 oz indigo" />
         </Field>
-        <Field label="For" htmlFor="jf-customer">
-          <TextInput id="jf-customer" value={customer} onChange={setCustomer} onEnter={save} placeholder="The customer, if there is one" />
+        <Field label="For sales order" htmlFor="jf-for"
+          hint={lines.length === 0 ? 'No open sales order line to make it for — it is made for stock.' : 'Blank is made for stock.'}>
+          <Select id="jf-for" value={lineId} onChange={setLineId}
+            options={[
+              { value: '', label: 'For stock — no sales order' },
+              ...lines.map((r) => ({ value: r.line.id, label: salesLineLabel(r) })),
+            ]} />
         </Field>
+        {!lineId && job?.customer && (
+          <p className="text-[12px] text-ink-3">Typed before it could name a sales order: “{job.customer}”.</p>
+        )}
       </div>
       <Foot onClose={onClose} onSave={save} label={job ? 'Save' : `Open the ${word.toLowerCase()}`} />
     </Dialog>
@@ -244,7 +267,7 @@ export function ReturnForm({ open, onClose, preset }: {
   }
 
   return (
-    <Dialog open onClose={onClose} title="Return to store" sub={`Material back from a ${word.one.toLowerCase()}.`}>
+    <Dialog open onClose={onClose} title="Return slip" sub={`Material back to the store from a ${word.one.toLowerCase()}.`}>
       <div className="space-y-3 px-4 py-4">
         {jobs.length === 0 ? (
           <p className="text-[12.5px] text-ink-3">Nothing has been issued yet, so nothing can come back.</p>
@@ -385,7 +408,7 @@ export function JobSheet({ jobId, onClose }: { jobId: string | null; onClose: ()
 
   return (
     <Dialog open onClose={onClose} wide title={`${word} ${row.job.no}${row.job.name ? ` — ${row.job.name}` : ''}`}
-      sub={`Opened ${shortDate(row.job.openedOn)}${row.job.customer ? ` · for ${row.job.customer}` : ''}${row.job.closedOn ? ` · closed ${shortDate(row.job.closedOn)}` : ''}`}>
+      sub={`Opened ${shortDate(row.job.openedOn)}${madeForText(workspace, row.job) ? ` · for ${madeForText(workspace, row.job)}` : ''}${row.job.closedOn ? ` · closed ${shortDate(row.job.closedOn)}` : ''}`}>
       <div className="space-y-4 px-4 py-4">
         {row.materials.length === 0 ? (
           <p className="text-[12.5px] text-ink-3">Nothing has been issued against it yet.</p>
@@ -462,7 +485,7 @@ export function IssueDocument({ slipId, onClose }: { slipId: string | null; onCl
   const slip = (workspace.issues ?? []).find((s) => s.id === slipId)
   return (
     <PaperDialog open onClose={onClose}
-      title={`${slip?.no ?? ''} — ${slip?.kind === 'return' ? 'return to store' : 'issue slip'}`}
+      title={`${slip?.no ?? ''} — ${slip?.kind === 'return' ? 'return slip' : 'issue slip'}`}
       papers={papers} sentTo={new Set()} onSent={() => {}} />
   )
 }

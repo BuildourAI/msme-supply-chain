@@ -116,13 +116,13 @@ export function Consignments() {
           of: (r) => r.verdict,
         }}
         tools={<DeskTools entity="consignment" noun="consignment" title="Consignments" rows={() => kit.toRows(rows)} />}
-        empty={{ line: 'Nothing booked with a carrier yet. Book a dispatch note with a carrier and it shows here until somebody confirms it arrived.' }}>
+        empty={{ line: 'Nothing booked with a carrier yet. Book a delivery challan with a carrier and it shows here until somebody confirms it arrived.' }}>
         {(shown) => (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
               <Figure label="On time, in full" value={landed.length ? `${otif.value}%` : '—'}
                 sub={landed.length ? `of ${landed.length} delivered · target ${dispatchRulesOf(ws).otifTargetPct}%` : 'nothing delivered yet'} />
-              <Figure label="Order to dock" value={ws.dispatchNotes.length ? `${dock.value} days` : '—'} sub="order taken to note raised" />
+              <Figure label="Order to dock" value={ws.dispatchNotes.length ? `${dock.value} days` : '—'} sub="sales order taken to challan raised" />
               <Figure label="Freight per unit" value={billed.length ? `₹${freight.value}` : '—'} sub={billed.length ? `over ${billed.length} with a bill` : 'no freight recorded'} />
               <Figure label="On the road" value={String(out.length)} sub={overdue ? `${overdue} past the promise` : 'none past the promise'} />
             </div>

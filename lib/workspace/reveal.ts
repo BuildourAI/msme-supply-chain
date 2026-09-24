@@ -210,15 +210,15 @@ export function inventoryNav(ws: Workspace, today = ''): NavRow[] {
     { label: 'Stock ledger', href: '/inventory/ledger', icon: 'boxes', badge: count(due) },
     /*
      * Work done on your own floor, against a style, job or order number, with
-     * how many are open. Called In-house whatever the owner's word; Jobwork,
-     * beside it, is work sent out to somebody else's floor on a challan.
+     * how many are open — material issued to your own floor. Sent for
+     * jobwork, beside it, is material sent to somebody else's on a challan.
      */
-    { label: 'In-house', href: '/inventory/issues', icon: 'factory', badge: count(openJobs(ws).length) },
+    { label: 'Issued to floor', href: '/inventory/issues', icon: 'factory', badge: count(openJobs(ws).length) },
     /*
      * The store's own material in somebody else's shed, with how many
      * challans are still out. Only what comes back passes the gate.
      */
-    { label: 'Jobwork', href: '/inventory/jobwork', icon: 'truck', badge: count(challansOut(ws).length) },
+    { label: 'Sent for jobwork', href: '/inventory/jobwork', icon: 'truck', badge: count(challansOut(ws).length) },
     /*
      * Only in a store that cuts. Remnants past their age, and cuts well below
      * plan nobody has looked at. Switched off, the row goes and every record
@@ -273,8 +273,8 @@ export function dispatchNav(ws: Workspace, today = ''): NavRow[] {
       icon: 'activity',
       badge: count(dispatchOpenCount(ws, today)),
     },
-    { label: 'Order book', href: '/dispatch/orders', icon: 'doc', badge: count(late) },
-    { label: 'Dispatch notes', href: '/dispatch/notes', icon: 'truck', badge: count(unbooked(ws).length) },
+    { label: 'Sales orders', href: '/dispatch/orders', icon: 'doc', badge: count(late) },
+    { label: 'Delivery challans', href: '/dispatch/notes', icon: 'truck', badge: count(unbooked(ws).length) },
     { label: 'Consignments', href: '/dispatch/consignments', icon: 'clock', badge: count(today ? overdueInTransit(ws, today) : 0) },
     { label: 'Returns', href: '/dispatch/returns', icon: 'undo', badge: count(overdueReturns(ws, today).length) },
     { label: 'Customers', href: '/dispatch/customers', icon: 'star', tucked: true },

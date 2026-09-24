@@ -50,7 +50,7 @@ function Dashboard() {
   const side: Side = {
     title: 'On the road',
     icon: 'truck',
-    quiet: { title: 'Nothing on the road', line: 'A dispatch note booked with a carrier shows here until somebody confirms it was delivered.' },
+    quiet: { title: 'Nothing on the road', line: 'A delivery challan booked with a carrier shows here until somebody confirms it was delivered.' },
     groups: road.map((g) => ({
       key: g.carrierId,
       label: g.carrier?.name ?? 'Unknown carrier',
@@ -94,7 +94,7 @@ function Dashboard() {
           <button type="button" onClick={() => setNoting(null)}
             className="press inline-flex items-center gap-1.5 rounded-lg border border-accent-ink bg-accent-ink px-3.5 py-2 text-[13px] font-semibold text-on-accent hover:bg-accent">
             <Icon name="truck" className="size-3.5" />
-            Raise a dispatch note
+            Raise a delivery challan
           </button>
         </div>
       </header>

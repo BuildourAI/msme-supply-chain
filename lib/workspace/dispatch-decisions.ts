@@ -234,7 +234,7 @@ export function dispatchDecisionsFor(ws: Workspace, today: string): Decision[] {
       band: 'costs',
       kind: 'return-overdue',
       title: `${r.rma.no} from ${r.customer?.name ?? 'a customer'} was due back ${shortDate(r.rma.dueBy)}`,
-      detail: `${r.rma.qty} ${r.product?.name ?? 'pieces'} against ${r.note?.no ?? 'a dispatch note'} — ${r.rma.reason}. Agreed by ${r.rma.owner}; ${late} day${late === 1 ? '' : 's'} past the date they were given.`,
+      detail: `${r.rma.qty} ${r.product?.name ?? 'pieces'} against ${r.note?.no ?? 'a delivery challan'} — ${r.rma.reason}. Agreed by ${r.rma.owner}; ${late} day${late === 1 ? '' : 's'} past the date they were given.`,
       act: 'receive',
       actLabel: 'Book it in',
       alt: { act: 'keep', label: 'Noted' },

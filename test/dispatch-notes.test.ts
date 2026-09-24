@@ -46,9 +46,9 @@ describe('a dispatch note', () => {
     const [ws, id] = raiseNote(booked(120), note(), TODAY)
     expect(id).toBe('DN-001')
     const n = ws.dispatchNotes[0]
-    expect([n.no, n.customerId, n.authorisedBy]).toEqual(['DN-1', 'CU-001', 'R. Mehta'])
+    expect([n.no, n.customerId, n.authorisedBy]).toEqual(['DC-1', 'CU-001', 'R. Mehta'])
     const out = ws.fgMoves.filter((m) => m.kind === 'despatch')
-    expect(out).toEqual([expect.objectContaining({ id: noteMoveId(id, 0), fgId: 'PR-001', qty: -100, sourceRef: 'DN-1' })])
+    expect(out).toEqual([expect.objectContaining({ id: noteMoveId(id, 0), fgId: 'PR-001', qty: -100, sourceRef: 'DC-1' })])
     expect(fgOnHand(ws, 'PR-001')).toBe(20)
     // the output those pieces came off can no longer be taken back
     expect(removeOutputProblem(ws, ws.outputs[0].id)).not.toBeNull()
@@ -78,7 +78,7 @@ describe('a dispatch note', () => {
     ;[ws] = raiseNote(ws, note({ orderId: 'SO-003', lines: [{ productId: 'PR-001', qty: 5 }] }), TODAY)
     expect(handoff(ws, 'DN-003').ewayNeeded).toBeNull()
     expect(noteRows(ws).map((r) => [r.note.no, r.units, r.valueAtCost])).toEqual([
-      ['DN-3', 5, 2100], ['DN-2', 40, 16800], ['DN-1', 100, 42000],
+      ['DC-3', 5, 2100], ['DC-2', 40, 16800], ['DC-1', 100, 42000],
     ])
   })
 })
@@ -96,12 +96,12 @@ describe('the delivery challan', () => {
       'Inside the state (CGST + SGST)',
       'E-way bill needed — the value is at or over ₹50,000',
     ])
-    expect(deliveryFileName(doc)).toBe('DN-1-Bharat-Panels.pdf')
+    expect(deliveryFileName(doc)).toBe('DC-1-Bharat-Panels.pdf')
     const words = deliveryMessageFor(doc)
-    expect(words).toMatch(/^Indigo Threads — delivery challan DN-1, 23 Sep 2026/)
+    expect(words).toMatch(/^Indigo Threads — delivery challan DC-1, 23 Sep 2026/)
     expect(words).toContain('With VRL Logistics (part load), docket VRL 4471902, expected by 25 Sep 2026')
     expect(words).toContain('E-way bill needed')
-    expect(deliverySendableFor(doc)).toMatchObject({ vendor: { name: 'Bharat Panels' }, subject: 'Delivery challan DN-1 — SO-1' })
+    expect(deliverySendableFor(doc)).toMatchObject({ vendor: { name: 'Bharat Panels' }, subject: 'Delivery challan DC-1 — SO-1' })
     expect(doc.problems).toEqual([])
   })
 })
@@ -134,7 +134,7 @@ describe('booking and delivery', () => {
     ws = markDelivered(ws, 'CN-002', { on: '2026-09-23', by: 'Their stores' }, TODAY)
     const rows = consignmentRows(ws, TODAY)
     expect(rows.map((r) => [r.note.no, r.onTime, r.inFull, r.verdict])).toEqual([
-      ['DN-2', true, true, 'otif'], ['DN-1', true, false, 'short'],
+      ['DC-2', true, true, 'otif'], ['DC-1', true, false, 'short'],
     ])
     expect(otifOf(rows).value).toBe(50)
     expect(orderToDock(ws).value).toBe(7.5) // 7 and 8 days from the 15th
@@ -146,22 +146,22 @@ describe('booking and delivery', () => {
     const road = onTheRoad(ws, TODAY)
     expect(road).toHaveLength(1)
     expect(road[0].carrier?.name).toBe('VRL Logistics')
-    expect(road[0].rows.map((x) => [x.row.note.no, x.daysAway, x.units])).toEqual([['DN-1', -1, 100], ['DN-2', 3, 60]])
-    expect(consignmentRows(ws, TODAY).find((r) => r.note.no === 'DN-1')?.verdict).toBe('overdue')
+    expect(road[0].rows.map((x) => [x.row.note.no, x.daysAway, x.units])).toEqual([['DC-1', -1, 100], ['DC-2', 3, 60]])
+    expect(consignmentRows(ws, TODAY).find((r) => r.note.no === 'DC-1')?.verdict).toBe('overdue')
   })
 })
 
 describe('the bay’s cards and figures', () => {
   it('asks for a carrier on a note nobody booked, and says an e-way bill is needed', () => {
     let [ws] = raiseNote(booked(120), note(), TODAY)
-    expect(unbooked(ws).map((n) => n.no)).toEqual(['DN-1'])
-    expect(dispatchNav(ws, TODAY).find((r) => r.label === 'Dispatch notes')?.badge).toBe('1')
+    expect(unbooked(ws).map((n) => n.no)).toEqual(['DC-1'])
+    expect(dispatchNav(ws, TODAY).find((r) => r.label === 'Delivery challans')?.badge).toBe('1')
     const cards = dispatchDecisionsFor(ws, TODAY)
     const book = cards.find((d) => d.kind === 'note-no-carrier')!
-    expect(book.title).toBe('DN-1 to Bharat Panels has no carrier or docket number')
+    expect(book.title).toBe('DC-1 to Bharat Panels has no carrier or docket number')
     expect([book.act, book.alt?.label]).toEqual(['book', 'Collected by them'])
     const eway = cards.find((d) => d.kind === 'note-eway')!
-    expect(eway.title).toBe('DN-1 is worth ₹90,000 — an e-way bill is needed before it moves')
+    expect(eway.title).toBe('DC-1 is worth ₹90,000 — an e-way bill is needed before it moves')
     expect(eway.href).toBe('/dispatch/notes?doc=DN-001')
     // booked, the first card goes; noted, the second does
     ;[ws] = bookConsignment(ws, 'DN-001', { carrierId: 'CR-002', promisedDate: TODAY })

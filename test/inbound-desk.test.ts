@@ -589,7 +589,7 @@ describe('the goods receipt note', () => {
     ws = closeReceipt(ws, id, { rejected: 4, inspector: 'S. Kale', closedAt: TODAY })
 
     const doc = buildGrn(ws, id)!
-    expect(doc.against).toBe('Order PO-1')
+    expect(doc.against).toBe('Purchase order PO-1')
     expect(doc.received).toBe('100 kg')
     expect(doc.accepted).toBe('96 kg')
     expect(doc.rejected).toBe('4 kg')

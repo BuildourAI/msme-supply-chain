@@ -73,7 +73,7 @@ export function ReturnForm({ noteId, onClose }: {
         <Field label="Went out on" htmlFor="rf-note">
           <Select id="rf-note" value={pick}
             onChange={(v) => { setPick(v); setProductId((ws.dispatchNotes ?? []).find((x) => x.id === v)?.lines[0]?.productId ?? '') }}
-            placeholder={notes.length ? 'Pick the dispatch note' : 'No delivered note to return against'}
+            placeholder={notes.length ? 'Pick the delivery challan' : 'No delivered challan to return against'}
             options={[...(note && !notes.some((x) => x.id === note.id) ? [note] : []), ...notes].map((x) => ({
               value: x.id, label: `${x.no} — ${name(x.customerId)} · ${shortDate(x.on)}`,
             }))} />

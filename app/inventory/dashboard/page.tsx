@@ -153,7 +153,7 @@ function Dashboard() {
         <ChaseDialog open onClose={() => setChasing(null)}
           title={`Chase ${chasing.vendor?.name ?? 'the jobworker'} on ${chasing.challan.no}`}
           vendorId={chasing.challan.vendorId}
-          subject={`Challan ${chasing.challan.no} — balance with you`}
+          subject={`Jobwork challan ${chasing.challan.no} — balance with you`}
           text={chasing.chase} />
       )}
       <ReturnForm challanId={returning} onClose={() => setReturning(null)} onBooked={(id) => setReturned(id)} />

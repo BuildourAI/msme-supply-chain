@@ -84,7 +84,7 @@ export function DueIn() {
           of: (r) => r.kind,
         }}
         empty={{
-          line: 'Nothing is due at the gate. An order appears here once it has been handed over, a challan once material is out — each against the day it should land.',
+          line: 'Nothing is due at the gate. A purchase order appears here once it has been handed over, a jobwork challan once material is out — each against the day it should land.',
           second: { label: 'Purchase orders', onClick: () => router.push('/sourcing/orders') },
         }}>
         {(shown) => {
@@ -103,7 +103,7 @@ export function DueIn() {
               {back.length > 0 && (
                 <section>
                   <Heading icon="factory" title="Back from jobworkers" count={back.length}
-                    sub="What should still come back on each challan, at the yield agreed" />
+                    sub="What should still come back on each jobwork challan, at the yield agreed" />
                   <BackTable rows={back} onBack={setReturning} />
                 </section>
               )}
@@ -137,7 +137,7 @@ function Heading({ icon, title, count, sub }: {
   )
 }
 
-/** The same words the Jobwork screen uses for where a challan stands. */
+/** The same words Sent for jobwork uses for where a jobwork challan stands. */
 function dueWord(d: DueBack): { label: string; tone: 'critical' | 'info' } {
   const late = d.row.late.value
   if (late > 0) return { label: `${late} day${late === 1 ? '' : 's'} overdue`, tone: 'critical' }
@@ -151,7 +151,7 @@ function BackTable({ rows, onBack }: { rows: DueBack[]; onBack: (challanId: stri
       <table className="w-full min-w-[620px] border-collapse text-[12px]" data-due-back>
         <thead>
           <tr className="border-b border-line text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-3">
-            <th className="py-1.5 pr-2 font-semibold">Challan</th>
+            <th className="py-1.5 pr-2 font-semibold">Jobwork challan</th>
             <th className="py-1.5 pr-2 font-semibold">Jobworker</th>
             <th className="w-full py-1.5 pr-2 font-semibold">Material</th>
             <th className="whitespace-nowrap py-1.5 pr-2 text-right font-semibold">Still to come</th>

@@ -40,7 +40,7 @@ export interface GrnDoc {
   /** the supplier, or the jobworker a return came back from */
   vendor: Vendor | null
   vendorAddress?: string
-  /** "Order PO-1", "Challan JW-1" */
+  /** "Purchase order PO-1", "Jobwork challan JW-1" */
   against: string
   material: string
   unit: string
@@ -111,7 +111,7 @@ export function buildGrn(ws: Workspace, receiptId: string): GrnDoc | null {
     company,
     vendor,
     vendorAddress: vendor ? ws.vendorContact[vendor.id]?.address : undefined,
-    against: order ? `Order ${order.no}` : challan ? `Challan ${challan.no}` : '—',
+    against: order ? `Purchase order ${order.no}` : challan ? `Jobwork challan ${challan.no}` : '—',
     material: item?.name ?? 'Unknown material',
     unit: uom,
     receivedOn: dmy(r.receivedOn),

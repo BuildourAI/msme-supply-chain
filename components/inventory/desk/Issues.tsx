@@ -13,6 +13,7 @@ import {
   closeJob, jobProblemToRemove, jobRows, jobWordCap, removeJob, removeSlip, removeSlipProblem,
   reopenJob, slipRows, type JobRow, type SlipRow,
 } from '@/lib/workspace/jobs'
+import { madeForText } from '@/lib/workspace/sales'
 import type { Job } from '@/lib/workspace/types'
 import { IssueDocument, IssueForm, JobForm, JobSheet, ReturnForm, WasteForm } from './IssueDialogs'
 
@@ -23,10 +24,10 @@ function Count({ n }: { n: number }) {
 }
 
 /**
- * In-house: what left the store for your own floor, and for what.
+ * Issued to floor: what left the store for your own floor, and for what.
  *
- * Called In-house because Jobwork, beside it on the rail, is material sent
- * out to somebody else's floor on a challan. Inside, the owner's word for the
+ * Named for where the material went, like Sent for jobwork beside it on the
+ * rail — material sent to somebody else's floor on a challan. Inside, the owner's word for the
  * thing itself — styles, jobs or orders — names the tab and every number. Two views:
  * each job with what it has used, and every slip that moved material, out or
  * back. A slip is the only way material leaves the store for the floor, so a
@@ -53,7 +54,10 @@ export function Issues() {
   const jobDrawn: Record<string, DrawnColumn<JobRow>> = {
     no: { cell: (r) => <span className="mono font-semibold text-ink">{r.job.no}</span>, text: (r) => r.job.no },
     name: { cell: (r) => <span className="text-ink">{r.job.name ?? ''}</span>, text: (r) => r.job.name ?? '' },
-    customer: { cell: (r) => <span className="text-ink-2">{r.job.customer ?? ''}</span>, text: (r) => r.job.customer ?? '' },
+    customer: {
+      cell: (r) => <span className="text-ink-2">{madeForText(ws, r.job)}</span>,
+      text: (r) => madeForText(ws, r.job),
+    },
     opened: { cell: (r) => shortDate(r.job.openedOn), text: (r) => r.job.openedOn },
     state: {
       cell: (r) => (r.open ? <StatePill label="Open" tone="info" />
@@ -120,8 +124,8 @@ export function Issues() {
   return (
     <>
       <ListPage
-        title="In-house" noun={word.one.toLowerCase()} rows={jobs}
-        search={(r) => `${r.job.no} ${r.job.name ?? ''} ${r.job.customer ?? ''} ${r.materials.map((m) => m.name).join(' ')} ${jobKit.searchText(r)}`}
+        title="Issued to floor" noun={word.one.toLowerCase()} rows={jobs}
+        search={(r) => `${r.job.no} ${r.job.name ?? ''} ${madeForText(ws, r.job)} ${r.materials.map((m) => m.name).join(' ')} ${jobKit.searchText(r)}`}
         filter={{
           label: 'Open and closed',
           options: [{ value: 'open', label: 'Open' }, { value: 'closed', label: 'Closed' }],
@@ -160,7 +164,7 @@ export function Issues() {
                 <span className="mb-2 flex gap-1.5">
                   <button type="button" onClick={() => setReturning({})}
                     className="press rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12.5px] font-medium hover:bg-surface-2">
-                    Return to store
+                    Return slip
                   </button>
                   <button type="button" onClick={() => setWasting({})}
                     className="press rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12.5px] font-medium hover:bg-surface-2">
