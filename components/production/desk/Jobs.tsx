@@ -8,11 +8,13 @@ import { DeskTools } from '@/components/sheet/DeskTools'
 import { buildColumns, type DrawnColumn } from '@/components/sheet/columns'
 import { ConfirmDelete } from '@/components/sourcing/ConfirmDelete'
 import { useWorkspace } from '@/components/workspace/store'
-import { IssueForm, ReturnForm, WasteForm } from '@/components/inventory/desk/IssueDialogs'
+import { IssueDocument, IssueForm, ReturnForm, WasteForm } from '@/components/inventory/desk/IssueDialogs'
 import { SendOutForm } from '@/components/inventory/desk/JobworkDialogs'
 import { addDays } from '@/lib/domain/calc'
 import { num, shortDate } from '@/lib/domain/format'
-import { closeJob, jobProblemToRemove, jobWordCap, removeJob, reopenJob } from '@/lib/workspace/jobs'
+import {
+  JOB_CARD, closeJob, jobProblemToRemove, removeJob, removeSlip, removeSlipProblem, reopenJob,
+} from '@/lib/workspace/jobs'
 import { outputRows, removeOutput, removeOutputProblem, type OutputRow } from '@/lib/workspace/output'
 import {
   PLAN_STATE_TONE, PLAN_STATE_WORD, floorOf, isWorkingDay, jobPlanRows, type JobPlanRow, type PlanState,
@@ -32,8 +34,9 @@ const pct = (v: number | null) => (v === null ? '—' : `${num(v, 1)}%`)
 
 /**
  * One home for a job card: opened here, planned here, and from its card
- * material goes to the floor or out on a challan — the slip and the challan
- * land in the store's lists.
+ * material goes to the floor or out on a challan. The slip is a movement on
+ * the stock ledger, and the challan sits in the store's Sent for jobwork.
+ * The screen is Job cards whatever they are numbered by — ST-1 or JC-1.
  *
  * Every style with the sales order it is for, its quantity, its dates and
  * its pace, and what has been booked against it: made, rejected, right first
@@ -58,6 +61,8 @@ export function Jobs() {
   const [sending, setSending] = useState<{ jobId: string } | null>(null)
   const [deletingJob, setDeletingJob] = useState<JobPlanRow | null>(null)
   const [deleting, setDeleting] = useState<OutputRow | null>(null)
+  const [paper, setPaper] = useState<string | null>(null)
+  const [untaking, setUntaking] = useState<string | null>(null)
 
   useEffect(() => {
     // a sales order line, a dashboard card or a figure links here with ?card=<job>
@@ -74,25 +79,32 @@ export function Jobs() {
 
   if (!workspace) return null
   const ws = workspace
-  const word = jobWordCap(ws)
+  const word = JOB_CARD
   const rows = jobPlanRows(ws, today)
   const log = outputRows(ws)
   const floor = floorOf(ws)
 
+  // a slip about to be taken back, in words
+  const untakingSlip = untaking ? (ws.issues ?? []).find((s) => s.id === untaking) : undefined
+  const untakingQty = untakingSlip?.lines.reduce((a, l) => a + l.qty, 0) ?? 0
+  const untakingUom = ws.items.find((i) => i.id === untakingSlip?.lines[0]?.itemId)?.uom ?? ''
+
   // the card steps aside for a form, and comes back when the form closes
   const leave = (id: string) => { setCard(null); setReturnTo(id) }
   const back = () => { if (returnTo) { setCard(returnTo); setReturnTo(null) } }
-  const act = (kind: CardAct, id: string, itemId?: string) => {
+  const act = (kind: CardAct, id: string, ref?: string) => {
     if (kind === 'close') { update((w) => closeJob(w, id, today)); return }
     if (kind === 'reopen') { update((w) => reopenJob(w, id)); return }
     leave(id)
     if (kind === 'edit') setOpening((ws.jobs ?? []).find((j) => j.id === id) ?? null)
     else if (kind === 'plan') setPlanning(id)
     else if (kind === 'output') setBooking({ jobId: id })
-    else if (kind === 'issue') setIssuing({ jobId: id, itemId })
+    else if (kind === 'issue') setIssuing({ jobId: id, itemId: ref })
     else if (kind === 'return') setReturning({ jobId: id })
     else if (kind === 'waste') setWasting({ jobId: id })
     else if (kind === 'sendout') setSending({ jobId: id })
+    else if (kind === 'slip' && ref) setPaper(ref)
+    else if (kind === 'takeback' && ref) setUntaking(ref)
   }
 
   const logDrawn: Record<string, DrawnColumn<OutputRow>> = {
@@ -215,7 +227,7 @@ export function Jobs() {
                   ]}
                   extra={{
                     icon: 'doc',
-                    label: (r) => `${word.one} card ${r.job.no}`,
+                    label: (r) => `${word.one} ${r.job.no}`,
                     onClick: (r) => setCard(r.job.id),
                   }}
                   extra2={{
@@ -279,6 +291,20 @@ export function Jobs() {
       <ReturnForm open={returning !== null} preset={returning ?? undefined} onClose={() => { setReturning(null); back() }} />
       <WasteForm open={wasting !== null} preset={wasting ?? undefined} onClose={() => { setWasting(null); back() }} />
       <SendOutForm open={sending !== null} preset={sending ?? undefined} onClose={() => { setSending(null); back() }} />
+      <IssueDocument slipId={paper} onClose={() => { setPaper(null); back() }} />
+      <ConfirmDelete
+        open={untaking !== null}
+        what={untakingSlip?.no ?? ''}
+        impact={{
+          clean: false,
+          losses: untakingSlip ? [untakingSlip.kind === 'issue'
+            ? `${num(untakingQty, 3)} ${untakingUom} goes back onto the lots it came off`
+            : `${num(untakingQty, 3)} ${untakingUom} comes off the store again`] : [],
+        }}
+        blocked={untaking ? removeSlipProblem(ws, untaking) : null}
+        onClose={() => { setUntaking(null); back() }}
+        onConfirm={() => { if (untaking) update((w) => removeSlip(w, untaking)) }}
+      />
       <ConfirmDelete
         open={deletingJob !== null}
         what={deletingJob ? `${word.one.toLowerCase()} ${deletingJob.job.no}` : ''}

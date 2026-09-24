@@ -36,6 +36,13 @@ export function readJobNumbering(raw: unknown): JobNumbering | undefined {
 // a word this build no longer offers reads as a job card, never as nothing
 export const jobWord = (ws: Workspace) => JOB_WORD[ws.jobNumbering?.word ?? 'job'] ?? JOB_WORD.job
 
+/**
+ * What Production calls the record itself — its menu row, its screen and the
+ * card — whatever the owner numbers them by. A garment shop's card still
+ * reads ST-1; the thing it is written on is a job card.
+ */
+export const JOB_CARD = { one: 'Job card', many: 'Job cards' } as const
+
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 export const jobWordCap = (ws: Workspace) => {
   const w = jobWord(ws)

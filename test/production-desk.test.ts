@@ -87,10 +87,10 @@ describe('the floor’s set-up', () => {
     expect(BUILT).toContain('production')
     expect(STAGE_HOME.production).toBe('/production/dashboard')
     const rows = productionNav(base(), TODAY)
-    expect(rows.map((r) => r.label)).toEqual(['Dashboard', 'Styles', 'Line watch', 'Turnaround', 'Products'])
+    expect(rows.map((r) => r.label)).toEqual(['Dashboard', 'Job cards', 'Line watch', 'Turnaround', 'Products'])
     expect(rows.filter((r) => r.tucked).map((r) => r.label)).toEqual(['Products'])
     // two styles open, neither planned
-    expect(rows.find((r) => r.label === 'Styles')).toMatchObject({ href: '/production/jobs', badge: '2' })
+    expect(rows.find((r) => r.label === 'Job cards')).toMatchObject({ href: '/production/jobs', badge: '2' })
     expect(navFor('production', base(), TODAY)).toEqual(rows)
   })
 

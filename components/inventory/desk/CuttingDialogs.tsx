@@ -43,7 +43,7 @@ function JobPick({ id, value, onChange, none }: {
   const jobs = openJobs(workspace)
   return (
     <Select id={id} value={value} onChange={onChange}
-      placeholder={!none && jobs.length === 0 ? `No ${word.many.toLowerCase()} open — open one on Production › ${word.many}` : undefined}
+      placeholder={!none && jobs.length === 0 ? `No ${word.many.toLowerCase()} open — open one on Production › Job cards` : undefined}
       options={[
         ...(none ? [{ value: '', label: none }] : []),
         ...jobs.map((j) => ({ value: j.id, label: `${j.no}${j.name ? ` — ${j.name}` : ''}` })),

@@ -7,11 +7,10 @@ import { useWorkspace } from '@/components/workspace/store'
 import { money, num, shortDate } from '@/lib/domain/format'
 import { buildIssueSlip, issueFileName, issueSendableFor, renderIssueSlip } from '@/lib/paper/issue'
 import {
-  issueMaterial, issueProblem, jobRows, jobWordCap, lastDrawnLot,
+  issueMaterial, issueProblem, jobWordCap, lastDrawnLot,
   onJob, openJobs, returnProblem, returnToStore, wasteOnJob, wasteProblem, type JobMaterial,
 } from '@/lib/workspace/jobs'
 import { fifo, usableOnHand } from '@/lib/workspace/ledger'
-import { madeForText } from '@/lib/workspace/sales'
 import { RackSelect } from './RackSelect'
 
 const n = (v: string) => (v.trim() === '' ? NaN : Number(v.replace(/,/g, '')))
@@ -30,9 +29,9 @@ function Foot({ onClose, label, onSave }: { onClose: () => void; label: string; 
 }
 
 /*
- * A job is opened on Production — its card is the floor's, and the store never
- * invents one. What lives here is what the store does against it: the issue
- * slip, the return slip, wastage, and the sheet that sums them.
+ * A job card is opened in Production, and everything here is done from it:
+ * the issue slip, the return slip, wastage, what it has had, and the slip as
+ * paper. The store never invents a job card.
  */
 
 /**
@@ -95,7 +94,7 @@ export function IssueForm({ open, onClose, preset, onIssued }: {
           <Field label={word.one} htmlFor="is-job">
             {/* only what is open: the store issues against a job card, it never opens one */}
             <Select id="is-job" value={jobId} onChange={setJobId}
-              placeholder={openJobs(ws).length ? undefined : `No ${word.many.toLowerCase()} open — open one on Production › ${word.many}`}
+              placeholder={openJobs(ws).length ? undefined : `No ${word.many.toLowerCase()} open — open one on Production › Job cards`}
               options={openJobs(ws).map((j) => ({ value: j.id, label: `${j.no}${j.name ? ` — ${j.name}` : ''}` }))} />
           </Field>
           <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-2">
@@ -314,8 +313,8 @@ export function WasteForm({ open, onClose, preset }: {
 
 /**
  * Everything a job has had, by material: issued, back, wasted, used, and what
- * it was worth. The table alone — the store's sheet and the floor's job card
- * both show it.
+ * it was worth. The table alone, for the job card to show when there is no
+ * plan for Line watch to judge.
  */
 export function JobMaterials({ materials, word }: { materials: JobMaterial[]; word: string }) {
   if (materials.length === 0) return <p className="text-[12.5px] text-ink-3">Nothing has been issued against it yet.</p>
@@ -355,8 +354,16 @@ export function JobMaterials({ materials, word }: { materials: JobMaterial[]; wo
   )
 }
 
-/** The slips and, where material is cut, the cuts made for a job — in the order they happened. Nothing, when there are none. */
-export function JobHistory({ jobId }: { jobId: string }) {
+/**
+ * The slips and, where material is cut, the cuts made for a job — in the
+ * order they happened. Nothing, when there are none. A slip can be opened as
+ * paper, or taken back when it was written by mistake.
+ */
+export function JobHistory({ jobId, onSlip, onTakeBack }: {
+  jobId: string
+  onSlip?: (slipId: string) => void
+  onTakeBack?: (slipId: string) => void
+}) {
   const { workspace } = useWorkspace()
   if (!workspace) return null
   const history = [
@@ -368,10 +375,20 @@ export function JobHistory({ jobId }: { jobId: string }) {
   return (
     <ul className="space-y-1 text-[12.5px] text-ink-2">
       {history.map((h) => (h.kind === 'slip' ? (
-        <li key={h.s.id}>
-          <span className="mono">{h.s.no}</span> · {shortDate(h.s.on)} · {h.s.kind === 'issue' ? 'issued' : 'back'}{' '}
-          {num(h.s.lines.reduce((a, l) => a + l.qty, 0), 3)} {itemOf(h.s.lines[0]?.itemId)?.uom ?? ''}{' '}
-          of {itemOf(h.s.lines[0]?.itemId)?.name ?? 'material'}{h.s.takenBy ? ` · ${h.s.takenBy}` : ''}
+        <li key={h.s.id} className="flex flex-wrap items-center gap-x-2 gap-y-1" data-slip={h.s.no}>
+          <span>
+            <span className="mono">{h.s.no}</span> · {shortDate(h.s.on)} · {h.s.kind === 'issue' ? 'issued' : 'back'}{' '}
+            {num(h.s.lines.reduce((a, l) => a + l.qty, 0), 3)} {itemOf(h.s.lines[0]?.itemId)?.uom ?? ''}{' '}
+            of {itemOf(h.s.lines[0]?.itemId)?.name ?? 'material'}{h.s.takenBy ? ` · ${h.s.takenBy}` : ''}
+          </span>
+          {onSlip && (
+            <button type="button" onClick={() => onSlip(h.s.id)} aria-label={`The slip ${h.s.no}`}
+              className="press rounded-md px-1.5 py-0.5 text-[12px] font-medium text-accent-ink hover:bg-surface-2">The slip</button>
+          )}
+          {onTakeBack && (
+            <button type="button" onClick={() => onTakeBack(h.s.id)} aria-label={`Take back ${h.s.no}`}
+              className="press rounded-md px-1.5 py-0.5 text-[12px] font-medium text-ink-3 hover:bg-surface-2 hover:text-critical">Take back</button>
+          )}
         </li>
       ) : (
         <li key={h.c.id}>
@@ -381,25 +398,6 @@ export function JobHistory({ jobId }: { jobId: string }) {
         </li>
       )))}
     </ul>
-  )
-}
-
-/** The store's sheet on a job: what it has had, and the slips that moved it. Read-only — the job itself is the floor's. */
-export function JobSheet({ jobId, onClose }: { jobId: string | null; onClose: () => void }) {
-  const { workspace } = useWorkspace()
-  if (!jobId || !workspace) return null
-  const row = jobRows(workspace).find((r) => r.job.id === jobId)
-  if (!row) return null
-  const word = jobWordCap(workspace).one
-
-  return (
-    <Dialog open onClose={onClose} wide title={`${word} ${row.job.no}${row.job.name ? ` — ${row.job.name}` : ''}`}
-      sub={`Opened ${shortDate(row.job.openedOn)}${madeForText(workspace, row.job) ? ` · for ${madeForText(workspace, row.job)}` : ''}${row.job.closedOn ? ` · closed ${shortDate(row.job.closedOn)}` : ''}`}>
-      <div className="space-y-4 px-4 py-4">
-        <JobMaterials materials={row.materials} word={word} />
-        <JobHistory jobId={jobId} />
-      </div>
-    </Dialog>
   )
 }
 

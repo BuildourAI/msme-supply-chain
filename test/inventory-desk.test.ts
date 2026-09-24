@@ -23,7 +23,7 @@ import {
   addRack, placeLot, rackImpact, rackProblem, rackRows, removeRack, unplacedLots, updateRack,
 } from '@/lib/workspace/racks'
 import { closeReceipt, arrive, removeReceipt, removeReceiptProblem } from '@/lib/workspace/receipts'
-import { BUILT, STAGE_HOME, inventoryNav, navFor } from '@/lib/workspace/reveal'
+import { BUILT, STAGE_HOME, inventoryNav, navFor, productionNav } from '@/lib/workspace/reveal'
 import { removeItem } from '@/lib/workspace/sourcing'
 import { parseStored } from '@/lib/workspace/storage'
 import { SCHEMA, type Workspace } from '@/lib/workspace/types'
@@ -106,16 +106,17 @@ describe('the store\'s rail', () => {
 
   it('keeps racks under More, and badges only work waiting', () => {
     const rows = inventoryNav(set(), TODAY)
-    expect(rows.map((r) => r.label)).toEqual(['Dashboard', 'Stock ledger', 'Issued to floor', 'Sent for jobwork', 'Wastage & loss', 'Racks'])
+    expect(rows.map((r) => r.label)).toEqual(['Dashboard', 'Stock ledger', 'Sent for jobwork', 'Wastage & loss', 'Racks'])
     expect(rows.filter((r) => r.tucked).map((r) => r.label)).toEqual(['Racks'])
     expect(rows.every((r) => r.badge === undefined)).toBe(true)
     expect(navFor('inventory', set(), TODAY)).toEqual(rows)
   })
 
-  it('calls the jobs row In-house whatever the owner\'s word, and badges the open ones', () => {
+  it('has no row of its own for material to the floor — that is issued from the job card', () => {
     let ws = setJobNumbering(set(), { word: 'style', prefix: 'ST' })
     ;[ws] = addJob(ws, { no: 'ST-1', openedOn: TODAY })
-    expect(inventoryNav(ws, TODAY).find((r) => r.href === '/inventory/issues')).toMatchObject({ label: 'Issued to floor', badge: '1' })
+    expect(inventoryNav(ws, TODAY).some((r) => r.href === '/inventory/issues')).toBe(false)
+    expect(productionNav(ws, TODAY).find((r) => r.href === '/production/jobs')?.label).toBe('Job cards')
   })
 
   it('badges the ledger with lots past their counting date', () => {

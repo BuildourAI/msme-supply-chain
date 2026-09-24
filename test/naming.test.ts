@@ -145,14 +145,15 @@ describe('the rails say where things are', () => {
     expect([first.title, first.cta]).toEqual(['Your first sales order', 'New sales order'])
   })
 
-  it('names the store\'s two ways out by where the material went', () => {
+  it('keeps the store\'s one way out, to a jobworker; the floor\'s is the job card', () => {
     const labels = inventoryNav(bay(), TODAY).map((r) => r.label)
-    expect(labels.slice(2, 4)).toEqual(['Issued to floor', 'Sent for jobwork'])
+    expect(labels[2]).toBe('Sent for jobwork')
+    expect(labels).not.toContain('Issued to floor')
   })
 
-  it('names the floor\'s job cards by the owner\'s word, and keeps their set-up step there', () => {
+  it('calls the floor\'s row Job cards whatever they are numbered by, and keeps their set-up step there', () => {
     const rows = productionNav(bay(), TODAY)
-    expect(rows[1]).toMatchObject({ label: 'Styles', href: '/production/jobs' })
+    expect(rows[1]).toMatchObject({ label: 'Job cards', href: '/production/jobs' })
     expect(rows.map((r) => r.label)).not.toContain('Plan vs actual')
     expect(productionNav(setJobNumbering(bay(), { word: 'job', prefix: 'JC' }), TODAY)[1].label).toBe('Job cards')
     expect(stepsFor('production').map((s) => s.id)).toContain('jobs')

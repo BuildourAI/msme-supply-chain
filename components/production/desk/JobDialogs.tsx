@@ -8,7 +8,7 @@ import { JobHistory, JobMaterials } from '@/components/inventory/desk/IssueDialo
 import { statePill } from '@/components/inventory/desk/Jobwork'
 import { longDate, num, shortDate } from '@/lib/domain/format'
 import { challanRows } from '@/lib/workspace/inbound'
-import { addJob, jobProblem, jobRows, jobWordCap, nextJobNo, updateJob } from '@/lib/workspace/jobs'
+import { JOB_CARD, addJob, jobProblem, jobRows, nextJobNo, updateJob } from '@/lib/workspace/jobs'
 import { jobworkers } from '@/lib/workspace/jobwork'
 import { lineWatch } from '@/lib/workspace/linewatch'
 import { PLAN_STATE_TONE, PLAN_STATE_WORD, jobPlanRow } from '@/lib/workspace/plan'
@@ -58,7 +58,7 @@ export function JobForm({ job, onClose, onSaved }: {
   }, [job]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (job === undefined || !workspace) return null
-  const word = jobWordCap(workspace).one
+  const word = JOB_CARD.one
   const lines = linkableLines(workspace, job?.id)
   const picked = lines.find((r) => r.line.id === lineId)
   const input = {
@@ -108,7 +108,7 @@ export function JobForm({ job, onClose, onSaved }: {
 }
 
 /** What a person can start from the card. The screen closes the card, opens the form, and brings the card back after. */
-export type CardAct = 'edit' | 'plan' | 'output' | 'issue' | 'return' | 'waste' | 'sendout' | 'close' | 'reopen'
+export type CardAct = 'edit' | 'plan' | 'output' | 'issue' | 'return' | 'waste' | 'sendout' | 'close' | 'reopen' | 'slip' | 'takeback'
 
 function Section({ title, actions, children }: { title: string; actions?: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -144,14 +144,15 @@ function Quiet({ onClick, children }: { onClick: () => void; children: React.Rea
 export function JobCard({ jobId, onClose, onAct }: {
   jobId: string | null
   onClose: () => void
-  onAct: (kind: CardAct, jobId: string, itemId?: string) => void
+  /** the third argument is the material to issue, or the slip to open or take back */
+  onAct: (kind: CardAct, jobId: string, ref?: string) => void
 }) {
   const { workspace, today } = useWorkspace()
   if (!jobId || !workspace) return null
   const ws = workspace
   const job = (ws.jobs ?? []).find((j) => j.id === jobId)
   if (!job) return null
-  const word = jobWordCap(ws).one
+  const word = JOB_CARD.one
   const row = jobPlanRow(ws, job, today)
   const store = jobRows(ws).find((r) => r.job.id === jobId)
   // built from the planned, open jobs — a closed or unplanned one has no line to watch
@@ -161,7 +162,7 @@ export function JobCard({ jobId, onClose, onAct }: {
   const open = !job.closedOn
   const hasSlips = (store?.materials.length ?? 0) > 0
   const uom = row.product?.uom ?? ''
-  const act = (kind: CardAct, itemId?: string) => onAct(kind, jobId, itemId)
+  const act = (kind: CardAct, ref?: string) => onAct(kind, jobId, ref)
 
   return (
     <Dialog open onClose={onClose} wide title={`${word} ${job.no}${job.name ? ` — ${job.name}` : ''}`}
@@ -232,7 +233,7 @@ export function JobCard({ jobId, onClose, onAct }: {
 
         {hasSlips && (
           <Section title="Slips and cuts">
-            <JobHistory jobId={jobId} />
+            <JobHistory jobId={jobId} onSlip={(id) => act('slip', id)} onTakeBack={(id) => act('takeback', id)} />
           </Section>
         )}
       </div>

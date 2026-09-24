@@ -31,10 +31,11 @@ import { CloseChallanDialog, ExtendDueDialog, ReturnForm, SendOutForm } from './
  * five always add up to what went out. It is the sample company's INB-03,
  * over the owner's own challans.
  *
- * It sits in the store, beside Issued to floor: that is material issued to
- * your own floor on a slip, this is material sent to somebody else's on a
- * jobwork challan. Only what comes back passes the gate. A challan can say which
- * style it went out for, and each one carries the GST year — inputs not back
+ * It sits in the store. Material to your own floor goes on a slip from the
+ * job card in Production; this is material sent to somebody else's floor on
+ * a jobwork challan, whether a job card sent it or it went out as loose
+ * stock. Only what comes back passes the gate. A challan can say which job
+ * card it went out for, and each one carries the GST year — inputs not back
  * within a year of leaving count as supplied to the jobworker.
  *
  * Two views of one book. The register is a card per challan, with the split

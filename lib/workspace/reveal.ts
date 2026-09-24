@@ -29,7 +29,7 @@ import { overdueInTransit } from './consignments'
 import { overdueReturns } from './returns'
 import { dispatchOpenCount } from './dispatch-decisions'
 import { cutRows, offcutRows } from './cutting'
-import { jobWordCap, openJobs } from './jobs'
+import { JOB_CARD } from './jobs'
 import { lotRows } from './ledger'
 import { unsoldPast } from './losses'
 import { unplacedLots } from './racks'
@@ -209,14 +209,11 @@ export function inventoryNav(ws: Workspace, today = ''): NavRow[] {
     },
     { label: 'Stock ledger', href: '/inventory/ledger', icon: 'boxes', badge: count(due) },
     /*
-     * Material issued to your own floor against a style or job card opened
-     * in Production, with how many are open. Sent for jobwork, beside it, is
-     * material sent to somebody else's floor on a challan.
-     */
-    { label: 'Issued to floor', href: '/inventory/issues', icon: 'factory', badge: count(openJobs(ws).length) },
-    /*
-     * The store's own material in somebody else's shed, with how many
-     * challans are still out. Only what comes back passes the gate.
+     * Material to your own floor is issued from each job card in Production,
+     * and every slip is a movement on the stock ledger — so the store has no
+     * row of its own for it. What it keeps is its own material in somebody
+     * else's shed, with how many challans are still out, whether or not a
+     * job card sent it. Only what comes back passes the gate.
      */
     { label: 'Sent for jobwork', href: '/inventory/jobwork', icon: 'truck', badge: count(challansOut(ws).length) },
     /*
@@ -241,8 +238,9 @@ export function inventoryNav(ws: Workspace, today = ''): NavRow[] {
  * unplanned, jobs that will not run as planned, products whose material list
  * has no quantities.
  *
- * The job cards row carries the owner's own word, because it is the thing
- * itself — opened, planned and closed here — not a report on it.
+ * The job cards row is the thing itself — opened, planned, issued against and
+ * closed there — not a report on it. It is called Job cards whatever the
+ * owner numbers them by (ST-1 or JC-1).
  */
 export function productionNav(ws: Workspace, today = ''): NavRow[] {
   const plans = today ? jobPlanRows(ws, today) : []
@@ -254,7 +252,7 @@ export function productionNav(ws: Workspace, today = ''): NavRow[] {
       icon: 'activity',
       badge: count(productionOpenCount(ws, today)),
     },
-    { label: jobWordCap(ws).many, href: '/production/jobs', icon: 'factory', badge: count(pace) },
+    { label: JOB_CARD.many, href: '/production/jobs', icon: 'factory', badge: count(pace) },
     { label: 'Line watch', href: '/production/line-watch', icon: 'eye', badge: count(today ? stoppingThisWeek(lineWatch(ws, today)).length : 0) },
     // a reading, not a queue: nothing on it goes down when somebody acts
     { label: 'Turnaround', href: '/production/turnaround', icon: 'clock' },
