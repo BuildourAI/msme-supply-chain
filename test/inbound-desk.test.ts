@@ -18,6 +18,8 @@ import { inboundDecisionsFor, inboundOpenCount } from '@/lib/workspace/inbound-d
 import { JOBWORKER, jobworkers } from '@/lib/workspace/jobwork'
 import { metricsFor, pickedMetrics, INBOUND_PICKS, DEFAULT_PICKS } from '@/lib/workspace/metrics'
 import { BUILT, STAGE_HOME, inboundNav, navFor, sourcingNav } from '@/lib/workspace/reveal'
+import { dueInCount } from '@/lib/workspace/due'
+import { markHandedOver } from '@/lib/workspace/orders'
 import { removeItem, removeVendor } from '@/lib/workspace/sourcing'
 import { parseStored } from '@/lib/workspace/storage'
 import { SCHEMA, type Workspace } from '@/lib/workspace/types'
@@ -241,11 +243,12 @@ describe('the inbound rail', () => {
     expect(STAGE_HOME.inbound).toBe('/inbound/dashboard')
   })
 
-  it('has five rows, none of them "later"', () => {
+  it('has the gate\'s rows, none of them "later" — orders are sourcing\'s', () => {
     const rows = inboundNav(set(), TODAY)
-    expect(rows.map((r) => r.label)).toEqual(['Dashboard', 'Receiving', 'Checks', 'Open orders', 'Jobwork'])
+    expect(rows.map((r) => r.label)).toEqual(['Dashboard', 'Receiving', 'Checks', 'Due in', 'Jobwork'])
+    expect(rows.map((r) => r.href)).not.toContain('/inbound/orders')
     expect(rows.some((r) => r.later)).toBe(false)
-    // five rows is short enough that nothing needs a "More"
+    // short enough that nothing needs a "More"
     expect(rows.some((r) => r.tucked)).toBe(false)
     expect(navFor('inbound', set(), TODAY)).toEqual(rows)
     expect(navFor('sourcing', set(), TODAY)).toEqual(sourcingNav(set(), TODAY))
@@ -292,6 +295,41 @@ describe('the gate\'s queue', () => {
   })
 })
 
+/* ================================================================== due in */
+
+describe('what the gate expects', () => {
+  const due = (expectedOn: string, state: 'confirmed' | 'draft' = 'confirmed'): Workspace => ({
+    ...set(),
+    stockLots: [{ id: 'LOT-001', itemId: 'IT-001', batchNo: 'OPENING', qty: 500, usability: 'usable' }],
+    orders: [{
+      id: 'PO-001', no: 'PO-1', vendorId: 'VN-001', itemId: 'IT-001', qty: 100, unitPrice: 80,
+      orderedOn: '2026-09-10', expectedOn, state,
+    }],
+  })
+  const badge = (ws: Workspace, today = TODAY) => inboundNav(ws, today).find((r) => r.label === 'Due in')?.badge
+
+  it('counts an order line due today or past its date, and not one still on its way', () => {
+    expect(dueInCount(due(TODAY), TODAY)).toBe(1)
+    expect(dueInCount(due('2026-09-17'), TODAY)).toBe(1)
+    expect(badge(due(TODAY))).toBe('1')
+    expect(badge(due('2026-09-27'))).toBeUndefined()
+  })
+
+  it('never counts a draft — the supplier does not have it yet', () => {
+    expect(dueInCount(due(TODAY, 'draft'), TODAY)).toBe(0)
+  })
+
+  it('stops counting once it has all come', () => {
+    const ws = due(TODAY)
+    const [arrived] = arrive(ws, { order: ws.orders[0], qty: 100, receivedOn: TODAY })
+    expect(dueInCount(arrived, TODAY)).toBe(0)
+  })
+
+  it('counts nothing without a date', () => {
+    expect(dueInCount(due(TODAY), '')).toBe(0)
+  })
+})
+
 /* =============================================================== the figures */
 
 describe('the gate\'s figures', () => {
@@ -312,6 +350,29 @@ describe('the gate\'s figures', () => {
     const ws = { ...fresh(), metricPicks: ['stale'], inboundMetricPicks: ['qcHeld'] }
     expect(pickedMetrics(ws, TODAY, 'inbound').map((m) => m.key)).toEqual(['qcHeld'])
     expect(pickedMetrics(ws, TODAY).map((m) => m.key)).toEqual(['stale'])
+  })
+
+  it('shows what rides on unconfirmed changes on sourcing, where they are confirmed', () => {
+    expect(INBOUND_PICKS).not.toContain('unacked')
+    expect(DEFAULT_PICKS).toContain('unacked')
+    expect(pickedMetrics(fresh(), TODAY, 'inbound').map((m) => m.key)).not.toContain('unacked')
+    expect(pickedMetrics(fresh(), TODAY).map((m) => m.key)).toContain('unacked')
+    const handed = markHandedOver({
+      ...set(),
+      orders: [{
+        id: 'PO-001', no: 'PO-1', vendorId: 'VN-001', itemId: 'IT-001', qty: 100, unitPrice: 80,
+        orderedOn: '2026-09-10', expectedOn: '2026-09-28', state: 'draft',
+      }],
+    }, 'PO-1', TODAY, 'R. Mehta')
+    expect(pickedMetrics(handed, TODAY).find((m) => m.key === 'unacked')?.href).toBe('/sourcing/orders')
+  })
+
+  it('brings a figure the owner kept at the gate along to sourcing', () => {
+    const kept = { ...fresh(), metricPicks: ['stale'], inboundMetricPicks: ['qcHeld', 'unacked'] }
+    expect(pickedMetrics(kept, TODAY).map((m) => m.key)).toEqual(['stale', 'unacked'])
+    // one they never chose at the gate is not forced on them
+    const not = { ...fresh(), metricPicks: ['stale'], inboundMetricPicks: ['qcHeld'] }
+    expect(pickedMetrics(not, TODAY).map((m) => m.key)).toEqual(['stale'])
   })
 })
 

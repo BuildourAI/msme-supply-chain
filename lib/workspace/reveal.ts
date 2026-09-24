@@ -34,7 +34,7 @@ import { lotRows } from './ledger'
 import { unsoldPast } from './losses'
 import { unplacedLots } from './racks'
 import { challansOut } from './jobwork'
-import { awaitingAckNos } from './orders'
+import { dueInCount } from './due'
 import { openReceipts } from './receipts'
 import { staleRates } from './sourcing'
 import type { Workspace } from './types'
@@ -163,17 +163,16 @@ export function sourcingNav(ws: Workspace, today = ''): NavRow[] {
 }
 
 /**
- * The inbound desk's rows: the gate, and the three things that decide what
- * reaches it.
+ * The inbound desk's rows: the gate, what it checks, and what it should expect.
  *
- * Five rows, not eight. Suppliers and materials stay on the sourcing rail — a
- * jobworker is a supplier of type Jobworker, and a material is the same
- * material whichever stage you are standing in. Every badge is a number that
- * goes down when somebody does something.
+ * Suppliers and materials stay on the sourcing rail — a jobworker is a
+ * supplier of type Jobworker, and a material is the same material whichever
+ * stage you are standing in. An order is sourcing's too, from draft to the
+ * supplier's confirmation of its last change: the gate sees it on Due in, the
+ * day it should land, and never changes it. Every badge is a number that goes
+ * down when somebody does something.
  */
 export function inboundNav(ws: Workspace, today = ''): NavRow[] {
-  // by NUMBER: one confirmation covers every line on the document
-  const unconfirmed = awaitingAckNos(ws).length
   return [
     {
       label: 'Dashboard',
@@ -185,8 +184,8 @@ export function inboundNav(ws: Workspace, today = ''): NavRow[] {
     { label: 'Receiving', href: '/inbound/receiving', icon: 'tray', badge: count(openReceipts(ws).length) },
     // materials nobody has written a check for yet
     { label: 'Checks', href: '/inbound/checks', icon: 'check', badge: count(uncheckedItems(ws).length) },
-    // orders changed and not yet confirmed by their supplier, told or not
-    { label: 'Open orders', href: '/inbound/orders', icon: 'cart', badge: count(unconfirmed) },
+    // lines due today or earlier, from suppliers and back from jobworkers, not here yet
+    { label: 'Due in', href: '/inbound/due', icon: 'calendar', badge: count(dueInCount(ws, today)) },
     { label: 'Jobwork', href: '/inbound/jobwork', icon: 'factory', badge: count(challansOut(ws).length) },
   ]
 }

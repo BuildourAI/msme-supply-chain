@@ -19,6 +19,7 @@ import {
   registerLedger, removeChallan, sendOut, sendOutProblem, usableOnHand, type SendOut,
 } from '@/lib/workspace/jobwork'
 import { closeReceipt, receiptsFor } from '@/lib/workspace/receipts'
+import { dueBackRows, dueInCount } from '@/lib/workspace/due'
 import { trail } from '@/lib/workspace/ledger'
 import { removeVendor, vendorImpact } from '@/lib/workspace/sourcing'
 import type { Item, VendorItem } from '@/lib/domain/types'
@@ -303,6 +304,32 @@ describe('what the gate is asked about jobwork', () => {
     expect(kinds(ws)).not.toContain('over-ceiling')
     const tight = { ...ws, policy: { ...ws.policy, jobworkerExposureCeiling: 30000 } }
     expect(kinds(tight)).toContain('over-ceiling')
+  })
+})
+
+describe('what the gate expects back', () => {
+  it('lists what should still come back, at the yield agreed', () => {
+    const [ws] = sent()
+    const [d] = dueBackRows(ws, TODAY)
+    // 50 kg sent at 95 in 100
+    expect(d).toMatchObject({ left: 47.5, overdue: false })
+    expect(d.row.challan.no).toBe('JW-1')
+  })
+
+  it('counts it on the gate\'s badge once its day has come', () => {
+    expect(dueInCount(sent()[0], TODAY)).toBe(0)
+    expect(dueInCount(sent({ dueBack: TODAY })[0], TODAY)).toBe(1)
+    const [late] = sent({ dueBack: '2026-09-15' })
+    expect(dueBackRows(late, TODAY)[0].overdue).toBe(true)
+    expect(dueInCount(late, TODAY)).toBe(1)
+  })
+
+  it('stops expecting what is back at the gate or on the shelf', () => {
+    const [ws, jw] = sent({ dueBack: '2026-09-15' })
+    const [atGate] = bookReturn(ws, jw, { qty: 47.5, receivedOn: '2026-09-18' })
+    expect(dueBackRows(atGate, TODAY)).toEqual([])
+    expect(dueInCount(atGate, TODAY)).toBe(0)
+    expect(dueBackRows(backClean().ws, TODAY).map((d) => d.left)).toEqual([2.5])
   })
 })
 

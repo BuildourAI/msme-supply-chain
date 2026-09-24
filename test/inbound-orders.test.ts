@@ -1,5 +1,6 @@
 /**
- * Open orders: what a supplier has been told, and whether it lands in time.
+ * Purchase orders once handed over: what a supplier has been told, and
+ * whether it lands in time.
  *
  * The rule the sample company's INB-02 exists for, and the one this file
  * proves over an owner's own records: cover is computed on the quantity the
@@ -14,12 +15,12 @@ import { buildRows } from '@/lib/domain/derive'
 import { buildPo, poMessageFor, poSubjectFor } from '@/lib/paper/po'
 import { boardLines, verdictText } from '@/lib/workspace/board'
 import { bundleFor } from '@/lib/workspace/bundle'
+import { decisionsFor } from '@/lib/workspace/decisions'
 import { emptyWorkspace } from '@/lib/workspace/defaults'
 import { inFlight } from '@/lib/workspace/flight'
 import { inboundDecisionsFor } from '@/lib/workspace/inbound-decisions'
-import { inboundNav } from '@/lib/workspace/reveal'
 import {
-  ackImageIds, ackedDate, ackedQty, awaitingAckNos, markHandedOver, recordAck, reviseOrder,
+  ackImageIds, ackedDate, ackedQty, awaitingAckNos, churnNotedKey, markHandedOver, recordAck, reviseOrder,
   reviseProblem, revisionsOf, syncOf, syncOrders,
 } from '@/lib/workspace/orders'
 import { arrive, closeReceipt } from '@/lib/workspace/receipts'
@@ -199,7 +200,7 @@ describe('their confirmation', () => {
     ws = reviseOrder(ws, 'PO-002', change(80))
     // counted as one order waiting, not two lines
     expect(awaitingAckNos(ws)).toEqual(['PO-1'])
-    expect(inboundNav(ws, TODAY).find((r) => r.label === 'Open orders')?.badge).toBe('1')
+    expect(decisionsFor(ws, TODAY).filter((d) => d.kind === 'not-told').map((d) => d.refs.orderNo)).toEqual(['PO-1'])
     ws = recordAck(ws, 'PO-1', { ref: 'email', on: TODAY })
     expect(awaitingAckNos(ws)).toEqual([])
     expect(ws.orders.map((o) => o.ackedVersion)).toEqual([2, 2])
@@ -313,8 +314,8 @@ describe('the inbound board', () => {
 
 /* ========================================================== the decisions */
 
-describe('what the gate is asked to do about orders', () => {
-  const kinds = (ws: Workspace) => inboundDecisionsFor(ws, TODAY).map((d) => d.kind)
+describe('what sourcing is asked to do about orders', () => {
+  const kinds = (ws: Workspace) => decisionsFor(ws, TODAY).map((d) => d.kind)
 
   it('nothing, when every order is in sync and in time', () => {
     expect(kinds(handed()).filter((k) => ['not-told', 'awaiting-ack', 'churn', 'lands-late'].includes(k)))
@@ -322,7 +323,7 @@ describe('what the gate is asked to do about orders', () => {
   })
 
   it('a change nobody sent costs money until it is sent', () => {
-    const d = inboundDecisionsFor(reviseOrder(handed(), 'PO-001', change(150)), TODAY)
+    const d = decisionsFor(reviseOrder(handed(), 'PO-001', change(150)), TODAY)
       .find((x) => x.kind === 'not-told')!
     expect(d).toMatchObject({ band: 'costs', act: 'notice', refs: { orderNo: 'PO-1' } })
     // 50 kg the supplier is not making, at ₹800
@@ -331,9 +332,9 @@ describe('what the gate is asked to do about orders', () => {
 
   it('a notice unanswered is half-finished, then costs once past the days allowed', () => {
     const sent = markHandedOver(reviseOrder(handed(), 'PO-001', change(150)), 'PO-1', '2026-09-17', 'R. Mehta')
-    const soon = inboundDecisionsFor(sent, TODAY).find((x) => x.kind === 'awaiting-ack')!
+    const soon = decisionsFor(sent, TODAY).find((x) => x.kind === 'awaiting-ack')!
     expect(soon).toMatchObject({ band: 'unfinished', act: 'ack', alt: { act: 'notice' } })
-    const later = inboundDecisionsFor(sent, '2026-09-21').find((x) => x.kind === 'awaiting-ack')!
+    const later = decisionsFor(sent, '2026-09-21').find((x) => x.kind === 'awaiting-ack')!
     expect(later.band).toBe('costs')
     expect(kinds(recordAck(sent, 'PO-1', { ref: 'ok', on: TODAY }))).not.toContain('awaiting-ack')
   })
@@ -345,18 +346,30 @@ describe('what the gate is asked to do about orders', () => {
     expect(kinds(ws)).not.toContain('churn')
     ws = reviseOrder(ws, 'PO-001', change(190))
     expect(kinds(ws)).toContain('churn')
-    const noted = { ...ws, drafts: { ...ws.drafts, 'inbound.churnNoted.PO-001.4': true } }
+    const noted = { ...ws, drafts: { ...ws.drafts, [churnNotedKey('PO-001', 4)]: true } }
     expect(kinds(noted)).not.toContain('churn')
     expect(kinds(reviseOrder(noted, 'PO-001', change(200)))).toContain('churn')
   })
 
   it('what will not be here in time stops the line — and only that', () => {
     expect(kinds(handed())).not.toContain('lands-late')
-    const late = inboundDecisionsFor(handed(base([order({ expectedOn: '2026-10-04' })])), TODAY)
+    const late = decisionsFor(handed(base([order({ expectedOn: '2026-10-04' })])), TODAY)
       .find((x) => x.kind === 'lands-late')!
-    expect(late).toMatchObject({ band: 'stops', act: 'open', alt: { act: 'chase' }, href: '/inbound/orders' })
+    expect(late).toMatchObject({ band: 'stops', act: 'open', alt: { act: 'chase' }, href: '/sourcing/orders' })
     expect(late.detail).toMatch(/4 days late/)
+    expect(kinds(handed(base([order({ expectedOn: '2026-10-04' })])))).toContain('lands-late')
     expect(kinds(handed(base([order({ expectedOn: '2026-09-29' })])))).toContain('lands-late')
+  })
+
+  it('and none of it is asked of the gate — the answer is a word with the supplier', () => {
+    const late = reviseOrder(handed(base([order({ expectedOn: '2026-10-04' })])), 'PO-001', change(150))
+    const buyer = ['not-told', 'awaiting-ack', 'churn', 'lands-late']
+    expect(decisionsFor(late, TODAY).filter((d) => buyer.includes(d.kind)).length).toBeGreaterThan(1)
+    expect(inboundDecisionsFor(late, TODAY).filter((d) => buyer.includes(d.kind))).toEqual([])
+  })
+
+  it('keeps a "noted" stored before the card moved', () => {
+    expect(churnNotedKey('PO-001', 4)).toBe('inbound.churnNoted.PO-001.4')
   })
 
   it('and the dashboard card that is not in time says so', () => {

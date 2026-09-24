@@ -20,6 +20,9 @@
  */
 import type { DerivedRow } from '@/lib/domain/derive'
 import { needsDecision } from '@/lib/domain/derive'
+import { money, num, shortDate } from '@/lib/domain/format'
+import { boardLines, verdictText } from './board'
+import { churnNotedKey, syncOrders } from './orders'
 import { orderGroups, orderRows, quoteRows, unorderedLines, expired } from './sourcing'
 import { flipSignature, flippingItems, sourcing } from './metrics'
 import { awaitingArrival } from './receipts'
@@ -56,12 +59,13 @@ export type Act =
   | 'paper'         // make the order's document
   | 'keep'          // looked at the cheaper supplier and staying put
   | 'close'         // close a request nobody answered
-  /* the gate's — see `inbound-decisions.ts` */
-  | 'arrive'        // goods are at the gate: say what came
-  | 'inspect'       // work down the checks and close the receipt
+  /* once an order is with its supplier — see `withSuppliers` below */
   | 'notice'        // send the supplier the changed order
   | 'ack'           // they confirmed the change
   | 'chase'         // text for a person to send a supplier or jobworker
+  /* the gate's — see `inbound-decisions.ts` */
+  | 'arrive'        // goods are at the gate: say what came
+  | 'inspect'       // work down the checks and close the receipt
   | 'return'        // material came back from a jobworker
   | 'close-challan' // settle a challan, and write off what never came back
   /* the store's — see `inventory-decisions.ts` */
@@ -86,9 +90,10 @@ export type DecisionKind =
   | 'at-risk' | 'late' | 'unsourced'
   | 'flip' | 'stale'
   | 'unfiled' | 'undecided' | 'unordered' | 'no-qty' | 'unsent' | 'no-reply'
+  /* sourcing's, once an order is with its supplier */
+  | 'not-told' | 'awaiting-ack' | 'churn' | 'lands-late'
   /* the gate's */
   | 'to-receive' | 'at-gate' | 'qc-overdue' | 'spike'
-  | 'not-told' | 'awaiting-ack' | 'churn' | 'lands-late'
   | 'challan-overdue' | 'challan-unaccounted' | 'over-ceiling'
   /* the store's — see `inventory-decisions.ts` */
   | 'count-due' | 'no-rack' | 'negative-stock' | 'count-variance' | 'held-long'
@@ -168,6 +173,7 @@ export function decisionsFor(
     ...stops(ws, today, rows),
     ...costs(ws, today),
     ...unfinished(ws, today),
+    ...withSuppliers(ws, today),
   ])
 }
 
@@ -443,6 +449,127 @@ function unfinished(ws: Workspace, today: string): Decision[] {
       href: '/sourcing/rfqs',
       refs: { rfqId: rfq.id, itemId: rfq.itemId },
       weight: 60,
+    })
+  }
+
+  return out
+}
+
+/* -------------------------------------------- once it is with the supplier -- */
+
+/**
+ * An order after it is handed over: changed and not told, told and not
+ * confirmed, changed too often, or landing after the line stops.
+ *
+ * These were the gate's once. They are the buyer's — each answer is a word
+ * with the supplier, never anything done at the gate — so they sit here, on
+ * the same queue as the order's own "past the date they gave". Each card
+ * carries its band, so the sort puts it among the others rather than in a
+ * block of its own.
+ */
+function withSuppliers(ws: Workspace, today: string): Decision[] {
+  // no date, no arithmetic — the command palette asks for rows, not for alarms
+  if (!today) return []
+  const out: Decision[] = []
+
+  /*
+   * A change nobody has told the supplier about costs money every day it
+   * sits: they are making the old quantity, and cover is counted on the old
+   * quantity. A notice unanswered past the days your rules allow costs too;
+   * inside them, it is only half-finished — somebody has to record the reply.
+   */
+  const synced = syncOrders(ws, today)
+  for (const g of synced) {
+    const vendor = g.vendor?.name ?? 'Unknown supplier'
+    const moved = g.lines.filter((l) => l.state !== 'acknowledged')
+    const one = moved[0]
+    if (!one) continue
+    const what = moved.length === 1
+      ? `${one.item?.name ?? 'a material'} now ${num(one.need.value, 3)} ${one.uom}, they are making ${num(one.making.value, 3)}`
+      : `${moved.length} lines changed`
+    if (g.state === 'not_told') {
+      out.push({
+        id: `not-told:${g.no}`,
+        band: 'costs',
+        kind: 'not-told',
+        title: `${g.no} · ${vendor}`,
+        detail: `changed, supplier not told — ${what}`
+          + (g.exposure > 0 ? ` · ${money(g.exposure)} riding on it` : ''),
+        act: 'notice',
+        actLabel: 'Send the change',
+        href: '/sourcing/orders',
+        refs: { orderNo: g.no, vendorId: g.vendor?.id },
+        weight: 300 + Math.min(199, Math.round(g.exposure / 1000)),
+      })
+      continue
+    }
+    if (g.state === 'awaiting_ack') {
+      const days = Math.max(...moved.map((l) => l.awaiting.value))
+      const overdue = moved.some((l) => l.chaseOverdue)
+      out.push({
+        id: `awaiting-ack:${g.no}`,
+        band: overdue ? 'costs' : 'unfinished',
+        kind: 'awaiting-ack',
+        title: `${g.no} · ${vendor}`,
+        detail: `change sent ${days === 0 ? 'today' : `${days} day${days === 1 ? '' : 's'} ago`}, not confirmed — ${what}`,
+        act: 'ack',
+        actLabel: 'They confirmed',
+        alt: { act: 'notice', label: 'Send it again' },
+        href: '/sourcing/orders',
+        refs: { orderNo: g.no, vendorId: g.vendor?.id },
+        weight: (overdue ? 250 : 90) + days,
+      })
+    }
+  }
+
+  /*
+   * A line that keeps moving. The supplier re-plans every time, and prices it
+   * in next quarter; the fix is upstream of purchasing. "Noted" sticks until
+   * the line moves again.
+   */
+  for (const g of synced) {
+    for (const l of g.lines) {
+      if (!l.whipsawed) continue
+      if (ws.drafts[churnNotedKey(l.order.id, l.sync.revisions.length)] === true) continue
+      out.push({
+        id: `churn:${l.order.id}`,
+        band: 'costs',
+        kind: 'churn',
+        title: `${g.no} · ${l.item?.name ?? 'Unknown material'}`,
+        detail: `changed ${l.churn.value} times in 30 days — your rules allow ${ws.policy.poChurnLimit}`,
+        act: 'open',
+        actLabel: 'Look at it',
+        alt: { act: 'keep', label: 'Noted' },
+        href: '/sourcing/orders',
+        refs: { orderNo: g.no, orderId: l.order.id, vendorId: g.vendor?.id, itemId: l.order.itemId },
+        weight: 150 + l.churn.value,
+      })
+    }
+  }
+
+  /*
+   * What will not be here in time. Covered on quantity is not covered: an
+   * order that lands after the line stops, or lands and cannot be inspected
+   * before it does, stops the line all the same. The answer is to hurry the
+   * order already placed, not to place a second one.
+   */
+  for (const l of boardLines(ws, today)) {
+    const v = l.verdict.value
+    if (v !== 'late' && v !== 'tight') continue
+    out.push({
+      id: `lands-late:${l.order.id}`,
+      band: 'stops',
+      kind: 'lands-late',
+      title: `${l.order.no} · ${l.item?.name ?? 'Unknown material'}`,
+      detail: v === 'late'
+        ? `lands ${verdictText(l)}: line stops ${shortDate(l.stops!)}, arrives ${shortDate(l.arrives)}`
+        : `tight: line stops ${shortDate(l.stops!)}, issuable ${shortDate(l.issuable)}`,
+      act: 'open',
+      actLabel: 'Look at it',
+      alt: { act: 'chase', label: 'Ask them to hurry' },
+      href: '/sourcing/orders',
+      refs: { orderNo: l.order.no, orderId: l.order.id, vendorId: l.order.vendorId, itemId: l.order.itemId },
+      weight: 700 + l.lateBy,
     })
   }
 

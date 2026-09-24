@@ -8,12 +8,9 @@ import { MetricPicker } from '@/components/sourcing/MetricPicker'
 import { ReceiveForm } from '@/components/sourcing/ReceiveForm'
 import { GrnDocument } from '@/components/inbound/desk/GrnDocument'
 import { InspectForm } from '@/components/inbound/desk/InspectForm'
-import { AckDialog } from '@/components/inbound/desk/AckDialog'
-import { ChaseDialog, ExpediteDialog } from '@/components/inbound/desk/ChaseDialog'
+import { ChaseDialog } from '@/components/sourcing/ChaseDialog'
 import { CloseChallanDialog, ReturnForm } from '@/components/inbound/desk/JobworkDialogs'
 import { challanRows, type ChallanRow } from '@/lib/workspace/inbound'
-import { PoDocument } from '@/components/sourcing/PoDocument'
-import { boardLines, type BoardLine } from '@/lib/workspace/board'
 import { isOpen } from '@/lib/workspace/receipts'
 import { useWorkspace } from '@/components/workspace/store'
 import { type Act, type Band, type Decision } from '@/lib/workspace/decisions'
@@ -29,11 +26,12 @@ import type { PurchaseOrder } from '@/lib/workspace/types'
  * same shape: what is waiting on you, and what is on its way. The right-hand
  * column is literally the same list — orders out with suppliers, soonest first
  * — because that is exactly what the gate is waiting for. The left is the
- * gate's own work: goods due, receipts waiting on inspection, changes a
- * supplier has not confirmed, material out at a jobworker past its date.
+ * gate's own work: goods due, receipts waiting on inspection, a rejection out
+ * of pattern, material out at a jobworker past its date.
  *
- * Nothing on this screen is also on the sourcing one. Chasing a late supplier
- * is sourcing's; saying what came off the lorry is the gate's.
+ * Nothing on this screen is also on the sourcing one. Chasing a late supplier,
+ * and getting a change to an order confirmed, are sourcing's; saying what came
+ * off the lorry is the gate's.
  */
 export default function Page() {
   return <DeskOnly><Dashboard /></DeskOnly>
@@ -47,9 +45,6 @@ function Dashboard() {
   const [inspecting, setInspecting] = useState<string | null>(null)
   const [papering, setPapering] = useState<string | null>(null)
   const [opened, setOpened] = useState<Set<Band>>(new Set())
-  const [noticing, setNoticing] = useState<string | null>(null)
-  const [acking, setAcking] = useState<string | null>(null)
-  const [chasing, setChasing] = useState<BoardLine | null>(null)
   const [chasingChallan, setChasingChallan] = useState<ChallanRow | null>(null)
   const [returning, setReturning] = useState<string | null>(null)
   const [returned, setReturned] = useState<string | null>(null)
@@ -97,21 +92,6 @@ function Dashboard() {
       update((w) => ({ ...w, drafts: { ...w.drafts, [`inbound.spikeNoted.${receiptId}`]: true } }))
       return
     }
-    if (kind === 'keep' && d.kind === 'churn' && d.refs.orderId) {
-      // noted until the line moves again — the key carries how many versions it had
-      const o = ws.orders.find((x) => x.id === d.refs.orderId)
-      const key = `inbound.churnNoted.${d.refs.orderId}.${o?.revisions?.length ?? 0}`
-      update((w) => ({ ...w, drafts: { ...w.drafts, [key]: true } }))
-      return
-    }
-    // the revised order IS the change notice: the same document, sent again
-    if (kind === 'notice' && orderNo) { setNoticing(orderNo); return }
-    if (kind === 'ack' && orderNo) { setAcking(orderNo); return }
-    if (kind === 'chase' && d.refs.orderId) {
-      const line = boardLines(ws, today).find((l) => l.order.id === d.refs.orderId)
-      if (line) setChasing(line)
-      return
-    }
     const { challanId } = d.refs
     if (kind === 'chase' && challanId) {
       const row = challanRows(ws, today).find((r) => r.challan.id === challanId)
@@ -139,7 +119,7 @@ function Dashboard() {
 
       <Queue rows={queue} berths={berths} onAct={act} showAll={opened}
         onShowAll={(b) => setOpened((s) => new Set(s).add(b))}
-        clear="Nothing at the gate, nothing unconfirmed, nothing overdue at a jobworker." />
+        clear="Nothing at the gate, nothing waiting on inspection, nothing overdue at a jobworker." />
 
       {metrics.length > 0 && (
         <section className="mt-7">
@@ -158,9 +138,6 @@ function Dashboard() {
       <InspectForm receiptId={inspecting} onClose={() => setInspecting(null)}
         onClosed={(id) => setPapering(id)} />
       <GrnDocument open={papering !== null} receiptId={papering} onClose={() => setPapering(null)} />
-      <PoDocument open={noticing !== null} no={noticing} onClose={() => setNoticing(null)} />
-      <AckDialog no={acking} onClose={() => setAcking(null)} />
-      <ExpediteDialog line={chasing} onClose={() => setChasing(null)} />
       {chasingChallan && (
         <ChaseDialog open onClose={() => setChasingChallan(null)}
           title={`Chase ${chasingChallan.vendor?.name ?? 'the jobworker'} on ${chasingChallan.challan.no}`}

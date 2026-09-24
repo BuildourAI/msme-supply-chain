@@ -200,6 +200,13 @@ export const awaitingAck = (ws: Workspace): PurchaseOrder[] =>
 export const awaitingAckNos = (ws: Workspace): string[] =>
   [...new Set(awaitingAck(ws).map((o) => o.no))]
 
+/**
+ * "Noted" on a line that keeps moving, until it moves again. The key still
+ * says inbound: the card lived at the gate when the first ones were stored.
+ */
+export const churnNotedKey = (orderId: string, versions: number) =>
+  `inbound.churnNoted.${orderId}.${versions}`
+
 /** Every picture of a confirmation this workspace points at, so nothing prunes it. */
 export const ackImageIds = (ws: Workspace): string[] =>
   ws.orders.map((o) => o.ackImageId).filter((x): x is string => Boolean(x))

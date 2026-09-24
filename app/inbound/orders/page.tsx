@@ -11,8 +11,7 @@ import { addDays, daysBetween } from '@/lib/domain/calc'
 import * as S from '@/lib/seed/sourcing'
 import { longDate, money, qtyText, shortDate } from '@/lib/domain/format'
 import { useWorkspace } from '@/components/workspace/store'
-import { Orders } from '@/components/inbound/desk/Orders'
-import { DeskOnly } from '@/components/sourcing/DeskOnly'
+import { Moved } from '@/components/shell/Moved'
 
 const seed: SeedBundle = {
   today: S.TODAY_SOURCING, items: S.items, vendors: S.vendors, vendorItems: S.vendorItems,
@@ -79,11 +78,11 @@ function PageBody() {
 
 /**
  * One route, two companies. The sample keeps the worked example it has always
- * had; the owner gets their own desk, which reads their workspace and nothing
- * else.
+ * had. An owner's orders live on Purchase orders, from draft to the supplier's
+ * confirmation of the last change, so this address takes them there.
  */
 export default function Page() {
   const { mode, ready } = useWorkspace()
   if (!ready) return <div className="min-h-[50vh]" aria-hidden />
-  return mode === 'mine' ? <DeskOnly><Orders /></DeskOnly> : <PageBody />
+  return mode === 'mine' ? <Moved to="/sourcing/orders" /> : <PageBody />
 }

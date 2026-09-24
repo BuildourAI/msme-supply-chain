@@ -120,9 +120,9 @@ export type MetricStage = 'sourcing' | 'inbound' | 'inventory' | 'production' | 
 export const STAGE_METRICS: Record<MetricStage, MetricKey[]> = {
   sourcing: [
     'onTime', 'lead', 'defects', 'flip', 'stale',
-    'singleSource', 'concentration', 'priceMoves', 'outstanding',
+    'singleSource', 'concentration', 'priceMoves', 'outstanding', 'unacked',
   ],
-  inbound: ['qcHeld', 'inspectedOnTime', 'defects', 'onTime', 'unacked', 'atJobworkers', 'lead'],
+  inbound: ['qcHeld', 'inspectedOnTime', 'defects', 'onTime', 'atJobworkers', 'lead'],
   inventory: ['stockValue', 'unconfirmed', 'accuracy', 'heldStock', 'netLoss', 'scrap', 'dio', 'remnants'],
   production: ['lineRunsFor', 'jobsStopping', 'attainment', 'firstPass', 'floorDays', 'rmToFg', 'haltDays'],
   dispatch: ['otif', 'orderToDock', 'pastPromise', 'fgValue', 'freightUnit', 'carrierLate', 'dispatchedMonth', 'returnRate'],
@@ -137,17 +137,22 @@ const NEEDS_RETURNS: MetricKey[] = ['returnRate']
 /**
  * What a new owner sees before they have chosen.
  *
- * Six, not nine. The three left out — concentration, price moves, single
+ * Seven, not ten. The three left out — concentration, price moves, single
  * sourcing — are the ones you look at once a quarter, and a dashboard that
- * opens with everything on it is one nobody reads.
+ * opens with everything on it is one nobody reads. What rides on changes the
+ * supplier has not confirmed is here because confirming them is the buyer's.
  */
 export const DEFAULT_PICKS: MetricKey[] = [
-  'onTime', 'lead', 'defects', 'flip', 'stale', 'outstanding',
+  'onTime', 'lead', 'defects', 'flip', 'stale', 'outstanding', 'unacked',
 ]
 
-/** The gate's six, before anybody has chosen. The spread of lead times is sourcing's to watch. */
+/**
+ * The gate's, before anybody has chosen. The spread of lead times joins now
+ * that confirming changes is sourcing's — it is what makes a delivery date
+ * something the gate can plan a day around, or not.
+ */
 export const INBOUND_PICKS: MetricKey[] = [
-  'qcHeld', 'inspectedOnTime', 'defects', 'onTime', 'unacked', 'atJobworkers',
+  'qcHeld', 'inspectedOnTime', 'defects', 'onTime', 'atJobworkers', 'lead',
 ]
 
 /**
@@ -843,7 +848,7 @@ function gateMetrics(
         key: 'unacked', label: METRIC_LABEL.unacked, value: money(unacked),
         sub: unacked === 0 ? 'every change is confirmed' : 'on changes the supplier has not confirmed',
         tone: unacked === 0 ? 'good' : 'critical',
-        measured: true, href: '/inbound/orders',
+        measured: true, href: '/sourcing/orders',
         how: 'Σ |what we now want − what the supplier confirmed| × last purchase rate',
       }
       : nothing('unacked', 'No order handed over yet',
@@ -1114,13 +1119,30 @@ export function stageMetrics(ws: Workspace, today: string, stage: MetricStage = 
     .map((k) => all.find((m) => m.key === k)!).filter(Boolean)
 }
 
-/** Where a desk keeps its owner's choice. Absent is "nobody has chosen yet". */
-export const picksOf = (ws: Workspace, stage: MetricStage): MetricKey[] =>
-  ((stage === 'inbound' ? ws.inboundMetricPicks
+const storedPicks = (ws: Workspace, stage: MetricStage): string[] | undefined =>
+  stage === 'inbound' ? ws.inboundMetricPicks
     : stage === 'inventory' ? ws.inventoryMetricPicks
       : stage === 'production' ? ws.productionMetricPicks
         : stage === 'dispatch' ? ws.dispatchMetricPicks
-          : ws.metricPicks) ?? DEFAULTS_FOR[stage]) as MetricKey[]
+          : ws.metricPicks
+
+/**
+ * Figures that changed desks, and where from. One the owner kept on the old
+ * desk follows them to the new one, rather than quietly disappearing from
+ * both until they go looking for it in the picker.
+ */
+const MOVED: Partial<Record<MetricKey, { from: MetricStage; to: MetricStage }>> = {
+  unacked: { from: 'inbound', to: 'sourcing' },
+}
+
+/** Where a desk keeps its owner's choice. Absent is "nobody has chosen yet". */
+export function picksOf(ws: Workspace, stage: MetricStage): MetricKey[] {
+  const own = storedPicks(ws, stage)
+  if (!own) return DEFAULTS_FOR[stage]
+  const followed = (Object.keys(MOVED) as MetricKey[]).filter((k) => MOVED[k]!.to === stage
+    && !own.includes(k) && (storedPicks(ws, MOVED[k]!.from) ?? []).includes(k))
+  return [...own, ...followed] as MetricKey[]
+}
 
 /** The ones the owner keeps, in the order the desk shows them. */
 export function pickedMetrics(ws: Workspace, today: string, stage: MetricStage = 'sourcing'): Metric[] {

@@ -5,9 +5,6 @@ import { Field, Textarea, TextInput } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/icons'
 import { useWorkspace } from '@/components/workspace/store'
 import { mailtoUrl, waNumber, whatsappUrl } from '@/lib/paper/share'
-import { num, shortDate } from '@/lib/domain/format'
-import { verdictText, type BoardLine } from '@/lib/workspace/board'
-import { expediteDraft } from '@/lib/workspace/orders'
 
 /**
  * Words for a person to send.
@@ -99,21 +96,5 @@ export function ChaseDialog({ open, onClose, title, sub, vendorId, subject, text
         </span>
       </footer>
     </Dialog>
-  )
-}
-
-/** An order that will not be here in time, and the words to hurry it. */
-export function ExpediteDialog({ line, onClose }: { line: BoardLine | null; onClose: () => void }) {
-  if (!line) return null
-  return (
-    <ChaseDialog open onClose={onClose}
-      title={`Ask ${line.vendor?.name ?? 'the supplier'} to hurry ${line.order.no}`}
-      sub={`${line.item?.name ?? 'This material'} lands ${verdictText(line)}`}
-      vendorId={line.order.vendorId}
-      subject={`${line.order.no} — needed sooner`}
-      text={expediteDraft(
-        line.vendor?.name ?? 'Sir', line.order.no, line.item?.name ?? 'the material',
-        `${num(line.qty, 3)} ${line.uom}`, shortDate(line.promised),
-        line.stops ? shortDate(line.stops) : shortDate(line.arrives))} />
   )
 }

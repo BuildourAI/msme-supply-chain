@@ -3,17 +3,16 @@
  *
  * The same `Decision` shape the sourcing queue uses, drawn by the same `Queue`,
  * so the two desks read alike — but a different list. Sourcing's queue is
- * about suppliers and prices; this one is about material: what is due, what is
- * waiting to be inspected, what the supplier has not confirmed, what is out at
- * a jobworker past its date. Nothing is on both. The one kind that used to be —
- * an order due for delivery — moved here, because recording what arrived is
- * the gate's job, and asking for it on both screens counted one lorry twice.
+ * about suppliers, prices and what the supplier has not confirmed; this one
+ * is about material: what is due, what is waiting to be inspected, a rejection
+ * out of pattern, what is out at a jobworker past its date. Nothing is on
+ * both. An order due for delivery is here, because recording what arrived is
+ * the gate's job; a change the supplier has not confirmed is sourcing's,
+ * because the answer is a word with the supplier, never anything at the gate.
  *
  * Pure. Later phases add kinds to the same list rather than new screens.
  */
-import { money, num, shortDate } from '@/lib/domain/format'
-import { boardLines, verdictText } from './board'
-import { syncOrders } from './orders'
+import { money, num } from '@/lib/domain/format'
 import { orderGroups, orderRows } from './sourcing'
 import { sortDecisions, type Decision } from './decisions'
 import { challanRows, jobworkerHoldings, receiptRow, spikeOf } from './inbound'
@@ -107,108 +106,6 @@ export function inboundDecisionsFor(ws: Workspace, today: string): Decision[] {
       href: '/inbound/receiving',
       refs: { receiptId: r.id, vendorId: r.vendorId, itemId: r.itemId },
       weight: 200 + Math.round(s_.thisPct),
-    })
-  }
-
-  /*
-   * Order changes and the supplier's confirmation of them. A change nobody
-   * has told the supplier about costs money every day it sits: they are
-   * making the old quantity, and cover is counted on the old quantity. A
-   * notice unanswered past the days the gate rules allow costs too; inside
-   * them, it is only half-finished — somebody has to record the reply.
-   */
-  for (const g of syncOrders(ws, today)) {
-    const vendor = g.vendor?.name ?? 'Unknown supplier'
-    const moved = g.lines.filter((l) => l.state !== 'acknowledged')
-    const one = moved[0]
-    if (!one) continue
-    const what = moved.length === 1
-      ? `${one.item?.name ?? 'a material'} now ${num(one.need.value, 3)} ${one.uom}, they are making ${num(one.making.value, 3)}`
-      : `${moved.length} lines changed`
-    if (g.state === 'not_told') {
-      out.push({
-        id: `not-told:${g.no}`,
-        band: 'costs',
-        kind: 'not-told',
-        title: `${g.no} · ${vendor}`,
-        detail: `changed, supplier not told — ${what}`
-          + (g.exposure > 0 ? ` · ${money(g.exposure)} riding on it` : ''),
-        act: 'notice',
-        actLabel: 'Send the change',
-        href: '/inbound/orders',
-        refs: { orderNo: g.no, vendorId: g.vendor?.id },
-        weight: 300 + Math.min(199, Math.round(g.exposure / 1000)),
-      })
-      continue
-    }
-    if (g.state === 'awaiting_ack') {
-      const days = Math.max(...moved.map((l) => l.awaiting.value))
-      const overdue = moved.some((l) => l.chaseOverdue)
-      out.push({
-        id: `awaiting-ack:${g.no}`,
-        band: overdue ? 'costs' : 'unfinished',
-        kind: 'awaiting-ack',
-        title: `${g.no} · ${vendor}`,
-        detail: `change sent ${days === 0 ? 'today' : `${days} day${days === 1 ? '' : 's'} ago`}, not confirmed — ${what}`,
-        act: 'ack',
-        actLabel: 'They confirmed',
-        alt: { act: 'notice', label: 'Send it again' },
-        href: '/inbound/orders',
-        refs: { orderNo: g.no, vendorId: g.vendor?.id },
-        weight: (overdue ? 250 : 90) + days,
-      })
-    }
-  }
-
-  /*
-   * A line that keeps moving. The supplier re-plans every time, and prices it
-   * in next quarter; the fix is upstream of purchasing. "Noted" sticks until
-   * the line moves again.
-   */
-  for (const g of syncOrders(ws, today)) {
-    for (const l of g.lines) {
-      if (!l.whipsawed) continue
-      const key = `inbound.churnNoted.${l.order.id}.${l.sync.revisions.length}`
-      if (ws.drafts[key] === true) continue
-      out.push({
-        id: `churn:${l.order.id}`,
-        band: 'costs',
-        kind: 'churn',
-        title: `${g.no} · ${l.item?.name ?? 'Unknown material'}`,
-        detail: `changed ${l.churn.value} times in 30 days — the gate rules allow ${ws.policy.poChurnLimit}`,
-        act: 'open',
-        actLabel: 'Look at it',
-        alt: { act: 'keep', label: 'Noted' },
-        href: '/inbound/orders',
-        refs: { orderNo: g.no, orderId: l.order.id, vendorId: g.vendor?.id, itemId: l.order.itemId },
-        weight: 150 + l.churn.value,
-      })
-    }
-  }
-
-  /*
-   * What will not be here in time. Covered on quantity is not covered: an
-   * order that lands after the line stops, or lands and cannot be inspected
-   * before it does, stops the line all the same. The answer is to hurry the
-   * order already placed, not to place a second one.
-   */
-  for (const l of boardLines(ws, today)) {
-    const v = l.verdict.value
-    if (v !== 'late' && v !== 'tight') continue
-    out.push({
-      id: `lands-late:${l.order.id}`,
-      band: 'stops',
-      kind: 'lands-late',
-      title: `${l.order.no} · ${l.item?.name ?? 'Unknown material'}`,
-      detail: v === 'late'
-        ? `lands ${verdictText(l)}: line stops ${shortDate(l.stops!)}, arrives ${shortDate(l.arrives)}`
-        : `tight: line stops ${shortDate(l.stops!)}, issuable ${shortDate(l.issuable)}`,
-      act: 'open',
-      actLabel: 'Look at it',
-      alt: { act: 'chase', label: 'Ask them to hurry' },
-      href: '/inbound/orders',
-      refs: { orderNo: l.order.no, orderId: l.order.id, vendorId: l.order.vendorId, itemId: l.order.itemId },
-      weight: 700 + l.lateBy,
     })
   }
 

@@ -1,6 +1,5 @@
 'use client'
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
 import { BestLanded } from '@/components/sourcing/BestLanded'
 import { Dialog } from '@/components/ui/Dialog'
 import { Chips, Field, NumberInput, Select } from '@/components/ui/Field'
@@ -89,9 +88,9 @@ export function OrderForm({ open, onClose, editing }: {
   /*
    * A line its supplier holds is not edited here. What they are making, how
    * much and by when is a new version with a reason, which the supplier is
-   * sent and confirms — on Open orders. Typing over it here would change our
-   * figure silently and leave theirs where it was, which is the gap that
-   * screen exists to show. The rate and the state stay editable: the rate is
+   * sent and confirms — with Change on the order's card. Typing over it here
+   * would change our figure silently and leave theirs where it was, which is
+   * the gap that card exists to show. The rate and the state stay editable: the rate is
    * our record of what was agreed, the state is what somebody observed.
    */
   const locked = editing !== null && (editing.state === 'confirmed' || editing.state === 'shipped'
@@ -207,9 +206,7 @@ export function OrderForm({ open, onClose, editing }: {
             {ws.vendors.find((v) => v.id === editing.vendorId)?.name ?? 'The supplier'} has this order —{' '}
             <strong className="text-ink">{num(editing.qty, 3)} {uomOfItem(ws, editing.itemId)}</strong> by{' '}
             {shortDate(editing.expectedOn)}. A change to how much or when is a new version they have to
-            confirm, so it is made on{' '}
-            <Link href="/inbound/orders" onClick={onClose}
-              className="font-semibold text-accent-ink underline underline-offset-2">Open orders</Link>.
+            confirm, so it is made with <strong className="text-ink">Change</strong> on the order’s card.
           </p>
         )}
 

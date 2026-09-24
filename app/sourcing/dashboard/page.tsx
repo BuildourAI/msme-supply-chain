@@ -6,12 +6,16 @@ import { Queue } from '@/components/sourcing/Queue'
 import { Tiles } from '@/components/sourcing/Tiles'
 import { MetricPicker } from '@/components/sourcing/MetricPicker'
 import { PoDocument } from '@/components/sourcing/PoDocument'
+import { AckDialog } from '@/components/sourcing/AckDialog'
+import { ExpediteDialog } from '@/components/sourcing/ExpediteDialog'
 import { useWorkspace } from '@/components/workspace/store'
 import { buildRows } from '@/lib/domain/derive'
+import { boardLines, type BoardLine } from '@/lib/workspace/board'
 import { bundleFor } from '@/lib/workspace/bundle'
 import { decisionsFor, type Act, type Band, type Decision } from '@/lib/workspace/decisions'
 import { inFlight } from '@/lib/workspace/flight'
 import { flipSignature, pickedMetrics } from '@/lib/workspace/metrics'
+import { churnNotedKey } from '@/lib/workspace/orders'
 import { acceptLine, draftOrderFrom, rejectLine, syncRfqStates } from '@/lib/workspace/sourcing'
 
 /**
@@ -48,6 +52,8 @@ function Dashboard() {
   const { workspace, update, today } = useWorkspace()
   const [picking, setPicking] = useState(false)
   const [papering, setPapering] = useState<string | null>(null)
+  const [acking, setAcking] = useState<string | null>(null)
+  const [hurrying, setHurrying] = useState<BoardLine | null>(null)
   const [opened, setOpened] = useState<Set<Band>>(new Set())
 
   /*
@@ -89,6 +95,25 @@ function Dashboard() {
     }
     if (kind === 'paper' && orderNo) {
       setPapering(orderNo)
+      return
+    }
+    /*
+     * Once an order is with its supplier. "Noted" on a line that keeps moving
+     * comes first: the card carries the material too, and the branch below
+     * would otherwise file it as a cheaper supplier looked at and declined.
+     */
+    if (kind === 'keep' && d.kind === 'churn' && d.refs.orderId) {
+      const o = ws.orders.find((x) => x.id === d.refs.orderId)
+      const key = churnNotedKey(d.refs.orderId, o?.revisions?.length ?? 0)
+      update((w) => ({ ...w, drafts: { ...w.drafts, [key]: true } }))
+      return
+    }
+    // the revised order IS the change notice: the same document, sent again
+    if (kind === 'notice' && orderNo) { setPapering(orderNo); return }
+    if (kind === 'ack' && orderNo) { setAcking(orderNo); return }
+    if (kind === 'chase' && d.refs.orderId) {
+      const line = boardLines(ws, today).find((l) => l.order.id === d.refs.orderId)
+      if (line) setHurrying(line)
       return
     }
     if (kind === 'keep' && itemId) {
@@ -150,6 +175,8 @@ function Dashboard() {
 
       <MetricPicker open={picking} onClose={() => setPicking(false)} />
       <PoDocument open={papering !== null} no={papering} onClose={() => setPapering(null)} />
+      <AckDialog no={acking} onClose={() => setAcking(null)} />
+      <ExpediteDialog line={hurrying} onClose={() => setHurrying(null)} />
     </div>
   )
 }
