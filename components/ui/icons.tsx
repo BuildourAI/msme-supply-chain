@@ -78,8 +78,8 @@ export function Icon({ name, className = 'size-4' }: { name: IconName; className
 /**
  * The brand mark: a cluster of squares stepping out from a solid centre, the
  * shape the reference uses for its logo and for the centre of every diagram.
- * `fill="currentColor"` so one glyph works in orange on white and in white on
- * orange without a second copy.
+ * `fill="currentColor"` so one glyph works in navy on white and in white on
+ * navy without a second copy.
  */
 export function Logo({ className = 'size-6' }: { className?: string }) {
   return (

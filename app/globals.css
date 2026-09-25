@@ -3,20 +3,20 @@
 /* ============================================================================
    BuildOur design system — CONTEXT.md §10, on the Buildour AI brand.
 
-   White ground, one orange accent, near-black heavy type, flat white cards
-   with a hairline border. No gradient, no frost, no floating frame: the
+   White ground, one navy accent, near-black heavy type, flat white cards
+   with a hairline border. Red, amber and green only for status — late,
+   tight, fine — and always with an icon and a word beside them. The
    reference is a working tool, and everything that is not information has
    been taken out of the way.
 
    LIGHT ONLY. There is no dark theme and no toggle.
 
-   TWO ORANGES, and the reason matters. The brand orange #FF5000 measures
-   3.28:1 on white — fine for a fill, an icon, a rule or a 40px headline
-   word, and below the 4.5 floor for every piece of text this app actually
-   runs at (9.5px to 13px). So --accent is the fill grade and --accent-ink
-   is the text grade. Anything smaller than about 18px that wants to be
-   orange takes --accent-ink. The same split is why --ink-3 is a step
-   deeper than the grey the reference uses for its micro labels.
+   TWO NAVIES. --accent (#1E3A6B) is the fill grade: icons, rails, bars,
+   the band behind a dashboard. --accent-ink (#152B52) is the text grade and
+   the primary button, a step deeper so a button lifts on hover. Both clear
+   the 4.5 floor for small text on white and on the tint pill, which the
+   orange this replaced did not — it needed the split for contrast; the navy
+   keeps it for the hover.
 
    Two things here are load-bearing for the browser suites, not just for
    looks: `rounded-lg` and `border-dashed` are selectors the checks walk. So
@@ -48,26 +48,29 @@
   --line-soft: #EFF0F3;
 
   /* ----------------------------------------------------------- accent --- */
+  /* The portal's one hue is the owner's navy (see --navy below): what Indian
+     manufacturers read every day — Tally, Busy, Excel — is navy on white, and
+     the dashboards, the sign-in and the Welcome page are drawn in it. The
+     accent tokens are that navy, so every screen, button, tab, rail row and
+     logo wears the same colour without a class changing anywhere. */
   /* fill grade: squares, icons, rails, bars, the glow, figures over 24px */
-  --accent: #FF5000;
-  /* Text grade: any orange text under 18px, links, the primary button fill.
-     #C43D00 was the first pick and measured 4.46 against the accent pill —
-     four hundredths under the floor, on every "live" badge in the app. One
-     step deeper clears it on all four grounds it lands on. */
-  --accent-ink: #BD3B00;
-  --accent-soft: #FFE8E2;   /* hover wash, ::selection */
-  --accent-tint: #FFF0ED;   /* the sidebar's active row, the active tab pill */
-  --accent-icon: #FFDCC8;   /* the KPI icon square */
+  --accent: #1E3A6B;
+  /* text grade: links, small navy words, the primary button fill (it lifts
+     to --accent on hover). 12:1 on white, 10:1 on the tint pill. */
+  --accent-ink: #152B52;
+  --accent-soft: #E3E9F4;   /* hover wash, ::selection */
+  --accent-tint: #EEF2F9;   /* the sidebar's active row, the active tab pill */
+  --accent-icon: #DCE4F1;   /* the KPI icon square */
   --on-accent: #FFFFFF;
 
   /* The tinted-bar ramp, for bars that sit BEHIND ink text — a ranked list
      where the longest bar is the deepest. These are UI tints, not chart
      marks: a chart mark takes --cat-* or --seq-*. */
-  --ramp-1: #FF5000;
-  --ramp-2: #FFA274;
-  --ramp-3: #FFC1A0;
-  --ramp-4: #FDD7C4;
-  --ramp-5: #FFE8E2;
+  --ramp-1: #8FA7D1;
+  --ramp-2: #B3C4E2;
+  --ramp-3: #CAD6EC;
+  --ramp-4: #DCE4F3;
+  --ramp-5: #EAEFF8;
 
   /* ----------------------------------------------------------- status --- */
   /* §10 — reserved, and never used for a series. Text grade, because these
@@ -93,25 +96,25 @@
   --navy: #1E3A6B;
   --navy-deep: #152B52;
 
-  /* validated categorical slots — §10. Never invent hues. Checked with the
-     dataviz validator on #FFFFFF: lightness band, chroma floor, CVD
-     separation and the normal-vision floor all pass. Deliberately no second
-     orange, so the accent stays reserved for the brand rather than becoming
-     "series 1". */
-  --cat-1: #2A78D6;
-  --cat-2: #1BAF7A;
-  --cat-3: #4A3AA7;
-  --cat-4: #EDA100;
-  --cat-5: #E87BA4;
+  /* validated categorical slots — §10. Never invent hues. Blues and violets
+     only: no green, amber or red, because those three mean on track, tight
+     and late everywhere in the portal and a series must never read as a
+     verdict. Checked with the dataviz validator on white — lightness band,
+     chroma floor, colour-blind separation (worst ΔE 12.2 protan) and the
+     normal-vision floor (worst 17.0) all pass. */
+  --cat-1: #2B5FAE;
+  --cat-2: #31A9C7;
+  --cat-3: #8150C4;
+  --cat-4: #CF5C97;
+  --cat-5: #5C8FE6;
 
-  /* sequential — one hue, light to dark, for ordered magnitudes. The brand
-     orange, which is what the reference ranks its bars with. --seq-1 is a
-     tint step for backgrounds; a mark starts at --seq-2. */
-  --seq-1: #FFE8E2;
-  --seq-2: #FF9A5C;
-  --seq-3: #FF7526;
-  --seq-4: #E84800;
-  --seq-5: #A83400;
+  /* sequential — one hue, light to dark, for ordered magnitudes: the navy.
+     --seq-1 is a tint step for backgrounds; a mark starts at --seq-2. */
+  --seq-1: #E8EEF7;
+  --seq-2: #9FB4D8;
+  --seq-3: #6184BE;
+  --seq-4: #33569A;
+  --seq-5: #1E3A6B;
 
   /* radii — named --r-* so the @theme bridge below can map them onto
      Tailwind's --radius-* without a variable referring to itself */
@@ -130,7 +133,7 @@
   /* the tab tint — the accent at a whisper, for the pill behind the tab you
      are on and the row the sidebar has you standing in */
   --tint: var(--accent-tint);
-  --tint-2: #FFF7F4;
+  --tint-2: #F5F7FB;
   --tint-head: var(--surface-2);
   --pill: var(--accent-tint);
   --pill-2: transparent;
@@ -287,7 +290,7 @@ body {
   letter-spacing: 0.12em;
   color: var(--ink-3);
 }
-/* …with the reference's short orange rule under it */
+/* …with the reference's short accent rule under it */
 .micro-rule::after {
   content: '';
   display: block;
@@ -443,7 +446,7 @@ body {
 .tab-ink-still { transition: none }
 
 /* the segmented control's thumb — a raised pill that slides. Its label is
-   12px white, so the thumb takes the text-grade orange. */
+   12px white, so the thumb takes the text-grade accent. */
 .seg-thumb {
   position: absolute; top: 1px; bottom: 1px; left: 0;
   border-radius: 999px;

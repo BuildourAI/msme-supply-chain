@@ -270,7 +270,7 @@ function Board({ lines, qcDays, onArrived }: {
                         style={{ '--i': 3, '--hatch-c': 'var(--accent)', '--hatch-pitch': '4px', '--hatch-w': '1.5px',
                           left: pct(a), width: `${Math.max(0, ((u - a) / span) * 100)}%` } as React.CSSProperties} />
                       {l.stops && (
-                        // ringed in the card's white, so it reads even over the orange wait
+                        // ringed in the card's white, so it reads even over the navy wait
                         <span aria-hidden className="anim-tick absolute inset-y-0 w-[2px] bg-critical"
                           style={{ left: `min(${pct(days(l.stops))}, calc(100% - 3px))`,
                             boxShadow: '0 0 0 1.5px var(--surface)' }} />

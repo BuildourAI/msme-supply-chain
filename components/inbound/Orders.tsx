@@ -488,7 +488,7 @@ export function InboundBoard({ lines, span = 26 }: {
             <tr className="mono border-b border-line text-left text-[9.5px] uppercase tracking-wider text-ink-3">
               <th className="whitespace-nowrap py-1 pr-2 font-normal">Order</th>
               <th className="w-full py-1 pr-2 font-normal">On the vendor’s floor</th>
-              <th className="w-28 py-1 pr-2 font-normal" title="The orange bar is the wait; the hatched tail is inbound QC; the red tick is the day the line stops.">
+              <th className="w-28 py-1 pr-2 font-normal" title="The navy bar is the wait; the hatched tail is inbound QC; the red tick is the day the line stops.">
                 Timing
               </th>
               <th className="whitespace-nowrap py-1 pr-2 text-right font-normal">Arrives</th>

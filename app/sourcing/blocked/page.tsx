@@ -4,7 +4,7 @@ import { PageHeader } from '@/components/shell/PageHeader'
 import { Card, Pill, StatusPill } from '@/components/ui/bits'
 import { Icon } from '@/components/ui/icons'
 import { Donut, RankedBars } from '@/components/charts/exec-charts'
-import { CAT } from '@/components/charts/kit'
+import { SEQ } from '@/components/charts/kit'
 import { useDesk } from '@/components/desk/store'
 import { Note } from '@/components/ui/Note'
 import { AGE_LABEL, blockedStock, CAUSE_LABEL, ROUTE_LABEL } from '@/lib/seed/blocked'
@@ -230,7 +230,8 @@ function PageBody() {
   const ageSegs = (['0_90', '90_180', 'over_180'] as const).map((k, i) => ({
     label: `${AGE_LABEL[k]} · ${lakh(blockedStock.filter((b) => b.ageBucket === k).reduce((a, b) => a + b.value, 0))}`,
     value: blockedStock.filter((b) => b.ageBucket === k).reduce((a, b) => a + b.value, 0),
-    color: CAT[i === 0 ? 2 : i === 1 ? 3 : 1],
+    // age is an order, not three kinds: one navy, darker the longer it has sat
+    color: SEQ[i === 0 ? 0 : i === 1 ? 1 : 3],
   }))
 
   // A deadline is only worth printing if somebody can still miss it.

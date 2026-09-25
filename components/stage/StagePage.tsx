@@ -58,9 +58,8 @@ export function StagePage({ stage, children }: { stage: Stage; children?: React.
           </div>
         </div>
 
-        {/* The claim, at slide size. The key phrase and the stop are orange:
-            at 40px and up, the fill-grade accent is large text and clears the
-            contrast floor, which it would not at body size. */}
+        {/* The claim, at slide size. The key phrase and the stop are in the
+            accent, the one colour on the page that is not ink or grey. */}
         <h1 className="max-w-[18ch] text-[34px] font-extrabold leading-[1.04] tracking-[-0.03em] sm:max-w-none sm:text-[40px] lg:text-[48px]">
           {stage.headline.pre}{' '}
           <span className="text-accent">{stage.headline.key}</span>
