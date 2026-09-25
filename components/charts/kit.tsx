@@ -339,3 +339,86 @@ export function CoverBar({ coverDays, leadDays, tone }: {
     </div>
   )
 }
+
+/* ------------------------------------------------------ columns over time */
+
+/**
+ * One measure over a handful of periods, as thin columns. The period that is
+ * the point — usually the current one — is in the accent and labelled; the
+ * others are context, in the de-emphasis grey, so the eye goes where the
+ * sentence does. One axis, a few quiet gridlines, a <title> on every column,
+ * and the numbers as a table for anyone who wants them without hovering.
+ */
+export function Columns({ points, format, emphasis, title }: {
+  points: { label: string; value: number; note?: string }[]
+  format: (n: number) => string
+  /** the index drawn in the accent and labelled; defaults to the last */
+  emphasis?: number
+  title: string
+}) {
+  const hot = emphasis ?? points.length - 1
+  const W = 440, H = 200, L = 46, R = 8, T = 18, B = 34
+  const plotW = W - L - R, plotH = H - T - B
+  const peak = Math.max(1, ...points.map((p) => p.value))
+  // three steps to a round top, so the gridlines read as plain numbers
+  const mag = 10 ** Math.floor(Math.log10(peak / 3))
+  const step = Math.ceil(peak / 3 / mag) * mag
+  const top = step * 3
+  const y = (v: number) => T + plotH - (v / top) * plotH
+  const slot = plotW / Math.max(1, points.length)
+  const bw = Math.min(34, slot * 0.55)
+  return (
+    <div>
+      <ChartFrame title={title} viewBox={`0 0 ${W} ${H}`}>
+        {[1, 2, 3].map((k) => (
+          <line key={k} x1={L} x2={W - R} y1={y(step * k)} y2={y(step * k)} stroke="var(--line-soft)" />
+        ))}
+        <line x1={L} x2={W - R} y1={y(0)} y2={y(0)} stroke="var(--line)" />
+        {[0, 1, 2, 3].map((k) => (
+          <text key={k} x={L - 6} y={y(step * k) + 3.5} textAnchor="end" fontSize="10.5" fill="var(--ink-3)"
+            fontFamily="var(--font-plex-sans)">{k === 0 ? '0' : format(step * k)}</text>
+        ))}
+        {points.map((p, i) => {
+          const x = L + slot * i + (slot - bw) / 2
+          const h = Math.max(p.value > 0 ? 2 : 0, y(0) - y(p.value))
+          const r = Math.min(4, h / 2)
+          const yy = y(0) - h
+          const d = h > 0
+            ? `M${x} ${y(0)}V${yy + r}Q${x} ${yy} ${x + r} ${yy}H${x + bw - r}Q${x + bw} ${yy} ${x + bw} ${yy + r}V${y(0)}Z`
+            : ''
+          return (
+            <g key={p.label}>
+              {/* the hit area is the whole slot, not just the column */}
+              <rect x={L + slot * i} y={T} width={slot} height={plotH} fill="transparent">
+                <title>{`${p.label}: ${format(p.value)}${p.note ? ` · ${p.note}` : ''}`}</title>
+              </rect>
+              {d && <path d={d} fill={i === hot ? 'var(--accent)' : 'var(--surface-3)'} className="anim-reveal"
+                style={{ '--i': i, pointerEvents: 'none' } as React.CSSProperties} />}
+              {i === hot && p.value > 0 && (
+                <text x={x + bw / 2} y={yy - 6} textAnchor="middle" fontSize="11" fontWeight="700" fill="var(--ink)"
+                  fontFamily="var(--font-plex-sans)">{format(p.value)}</text>
+              )}
+              <text x={L + slot * i + slot / 2} y={H - 14} textAnchor="middle" fontSize="10.5"
+                fill={i === hot ? 'var(--ink)' : 'var(--ink-3)'} fontWeight={i === hot ? 600 : 400}
+                fontFamily="var(--font-plex-sans)">{p.label}</text>
+            </g>
+          )
+        })}
+      </ChartFrame>
+      <details className="mt-1 text-[11px] text-ink-3">
+        <summary className="cursor-pointer select-none hover:text-ink-2">The numbers</summary>
+        <table className="mt-1 w-full text-left">
+          <tbody>
+            {points.map((p) => (
+              <tr key={p.label} className="border-t border-line-soft">
+                <td className="py-1 pr-2">{p.label}</td>
+                <td className="num py-1 text-right text-ink">{format(p.value)}</td>
+                {points.some((q) => q.note) && <td className="py-1 pl-2 text-right">{p.note ?? ''}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
+    </div>
+  )
+}

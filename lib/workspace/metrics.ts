@@ -105,6 +105,8 @@ export type MetricKey =
   | 'otif' | 'orderToDock' | 'pastPromise' | 'fgValue' | 'freightUnit' | 'carrierLate' | 'dispatchedMonth'
   /* only once a return has been agreed */
   | 'returnRate'
+  /* the owner's gist on the Welcome page — never offered on a desk */
+  | 'orderBook' | 'dispatchedValue' | 'onOrder'
 
 /** The desks that have a dashboard of figures. */
 export type MetricStage = 'sourcing' | 'inbound' | 'inventory' | 'production' | 'dispatch'
@@ -210,6 +212,9 @@ export const METRIC_LABEL: Record<MetricKey, string> = {
   carrierLate: 'Delivered late',
   dispatchedMonth: 'Dispatched this month',
   returnRate: 'Returned',
+  orderBook: 'Order book',
+  dispatchedValue: 'Dispatched this month',
+  onOrder: 'On order from suppliers',
 }
 
 /** One line each, for the dialog where the owner picks. */
@@ -250,6 +255,9 @@ export const METRIC_WHY: Record<MetricKey, string> = {
   carrierLate: 'Of this month’s confirmed deliveries, the share that landed after the day the customer was given.',
   dispatchedMonth: 'What left the building this month, at what it cost to make.',
   returnRate: 'Of every piece shipped, the share customers were agreed to send back — counted when agreed, not when it arrives.',
+  orderBook: 'What customers have ordered and not yet been sent, at the rates on their sales orders.',
+  dispatchedValue: 'What left this month on delivery challans, at selling value before GST.',
+  onOrder: 'What suppliers have been handed and not yet delivered, at the price on each purchase order.',
 }
 
 /* ------------------------------------------------------------- the maths -- */
@@ -859,7 +867,7 @@ function gateMetrics(
   ]
 }
 
-const nothingOf = (key: MetricKey, value: string, how: string): Metric => ({
+export const nothingOf = (key: MetricKey, value: string, how: string): Metric => ({
   key, label: METRIC_LABEL[key], value, sub: 'nothing to measure yet',
   tone: 'neutral', measured: false, how,
 })
@@ -1116,6 +1124,15 @@ export function stageMetrics(ws: Workspace, today: string, stage: MetricStage = 
   const all = stage === 'production' ? productionMetrics(ws, today, nothingOf)
     : stage === 'dispatch' ? dispatchMetrics(ws, today, nothingOf)
       : metricsFor(ws, today)
+  return stageMetricsFrom(ws, stage, all)
+}
+
+/**
+ * A desk's figures picked out of ones already worked out. The sourcing, gate
+ * and store figures come from one `metricsFor`, so a screen that shows all
+ * three — the owner's gist — works them out once rather than three times.
+ */
+export function stageMetricsFrom(ws: Workspace, stage: MetricStage, all: Metric[]): Metric[] {
   return STAGE_METRICS[stage]
     .filter((k) => ws.cutting || !NEEDS_CUTTING.includes(k))
     .filter((k) => (ws.rmas ?? []).length > 0 || !NEEDS_RETURNS.includes(k))

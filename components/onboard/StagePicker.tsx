@@ -2,37 +2,52 @@
 import Link from 'next/link'
 import { Icon } from '@/components/ui/icons'
 import { useWorkspace } from '@/components/workspace/store'
+import { longDate } from '@/lib/domain/format'
 import { progressOf, stepsFor } from '@/lib/workspace/checklist'
+import { hasRecords } from '@/lib/workspace/executive'
 import { BUILT, STAGE_HOME, STAGE_TILES } from '@/lib/workspace/reveal'
 import { Checklist } from './Checklist'
+import { Gist } from './Gist'
 
 /**
- * Where an owner starts: five stages, and the ones that are open.
+ * Where an owner starts: the business in one look, then five stages.
  *
- * Not a dashboard. Sixteen executive figures over a company that has entered
- * four materials would be sixteen zeroes and four charts of nothing, which is
- * the overwhelming-and-useless combination this pass exists to remove. The
- * question on this screen is "which part of the business am I working on", and
- * that is the only question on it.
+ * Not a dashboard on day one. Sixteen figures over a company that has entered
+ * four materials would be sixteen zeroes and four charts of nothing, so until
+ * the first purchase order, count, job card or sales order is written the only
+ * question here is "which part of the business am I working on". Once there is
+ * something to read, the gist opens above the tiles — money, what needs the
+ * owner, the goals, each stage's figures — and the tiles stay underneath,
+ * because which stage to work on is still the question after the look.
  *
  * Each open tile carries its own set-up progress, and each stage's checklist
  * sits underneath. Inside a desk every screen is plain, with its own Add
  * button, because somebody who is operating already knows what they came for.
  */
 export function StagePicker() {
-  const { workspace } = useWorkspace()
+  const { workspace, today } = useWorkspace()
   if (!workspace) return null
+  const running = hasRecords(workspace)
 
   return (
-    <div className="mx-auto w-full max-w-[64rem]">
-      <header className="mb-6">
-        <p className="mono text-[10.5px] uppercase tracking-wider text-ink-3">
-          {workspace.company.name}
-        </p>
-        <h1 className="mt-1 text-[26px] font-extrabold leading-none tracking-[-0.03em]">
-          Welcome, {workspace.owner.name}
-        </h1>
+    <div className={`mx-auto w-full ${running ? 'max-w-[72rem]' : 'max-w-[64rem]'}`}>
+      <header className="mb-6 flex flex-wrap items-end gap-x-4 gap-y-2">
+        <div className="min-w-0">
+          <p className="mono text-[10.5px] uppercase tracking-wider text-ink-3">
+            {workspace.company.name}
+          </p>
+          <h1 className="mt-1 text-[26px] font-extrabold leading-none tracking-[-0.03em]">
+            Welcome, {workspace.owner.name}
+          </h1>
+        </div>
+        {running && (
+          <p data-gist-date className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-ink-2">
+            <Icon name="calendar" className="size-3.5 text-ink-3" />{longDate(today)}
+          </p>
+        )}
       </header>
+
+      {running && <Gist />}
 
       <ul className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {STAGE_TILES.map((s, i) => {
@@ -68,7 +83,7 @@ export function StagePicker() {
           return (
             <li key={s.id} style={{ '--i': i } as React.CSSProperties}>
               {built ? (
-                <Link href={STAGE_HOME[s.id]}
+                <Link href={STAGE_HOME[s.id]} data-stage-tile={s.id}
                   className={`${shell} press border-line bg-surface hover:border-accent hover:bg-accent-tint/30`}>
                   {body}
                 </Link>

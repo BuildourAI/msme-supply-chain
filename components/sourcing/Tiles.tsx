@@ -58,6 +58,9 @@ const ICON: Record<MetricKey, IconName> = {
   carrierLate: 'truck',
   dispatchedMonth: 'arrow-right',
   returnRate: 'undo',
+  orderBook: 'cash',
+  dispatchedValue: 'truck',
+  onOrder: 'cart',
 }
 
 /*
@@ -79,10 +82,16 @@ const FIGURE: Record<MetricTone, string> = {
   neutral: 'text-ink',
 }
 
-export function Tiles({ metrics }: { metrics: Metric[] }) {
+export function Tiles({ metrics, columns = 3 }: {
+  metrics: Metric[]
+  /** five across for a headline row — the fifth spans two on a tablet so no tile sits alone */
+  columns?: 3 | 5
+}) {
   if (metrics.length === 0) return null
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className={columns === 5
+      ? 'grid gap-3 sm:grid-cols-2 sm:[&>:nth-child(5)]:col-span-2 lg:grid-cols-5 lg:[&>:nth-child(5)]:col-span-1'
+      : 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3'}>
       {metrics.map((m, i) => <Tile key={m.key} m={m} i={i} />)}
     </div>
   )

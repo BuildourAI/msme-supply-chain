@@ -1,0 +1,228 @@
+/**
+ * The owner's gist: the whole business in one look, read off the records.
+ *
+ * Money at the value its record carries, nothing typed in for it; every
+ * desk's queue as its own dashboard counts it; goals judged against rules the
+ * owner set; the last things written, newest first.
+ */
+import { describe, expect, it } from 'vitest'
+import { buildRows } from '@/lib/domain/derive'
+import { bundleFor } from '@/lib/workspace/bundle'
+import { applyCount } from '@/lib/workspace/count'
+import { BAND_ORDER, openCount } from '@/lib/workspace/decisions'
+import { dispatchOpenCount } from '@/lib/workspace/dispatch-decisions'
+import { raiseNote } from '@/lib/workspace/dispatch-notes'
+import { emptyWorkspace } from '@/lib/workspace/defaults'
+import {
+  compact, dispatchedByMonth, gist, goals, hasRecords, headlines, moneyOf, moneySits, monthsBack, needsYou,
+  ordersByPromise, pendingValue, queuesOf, recentActivity, spendByMaterial, stageCards, whenWord,
+} from '@/lib/workspace/executive'
+import { inboundOpenCount } from '@/lib/workspace/inbound-decisions'
+import { inventoryOpenCount } from '@/lib/workspace/inventory-decisions'
+import { JOBWORKER, sendOut } from '@/lib/workspace/jobwork'
+import { metricsFor, stageMetrics } from '@/lib/workspace/metrics'
+import { productionOpenCount } from '@/lib/workspace/production-decisions'
+import { recordReceipt } from '@/lib/workspace/receipts'
+import type { PurchaseOrder, Workspace } from '@/lib/workspace/types'
+import { TODAY, booked, made } from './dispatch-fixture'
+
+const fresh = (): Workspace =>
+  emptyWorkspace({ id: 'WS-1', createdAt: '2026-01-01', ownerName: 'Shanti', contact: '', companyName: 'Indigo Threads', makes: 'Jeans' })
+
+const po = (over: Partial<PurchaseOrder> = {}): PurchaseOrder => ({
+  id: 'PO-001', no: 'PO-1', vendorId: 'VN-001', itemId: 'IT-001', qty: 200, unitPrice: 240,
+  orderedOn: '2026-09-10', expectedOn: '2026-09-26', state: 'confirmed', ...over,
+})
+
+/** booked(), with a supplier, one purchase order handed over and one still a draft */
+const buying = (): Workspace => ({
+  ...booked(),
+  vendors: [{ id: 'VN-001', name: 'Arvind Mills', paymentTermsDays: 30 }],
+  orders: [po(), po({ id: 'PO-002', no: 'PO-2', qty: 100, state: 'draft' })],
+})
+
+/** 30 of SO-1 sent today, on DC-1 */
+const sentSome = (ws = booked()): Workspace => raiseNote(ws, {
+  orderId: 'SO-001', on: TODAY, lines: [{ productId: 'PR-001', qty: 30 }],
+  weightKg: 30, authorisedBy: 'R. Mehta', actor: 'K. Rao',
+}, TODAY)[0]
+
+describe('small words', () => {
+  it('reads money the way an owner does, one decimal in lakh and crore', () => {
+    expect(compact(1_860_000)).toBe('₹18.6 L')
+    expect(compact(12_345_678)).toBe('₹1.2 Cr')
+    expect(compact(45_000)).toBe('₹45,000')
+  })
+
+  it('counts months back across a year end, oldest first', () => {
+    expect(monthsBack('2026-02-10', 4)).toEqual(['2025-11', '2025-12', '2026-01', '2026-02'])
+    expect(whenWord(TODAY, TODAY)).toBe('today')
+    expect(whenWord('2026-09-22', TODAY)).toBe('yesterday')
+    expect(whenWord('2026-09-19', TODAY)).toBe('19 Sep')
+  })
+})
+
+describe('when the gist opens', () => {
+  it('stays shut on the first day, and opens with the first record', () => {
+    expect(hasRecords(fresh())).toBe(false)
+    const counted = applyCount({ ...fresh(), items: booked().items }, '2026-09-01', { 'IT-001': { good: 10 } }, 'Shanti')
+    expect(hasRecords(counted)).toBe(true)
+  })
+})
+
+describe('the money', () => {
+  it('counts the order book as what is still to go, at the order’s own rates', () => {
+    const m = moneyOf(booked(), TODAY)
+    // SO-1: 100 × 900, promised the 20th; SO-2: 200 × 950
+    expect([m.orderBook, m.pastPromise, m.openOrders, m.pastOrders]).toEqual([280_000, 90_000, 2, 1])
+    const sent = sentSome()
+    expect(pendingValue(sent, sent.customerOrders[0])).toBe(63_000)
+    expect(moneyOf(sent, TODAY).orderBook).toBe(253_000)
+  })
+
+  it('counts what was dispatched at selling value, not at what it cost to make', () => {
+    const ws = sentSome()
+    const bars = dispatchedByMonth(ws, TODAY)
+    expect(bars.map((b) => b.label)).toEqual(['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'])
+    expect(bars[5]).toMatchObject({ month: '2026-09', value: 27_000, count: 1 })
+    const tile = headlines(ws, TODAY).find((t) => t.key === 'dispatchedValue')!
+    expect([tile.value, tile.measured]).toEqual(['₹27,000', true])
+  })
+
+  it('counts what is on order as handed over and not yet in — no drafts, never below nought', () => {
+    let ws = buying()
+    expect(moneyOf(ws, TODAY)).toMatchObject({ onOrder: 48_000, onOrderCount: 1, landThisWeek: 1 })
+    ws = recordReceipt(ws, { order: ws.orders[0], qty: 50, accepted: 50, rejected: 0, receivedOn: '2026-09-22' })
+    expect(moneyOf(ws, TODAY).onOrder).toBe(36_000)
+    const over = recordReceipt(buying(), { order: buying().orders[0], qty: 250, accepted: 250, rejected: 0, receivedOn: '2026-09-22' })
+    expect(moneyOf(over, TODAY).onOrder).toBe(0)
+  })
+
+  it('reads stock at the last price paid, and finished goods at what they cost to make', () => {
+    const m = moneyOf(booked(), TODAY)
+    // 500 m of denim at 240; 120 pairs at 420
+    expect([m.shelf, m.finished]).toEqual([120_000, 50_400])
+    const sits = moneySits(m)
+    expect(sits.map((s) => s.label)).toEqual(['On the shelf', 'Held back', 'Finished goods', 'At jobworkers', 'On order'])
+    expect(sits.reduce((a, s) => a + s.value, 0)).toBe(170_400)
+  })
+
+  it('says what would fill a tile rather than printing nought', () => {
+    const tiles = headlines(fresh(), TODAY)
+    expect(tiles.map((t) => t.key)).toEqual(['orderBook', 'dispatchedValue', 'onOrder', 'stockValue', 'atJobworkers'])
+    expect(tiles.every((t) => !t.measured)).toBe(true)
+    expect(tiles[0].value).toBe('No orders yet')
+  })
+
+  it('never prices a counted shelf at nought when nothing has priced it', () => {
+    const items = booked().items.map((i) => ({ ...i, lastPurchaseRate: 0 }))
+    const ws = applyCount({ ...fresh(), items }, '2026-09-01', { 'IT-001': { good: 10 } }, 'Shanti')
+    const shelf = headlines(ws, TODAY).find((t) => t.key === 'stockValue')!
+    expect([shelf.measured, shelf.value]).toEqual([false, 'No price yet'])
+    expect(gist(ws, TODAY).counted).toBe(true)
+    expect(gist(fresh(), TODAY).counted).toBe(false)
+  })
+})
+
+describe('the charts', () => {
+  it('spends by material at the purchase order’s price, what arrived first', () => {
+    let ws = buying()
+    ws = recordReceipt(ws, { order: ws.orders[0], qty: 50, accepted: 50, rejected: 0, receivedOn: '2026-09-22' })
+    expect(spendByMaterial(ws, TODAY)).toEqual({ basis: 'received', rows: [{ label: 'Denim 14 oz', value: 12_000 }], total: 12_000 })
+  })
+
+  it('falls back to what was ordered this month, and folds the tail into Other', () => {
+    const base = buying()
+    const items = Array.from({ length: 8 }, (_, i) => ({ ...base.items[0], id: `IT-1${i}`, name: `Material ${i}` }))
+    const orders = items.map((it, i) => po({ id: `PO-1${i}`, no: `PO-1${i}`, itemId: it.id, qty: 10 * (i + 1), unitPrice: 100 }))
+    const s = spendByMaterial({ ...base, items, orders }, TODAY)
+    expect(s.basis).toBe('ordered')
+    expect(s.rows).toHaveLength(7)
+    expect(s.rows[0]).toEqual({ label: 'Material 7', value: 8_000 })
+    expect(s.rows[6]).toEqual({ label: 'Other (2)', value: 3_000 })
+    expect(s.total).toBe(36_000)
+  })
+
+  it('splits what is still to go by its promise: past, this week, later', () => {
+    const p = ordersByPromise(booked(), TODAY)
+    expect([p.past, p.soon, p.later]).toEqual([{ value: 90_000, count: 1 }, { value: 190_000, count: 1 }, { value: 0, count: 0 }])
+    expect(p.late[0]).toMatchObject({ no: 'SO-1', customer: 'Bharat Panels', promised: '2026-09-20' })
+  })
+})
+
+describe('what needs the owner', () => {
+  it('counts every desk’s queue as its own dashboard does — sourcing with its stock rows', () => {
+    const ws = buying()
+    const q = queuesOf(ws, TODAY)
+    const n = needsYou(q)
+    const rows = buildRows(bundleFor(ws, TODAY), ws.policy)
+    expect(n.stages.map((s) => s.count)).toEqual([
+      openCount(ws, TODAY, rows), inboundOpenCount(ws, TODAY), inventoryOpenCount(ws, TODAY),
+      productionOpenCount(ws, TODAY), dispatchOpenCount(ws, TODAY),
+    ])
+    expect(n.total).toBe(n.stages.reduce((a, s) => a + s.count, 0))
+    expect(n.stages.map((s) => s.href)).toEqual(['/sourcing/dashboard', '/inbound/dashboard', '/inventory/dashboard', '/production/dashboard', '/dispatch/dashboard'])
+    // the heaviest first: what stops the line, then what costs money, then what is half-done
+    const bands = n.top.map((t) => BAND_ORDER.indexOf(t.d.band))
+    expect(bands).toEqual([...bands].sort((a, b) => a - b))
+    expect(n.top.length).toBeLessThanOrEqual(3)
+    // SO-1 is past its promise, so dispatch has something that stops
+    expect(n.stages.find((s) => s.stage === 'dispatch')!.count).toBeGreaterThan(0)
+  })
+})
+
+describe('goals, from the rules the owner set', () => {
+  const judge = (ws: Workspace) => goals(ws, TODAY, [...metricsFor(ws, TODAY), ...stageMetrics(ws, TODAY, 'dispatch')])
+
+  it('has nothing to judge where nothing has happened', () => {
+    const g = judge(booked())
+    expect(g.map((x) => x.key)).toEqual(['otif', 'scrap', 'accuracy', 'jobworkers', 'inspected', 'pace'])
+    expect(g.find((x) => x.key === 'otif')).toMatchObject({ state: 'none', detail: 'nothing delivered to judge yet' })
+    expect(g.find((x) => x.key === 'jobworkers')!.state).toBe('none')
+  })
+
+  it('reads the floor on pace, and behind when the pieces are not coming off', () => {
+    expect(judge(booked()).find((x) => x.key === 'pace')).toMatchObject({ state: 'on', detail: '1 job card on pace' })
+    const slow = judge(made(60)).find((x) => x.key === 'pace')!
+    expect(slow).toMatchObject({ state: 'risk', detail: 'ST-1 is 60 behind plan', href: '/production/jobs?card=JB-001' })
+  })
+
+  it('holds jobworkers to the limit in the store rules', () => {
+    let ws: Workspace = { ...booked(), vendors: [{ id: 'VN-002', name: 'Shree Wash', paymentTermsDays: 0 }], vendorType: { 'VN-002': JOBWORKER } }
+    ;[ws] = sendOut(ws, { vendorId: 'VN-002', itemId: 'IT-001', qty: 100, sentOn: '2026-09-20', dueBack: '2026-09-30', expectedYield: 1 })
+    expect(judge(ws).find((x) => x.key === 'jobworkers')).toMatchObject({ state: 'on', detail: '₹24,000 · limit ₹2.0 L' })
+    const tight = { ...ws, policy: { ...ws.policy, jobworkerExposureCeiling: 10_000 } }
+    expect(judge(tight).find((x) => x.key === 'jobworkers')!.state).toBe('off')
+  })
+})
+
+describe('recent activity', () => {
+  it('reads the last things written off the records, newest first', () => {
+    const ws = sentSome(buying())
+    const a = recentActivity(ws)
+    expect(a[0]).toMatchObject({ on: TODAY, what: 'DC-1 raised for SO-1 · Bharat Panels', who: 'K. Rao', kind: 'doc' })
+    expect(a.map((x) => x.on)).toEqual([...a.map((x) => x.on)].sort().reverse())
+    expect(a.some((x) => /SO-2 taken · Deccan Retail · ₹1.9 L/.test(x.what))).toBe(true)
+    expect(recentActivity(ws, 3)).toHaveLength(3)
+  })
+})
+
+describe('the stage cards, and the whole', () => {
+  it('shows each desk’s own first four figures and what is open there', () => {
+    const ws = buying()
+    const g = gist(ws, TODAY)
+    expect(g.cards.map((c) => c.label)).toEqual(['Sourcing', 'Inbound', 'Inventory', 'Production', 'Dispatch'])
+    for (const c of g.cards) {
+      expect(c.figures.length).toBeLessThanOrEqual(4)
+      expect(c.work.length).toBeLessThanOrEqual(3)
+      expect(c.open).toBe(g.needs.stages.find((s) => s.stage === c.stage)!.count)
+    }
+    expect(g.cards.find((c) => c.stage === 'production')!.figures.map((f) => f.key))
+      .toEqual(['lineRunsFor', 'jobsStopping', 'attainment', 'firstPass'])
+    expect(stageCards(ws, {
+      sourcing: [], inbound: [], inventory: [], production: [], dispatch: [],
+    }, queuesOf(ws, TODAY)).every((c) => c.figures.length === 0)).toBe(true)
+    expect(g.headlines).toHaveLength(5)
+    expect(g.goals).toHaveLength(6)
+  })
+})
