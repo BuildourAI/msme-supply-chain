@@ -1,30 +1,27 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { Icon } from '@/components/ui/icons'
 import { DeskOnly } from '@/components/sourcing/DeskOnly'
-import { Queue } from '@/components/sourcing/Queue'
-import { Tiles } from '@/components/sourcing/Tiles'
+import { BandButton, BandChip, RecentList, StageDashboard, WaitingList } from '@/components/desk/StageDashboard'
+import { InboundPictures, InboundStrip } from '@/components/desk/StagePictures'
 import { MetricPicker } from '@/components/sourcing/MetricPicker'
 import { ReceiveForm } from '@/components/sourcing/ReceiveForm'
 import { GrnDocument } from '@/components/inbound/desk/GrnDocument'
 import { InspectForm } from '@/components/inbound/desk/InspectForm'
 import { isOpen } from '@/lib/workspace/receipts'
 import { useWorkspace } from '@/components/workspace/store'
+import { recentFor } from '@/lib/workspace/desk-pictures'
 import { type Act, type Band, type Decision } from '@/lib/workspace/decisions'
-import { inFlight } from '@/lib/workspace/flight'
 import { inboundDecisionsFor } from '@/lib/workspace/inbound-decisions'
 import { pickedMetrics } from '@/lib/workspace/metrics'
 import type { PurchaseOrder } from '@/lib/workspace/types'
 
 /**
- * The gate's morning.
+ * The gate's morning, in the desk's frame (`StageDashboard`).
  *
- * The same two columns as the sourcing dashboard, because the question is the
- * same shape: what is waiting on you, and what is on its way. The right-hand
- * column is literally the same list — orders out with suppliers, soonest first
- * — because that is exactly what the gate is waiting for. The left is the
- * gate's own work: goods due, receipts waiting on inspection, a rejection out
- * of pattern.
+ * Four pictures of the gate — what is waiting and for how long against the
+ * inspection window, what lands on each of the next ten days, each delivery
+ * against the day it was promised, and this month's accepted against rejected
+ * — the last few receipts as cards, and on the right what is waiting on you.
  *
  * Nothing on this screen is also on the sourcing one. Chasing a late supplier,
  * and getting a change to an order confirmed, are sourcing's; saying what came
@@ -56,7 +53,6 @@ function Dashboard() {
   const ws = workspace
 
   const queue = inboundDecisionsFor(ws, today)
-  const berths = inFlight(ws, today)
   const metrics = pickedMetrics(ws, today, 'inbound')
 
   const act = (d: Decision, kind: Act) => {
@@ -79,35 +75,22 @@ function Dashboard() {
     }
   }
 
+  const atGate = ws.receipts.filter(isOpen).length
   return (
-    <div className="anim-page mx-auto w-full max-w-[72rem]">
-      <header className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-3">
-        <h1 className="min-w-0 text-[26px] font-extrabold leading-none tracking-[-0.03em]">
-          Inbound
-        </h1>
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          <button type="button" onClick={() => setPicking(true)}
-            className="press inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-[13px] font-medium hover:bg-surface-2">
-            <Icon name="columns" className="size-3.5" />
-            Figures
-          </button>
-        </div>
-      </header>
-
-      <Queue rows={queue} berths={berths} onAct={act} showAll={opened}
-        onShowAll={(b) => setOpened((s) => new Set(s).add(b))}
-        clear="Nothing at the gate, nothing waiting on inspection." />
-
-      {metrics.length > 0 && (
-        <section className="mt-7">
-          <h2 className="mb-2.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-3">
-            <span aria-hidden className="h-px w-4 bg-line" />
-            How the gate is doing
-            <span aria-hidden className="h-px flex-1 bg-line" />
-          </h2>
-          <Tiles metrics={metrics} />
-        </section>
-      )}
+    <>
+      <StageDashboard stage="Inbound" icon="tray"
+        chips={<>
+          <BandChip alert={queue.length > 0}>{queue.length} need{queue.length === 1 ? 's' : ''} you</BandChip>
+          {atGate > 0 ? <BandChip icon="tray">{atGate} at the gate</BandChip> : <BandChip icon="tray">nothing at the gate</BandChip>}
+        </>}
+        actions={<BandButton icon="columns" onClick={() => setPicking(true)}>Figures</BandButton>}
+        metrics={metrics}
+        pictures={<InboundPictures ws={ws} today={today} />}
+        strip={<InboundStrip ws={ws} today={today} />}
+        waiting={<WaitingList rows={queue} onAct={act} showAll={opened}
+          onShowAll={(b) => setOpened((s) => new Set(s).add(b))}
+          clear="Nothing at the gate, nothing waiting on inspection." />}
+        recent={<RecentList title="Recent at the gate" items={recentFor(ws, 'inbound')} today={today} />} />
 
       <MetricPicker open={picking} onClose={() => setPicking(false)} stage="inbound" />
       <ReceiveForm open={receiving !== null} order={receiving} onClose={() => setReceiving(null)}
@@ -115,6 +98,6 @@ function Dashboard() {
       <InspectForm receiptId={inspecting} onClose={() => setInspecting(null)}
         onClosed={(id) => setPapering(id)} />
       <GrnDocument open={papering !== null} receiptId={papering} onClose={() => setPapering(null)} />
-    </div>
+    </>
   )
 }

@@ -88,6 +88,8 @@ export interface Metric {
   how: string
   /** its own numbers, drawn. Absent when there is nothing honest to draw. */
   chart?: Chart
+  /** one short line in status colour, for the one thing about it worth acting on or knowing */
+  flag?: { text: string; tone: MetricTone; up?: boolean }
 }
 
 export type MetricKey =

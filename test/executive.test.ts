@@ -14,7 +14,7 @@ import { dispatchOpenCount } from '@/lib/workspace/dispatch-decisions'
 import { raiseNote } from '@/lib/workspace/dispatch-notes'
 import { emptyWorkspace } from '@/lib/workspace/defaults'
 import {
-  compact, dispatchedByMonth, gist, goals, hasRecords, headlines, moneyOf, moneySits, monthsBack, needsYou,
+  compact, dispatchedByMonth, dispatchedSameDays, fyOf, gist, goals, hasRecords, headlines, moneyOf, moneySits, monthsBack, needsYou,
   jobRings, ordersByPromise, pendingValue, queuesOf, QUEUE_WORD, recentActivity, spendByMaterial, stageCards,
   stockCover, whenWord,
 } from '@/lib/workspace/executive'
@@ -60,6 +60,30 @@ describe('small words', () => {
     expect(whenWord(TODAY, TODAY)).toBe('today')
     expect(whenWord('2026-09-22', TODAY)).toBe('yesterday')
     expect(whenWord('2026-09-19', TODAY)).toBe('19 Sep')
+  })
+})
+
+describe('the financial year', () => {
+  it('runs April to March, as the books do', () => {
+    expect(fyOf('2026-09-25')).toEqual({ label: 'FY 2026–27', months: 6 })
+    expect(fyOf('2026-04-01')).toEqual({ label: 'FY 2026–27', months: 1 })
+    expect(fyOf('2027-03-31')).toEqual({ label: 'FY 2026–27', months: 12 })
+    expect(fyOf('2027-01-10')).toEqual({ label: 'FY 2026–27', months: 10 })
+  })
+
+  it('sets this month beside the same days of the last, never a whole month', () => {
+    let ws = sentSome()                                   // DC-1, 30 × ₹900 today (23 Sep)
+    ;[ws] = raiseNote(ws, { orderId: 'SO-001', on: '2026-09-12', lines: [{ productId: 'PR-001', qty: 10 }], weightKg: 10, authorisedBy: 'R. Mehta', actor: 'K. Rao' }, TODAY)
+    const d = dispatchedSameDays(ws, TODAY)
+    expect(d).toMatchObject({ now: 36_000, before: 0, month: '2026-08', days: 23 })
+    // nothing last month to compare with: no arrow on the tile
+    expect(headlines(ws, TODAY).find((t) => t.key === 'dispatchedValue')!.flag).toBeUndefined()
+  })
+
+  it('flags the order book with what is past its promise', () => {
+    const t = headlines(booked(), TODAY).find((x) => x.key === 'orderBook')!
+    expect(t.sub).toBe('2 orders to dispatch')
+    expect(t.flag).toEqual({ text: '₹90,000 past the promise', tone: 'critical' })
   })
 })
 

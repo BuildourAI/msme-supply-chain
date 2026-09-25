@@ -80,6 +80,18 @@
   --warn-soft: #FEF0D9;
   --good: #0B7A4F;
   --good-soft: #E3FFF1;
+  /* the warn ink is a brown made for words; as the fill of a bar or a dot it
+     reads as mud, so a mark takes it lifted towards amber — still darker than
+     --cat-4, and checked beside --critical and --good for colour-blind
+     separation (ΔE 8.1 protan, 15.5 normal). */
+  --warn-mark: #D48412;
+
+  /* the owner's dashboards: one hue for the frame and the data, greys for
+     everything secondary, and the three status colours only where something
+     is late, tight or fine. What Indian manufacturers read every day — Tally,
+     Busy, Excel — is navy or blue on white; a colour per tile reads as noise. */
+  --navy: #1E3A6B;
+  --navy-deep: #152B52;
 
   /* validated categorical slots — §10. Never invent hues. Checked with the
      dataviz validator on #FFFFFF: lightness band, chroma floor, CVD
@@ -177,6 +189,9 @@
   --color-warn-soft: var(--warn-soft);
   --color-good: var(--good);
   --color-good-soft: var(--good-soft);
+  --color-warn-mark: var(--warn-mark);
+  --color-navy: var(--navy);
+  --color-navy-deep: var(--navy-deep);
   --color-cat-1: var(--cat-1);
   --color-cat-2: var(--cat-2);
   --color-cat-3: var(--cat-3);

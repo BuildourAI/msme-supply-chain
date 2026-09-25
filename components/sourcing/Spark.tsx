@@ -21,9 +21,9 @@ import type { Chart, MetricTone } from '@/lib/workspace/metrics'
  */
 const STROKE: Record<MetricTone, string> = {
   good: 'var(--good)',
-  warn: 'var(--warn)',
+  warn: 'var(--warn-mark)',
   critical: 'var(--critical)',
-  neutral: 'var(--accent)',
+  neutral: 'var(--navy)',
 }
 
 /**
@@ -224,7 +224,7 @@ function Stack({ parts }: { parts: number[] }) {
           '--i': i,
           width: `${p}%`,
           // one hue, stepped — a share is a magnitude, not a category
-          background: `color-mix(in oklab, var(--accent) ${Math.max(100 - i * 18, 28)}%, var(--surface-3))`,
+          background: `color-mix(in oklab, var(--navy) ${Math.max(100 - i * 18, 28)}%, var(--surface-3))`,
         } as React.CSSProperties}
           className="anim-reveal" />
       ))}

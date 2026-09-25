@@ -52,6 +52,17 @@ export function compact(n: number): string {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
+/**
+ * The Indian financial year `today` falls in — April to March — as the owner
+ * says it, and how many of its months have begun. The books close on 31 March,
+ * so a year's picture of dispatches starts in April, not January.
+ */
+export function fyOf(today: string): { label: string; months: number } {
+  const y = Number(today.slice(0, 4)), m = Number(today.slice(5, 7))
+  const start = m >= 4 ? y : y - 1
+  return { label: `FY ${start}–${String((start + 1) % 100).padStart(2, '0')}`, months: m >= 4 ? m - 3 : m + 9 }
+}
+
 /** The last n months as YYYY-MM, oldest first, ending with the month `today` is in. */
 export function monthsBack(today: string, n: number): string[] {
   if (!today) return []
@@ -167,6 +178,37 @@ export function moneyOf(ws: Workspace, today: string): Money {
 }
 
 /** The five across the top, in the shape the desks' tiles already draw. */
+/**
+ * What left in the first days of last month, as many days as have passed of
+ * this one — so the 25th is set beside 1–25 of the month before, never beside
+ * a whole month this one has not finished yet.
+ */
+export function dispatchedSameDays(ws: Workspace, today: string): { now: number; before: number; month: string; days: number } {
+  const month = today.slice(0, 7)
+  const prev = monthsBack(today, 2)[0] ?? month
+  const days = Number(today.slice(8, 10))
+  const upTo = `${prev}-${String(days).padStart(2, '0')}`
+  const sum = (keep: (on: string) => boolean) => Math.round(ws.dispatchNotes.filter((n) => keep(n.on))
+    .reduce((a, n) => a + handoff(ws, n.id).taxable, 0))
+  return {
+    now: sum((on) => on.slice(0, 7) === month && on <= today),
+    before: sum((on) => on.slice(0, 7) === prev && on <= upTo),
+    month: prev,
+    days,
+  }
+}
+
+/** ↑ 15% on 1–25 Aug — only when last month had something to compare with. */
+function sameDaysFlag(ws: Workspace, today: string): Metric['flag'] {
+  if (!today) return undefined
+  const d = dispatchedSameDays(ws, today)
+  if (d.before <= 0 || d.now <= 0) return undefined
+  const pct = Math.round(((d.now - d.before) / d.before) * 100)
+  const span = `1–${d.days} ${monthWord(d.month)}`
+  if (pct === 0) return { text: `level with ${span}`, tone: 'neutral' }
+  return { text: `${Math.abs(pct)}% ${pct > 0 ? 'up' : 'down'} on ${span}`, tone: pct > 0 ? 'good' : 'warn', up: pct > 0 }
+}
+
 export function headlines(ws: Workspace, today: string, m: Money = moneyOf(ws, today)): Metric[] {
   const tile = (key: Metric['key'], value: number, sub: string, tone: MetricTone, href: string, how: string): Metric => ({
     key, label: METRIC_LABEL[key], value: compact(value), sub, tone, measured: true, href, how,
@@ -175,17 +217,19 @@ export function headlines(ws: Workspace, today: string, m: Money = moneyOf(ws, t
   const everStock = ws.stockLots.some((l) => isPhysical(l))
   return [
     ws.customerOrders.length > 0
-      ? tile('orderBook', m.orderBook,
-        m.openOrders === 0 ? 'nothing left to send'
-          : `${plural(m.openOrders, 'order')}${m.pastPromise > 0 ? ` · ${compact(m.pastPromise)} past the promise` : ''}`,
-        m.pastPromise > 0 ? 'warn' : 'neutral', '/dispatch/orders',
-        'Σ over open sales orders of what is still to go × the rate on the order, before GST')
+      ? {
+        ...tile('orderBook', m.orderBook,
+          m.openOrders === 0 ? 'nothing left to send' : `${plural(m.openOrders, 'order')} to dispatch`,
+          m.pastPromise > 0 ? 'warn' : 'neutral', '/dispatch/orders',
+          'Σ over open sales orders of what is still to go × the rate on the order, before GST'),
+        flag: m.pastPromise > 0 ? { text: `${compact(m.pastPromise)} past the promise`, tone: 'critical' as const } : undefined,
+      }
       : nothingOf('orderBook', 'No orders yet', 'take a sales order'),
     ws.dispatchNotes.length > 0
-      ? tile('dispatchedValue', m.dispatched,
+      ? { ...tile('dispatchedValue', m.dispatched,
         `${plural(m.dispatchedCount, 'challan')} · ${monthWord(monthsBack(today, 2)[0] ?? today.slice(0, 7))} ${compact(m.lastMonth)}`,
         'neutral', '/dispatch/notes',
-        'Σ this month’s delivery challans at the sales order’s rates, before GST')
+        'Σ this month’s delivery challans at the sales order’s rates, before GST'), flag: sameDaysFlag(ws, today) }
       : nothingOf('dispatchedValue', 'Nothing sent yet', 'raise a challan'),
     everPlaced
       ? tile('onOrder', m.onOrder,
@@ -658,6 +702,8 @@ export function stageCards(ws: Workspace, lists: Record<MetricStage, Metric[]>, 
 export interface Gist {
   headlines: Metric[]
   dispatched: MonthBar[]
+  /** FY 2026–27, and whether the columns are this financial year or simply the last six months */
+  fy: { label: string; whole: boolean }
   spend: Spend
   sits: Segment[]
   promise: Promise3
@@ -683,9 +729,11 @@ export function gist(ws: Workspace, today: string): Gist {
   }
   const queues = queuesOf(ws, today)
   const needs = needsYou(queues)
+  const fy = fyOf(today || '2000-04-01')
   return {
     headlines: headlines(ws, today, m),
-    dispatched: dispatchedByMonth(ws, today),
+    dispatched: dispatchedByMonth(ws, today, Math.max(6, fy.months)),
+    fy: { label: fy.label, whole: fy.months >= 6 },
     spend: spendByMaterial(ws, today),
     sits: moneySits(m),
     promise: ordersByPromise(ws, today),

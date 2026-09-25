@@ -1,13 +1,13 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { Icon } from '@/components/ui/icons'
 import { DeskOnly } from '@/components/sourcing/DeskOnly'
-import { Queue } from '@/components/sourcing/Queue'
-import { Tiles } from '@/components/sourcing/Tiles'
+import { BandButton, BandChip, RecentList, StageDashboard, WaitingList } from '@/components/desk/StageDashboard'
+import { InventoryPictures, InventoryStrip } from '@/components/desk/StagePictures'
 import { MetricPicker } from '@/components/sourcing/MetricPicker'
 import { useWorkspace } from '@/components/workspace/store'
+import { recentFor } from '@/lib/workspace/desk-pictures'
+import { compact, moneyOf } from '@/lib/workspace/executive'
 import { type Act, type Band, type Decision } from '@/lib/workspace/decisions'
-import { inFlight } from '@/lib/workspace/flight'
 import { inventoryDecisionsFor } from '@/lib/workspace/inventory-decisions'
 import { pickedMetrics } from '@/lib/workspace/metrics'
 import { varianceNotedKey } from '@/lib/workspace/counting'
@@ -24,14 +24,12 @@ import { challanRows, type ChallanRow } from '@/lib/workspace/inbound'
 import { isOpen } from '@/lib/workspace/receipts'
 
 /**
- * The store's morning.
+ * The store's morning, in the desk's frame (`StageDashboard`).
  *
- * The same two columns as the other desks: what is waiting on you, and what
- * is on its way. The left is the store's own work — which rack is due a
- * count, which lots nobody can find, where the book has gone below nothing,
- * and the store's material out at a jobworker past its date or its GST year.
- * The right is what is landing, because that is what the store is about to
- * have to put somewhere.
+ * Four pictures of the store — what the shelf is worth material by material,
+ * how many days each lasts against the time a new order takes, which lots are
+ * past their counting date, and this month's loss and scrap — a card per
+ * material with where its stock is, and on the right what is waiting on you.
  */
 export default function Page() {
   return <DeskOnly><Dashboard /></DeskOnly>
@@ -67,7 +65,6 @@ function Dashboard() {
   const ws = workspace
 
   const queue = inventoryDecisionsFor(ws, today)
-  const berths = inFlight(ws, today)
   const metrics = pickedMetrics(ws, today, 'inventory')
 
   const act = (d: Decision, kind: Act) => {
@@ -112,35 +109,22 @@ function Dashboard() {
     }
   }
 
+  const shelf = moneyOf(ws, today).shelf
   return (
-    <div className="anim-page mx-auto w-full max-w-[72rem]">
-      <header className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-3">
-        <h1 className="min-w-0 text-[26px] font-extrabold leading-none tracking-[-0.03em]">
-          Inventory
-        </h1>
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          <button type="button" onClick={() => setPicking(true)}
-            className="press inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-[13px] font-medium hover:bg-surface-2">
-            <Icon name="columns" className="size-3.5" />
-            Figures
-          </button>
-        </div>
-      </header>
-
-      <Queue rows={queue} berths={berths} onAct={act} showAll={opened}
-        onShowAll={(b) => setOpened((s) => new Set(s).add(b))}
-        clear="Every lot counted in time, every lot on a rack, nothing below nothing, nothing overdue at a jobworker." />
-
-      {metrics.length > 0 && (
-        <section className="mt-7">
-          <h2 className="mb-2.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-3">
-            <span aria-hidden className="h-px w-4 bg-line" />
-            How the store is doing
-            <span aria-hidden className="h-px flex-1 bg-line" />
-          </h2>
-          <Tiles metrics={metrics} />
-        </section>
-      )}
+    <>
+      <StageDashboard stage="Inventory" icon="boxes"
+        chips={<>
+          <BandChip alert={queue.length > 0}>{queue.length} need{queue.length === 1 ? 's' : ''} you</BandChip>
+          {shelf > 0 && <BandChip icon="boxes">{compact(shelf)} on the shelf</BandChip>}
+        </>}
+        actions={<BandButton icon="columns" onClick={() => setPicking(true)}>Figures</BandButton>}
+        metrics={metrics}
+        pictures={<InventoryPictures ws={ws} today={today} />}
+        strip={<InventoryStrip ws={ws} today={today} />}
+        waiting={<WaitingList rows={queue} onAct={act} showAll={opened}
+          onShowAll={(b) => setOpened((s) => new Set(s).add(b))}
+          clear="Every lot counted in time, every lot on a rack, nothing below nothing, nothing overdue at a jobworker." />}
+        recent={<RecentList title="Recent in the store" items={recentFor(ws, 'inventory')} today={today} />} />
 
       <MetricPicker open={picking} onClose={() => setPicking(false)} stage="inventory" />
       <CountDialog lotId={counting} onClose={() => setCounting(null)} />
@@ -160,6 +144,6 @@ function Dashboard() {
       <CloseChallanDialog challanId={closing} onClose={() => setClosing(null)} />
       <InspectForm receiptId={inspecting} onClose={() => setInspecting(null)} onClosed={(id) => setPapering(id)} />
       <GrnDocument open={papering !== null} receiptId={papering} onClose={() => setPapering(null)} />
-    </div>
+    </>
   )
 }

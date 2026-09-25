@@ -1,10 +1,9 @@
 'use client'
 import { useMemo, useState } from 'react'
-import { Icon } from '@/components/ui/icons'
 import { DeskOnly } from '@/components/sourcing/DeskOnly'
-import { Queue } from '@/components/sourcing/Queue'
-import { Tiles } from '@/components/sourcing/Tiles'
 import { MetricPicker } from '@/components/sourcing/MetricPicker'
+import { BandButton, BandChip, RecentList, StageDashboard, WaitingList } from '@/components/desk/StageDashboard'
+import { SourcingPictures, SourcingStrip } from '@/components/desk/StagePictures'
 import { PoDocument } from '@/components/sourcing/PoDocument'
 import { AckDialog } from '@/components/sourcing/AckDialog'
 import { ExpediteDialog } from '@/components/sourcing/ExpediteDialog'
@@ -13,7 +12,8 @@ import { buildRows } from '@/lib/domain/derive'
 import { boardLines, type BoardLine } from '@/lib/workspace/board'
 import { bundleFor } from '@/lib/workspace/bundle'
 import { decisionsFor, type Act, type Band, type Decision } from '@/lib/workspace/decisions'
-import { inFlight } from '@/lib/workspace/flight'
+import { recentFor } from '@/lib/workspace/desk-pictures'
+import { compact, moneyOf } from '@/lib/workspace/executive'
 import { flipSignature, pickedMetrics } from '@/lib/workspace/metrics'
 import { churnNotedKey } from '@/lib/workspace/orders'
 import { acceptLine, draftOrderFrom, rejectLine, syncRfqStates } from '@/lib/workspace/sourcing'
@@ -21,23 +21,15 @@ import { acceptLine, draftOrderFrom, rejectLine, syncRfqStates } from '@/lib/wor
 /**
  * Where the day starts.
  *
- * The work first and the figures below it, which is the whole argument of the
- * screen. Tiles above a worklist is the pattern `ListPage` refuses in its own
- * doc comment — "no KPI strip above the data" — and it has a second cost here:
- * a queue must be able to empty, and a strip of metrics permanently above it
- * means the screen never reads as done. Underneath, the figures are what you
- * scroll to once the queue is clear, which makes them the reward for an empty
- * queue rather than wallpaper you scroll past every morning.
+ * The desk's frame (`StageDashboard`): the owner's own figures in a row; four
+ * pictures of the buying — every order as a span from placed to promised, each
+ * supplier's deliveries as dots, what arrived month by month, and what lands
+ * on each of the next ten days; a card per material saying how long its shelf
+ * lasts; and on the right what is waiting on you, one line and one button each.
  *
- * The work itself is two columns — what is waiting on you, and what is out
- * with a supplier — because those are the two questions somebody opens this
- * screen with and only one of them was answered anywhere. `Queue` holds the
- * layout and `flight.ts` the partition that keeps the columns from saying
- * anything twice.
- *
- * The queue and the tiles are the same information seen twice — both read from
- * one workspace through pure functions, so the number on a tile and the rows
- * behind it cannot disagree.
+ * The queue and the pictures read one workspace through pure functions, so a
+ * late order in red on the timeline is the same late order waiting on the
+ * right. `decisionsFor` still decides what is waiting; the pictures only show.
  *
  * Nothing here sends anything. Chasing a late order and handing over a draft
  * both open the document, and §11 holds exactly as it does everywhere else:
@@ -70,7 +62,6 @@ function Dashboard() {
   const ws = workspace
 
   const queue = decisionsFor(ws, today, rows)
-  const berths = inFlight(ws, today)
   const metrics = pickedMetrics(ws, today)
 
   /*
@@ -136,47 +127,26 @@ function Dashboard() {
     }
   }
 
+  const out = moneyOf(ws, today).onOrder
   return (
-    <div className="anim-page mx-auto w-full max-w-[72rem]">
-      {/*
-        * The heading says only what screen this is. Every count that used to
-        * sit here — the total, and the bar breaking it into bands — is now on
-        * the columns and their sub-headings, where it is next to the rows it
-        * counts. Saying it three times in the top inch was the opposite of
-        * making the screen quick to read.
-        */}
-      <header className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-3">
-        <h1 className="min-w-0 text-[26px] font-extrabold leading-none tracking-[-0.03em]">
-          Sourcing
-        </h1>
-
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          <button type="button" onClick={() => setPicking(true)}
-            className="press inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-[13px] font-medium hover:bg-surface-2">
-            <Icon name="columns" className="size-3.5" />
-            Figures
-          </button>
-        </div>
-      </header>
-
-      <Queue rows={queue} berths={berths} onAct={act} showAll={opened}
-        onShowAll={(b) => setOpened((s) => new Set(s).add(b))} />
-
-      {metrics.length > 0 && (
-        <section className="mt-7">
-          <h2 className="mb-2.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-3">
-            <span aria-hidden className="h-px w-4 bg-line" />
-            How you are doing
-            <span aria-hidden className="h-px flex-1 bg-line" />
-          </h2>
-          <Tiles metrics={metrics} />
-        </section>
-      )}
+    <>
+      <StageDashboard stage="Sourcing" icon="cart"
+        chips={<>
+          <BandChip alert={queue.length > 0}>{queue.length} need{queue.length === 1 ? 's' : ''} you</BandChip>
+          {out > 0 && <BandChip icon="truck">{compact(out)} out with suppliers</BandChip>}
+        </>}
+        actions={<BandButton icon="columns" onClick={() => setPicking(true)}>Figures</BandButton>}
+        metrics={metrics}
+        pictures={<SourcingPictures ws={ws} today={today} />}
+        strip={<SourcingStrip ws={ws} today={today} />}
+        waiting={<WaitingList rows={queue} onAct={act} showAll={opened}
+          onShowAll={(b) => setOpened((s) => new Set(s).add(b))} />}
+        recent={<RecentList title="Recent in sourcing" items={recentFor(ws, 'sourcing')} today={today} />} />
 
       <MetricPicker open={picking} onClose={() => setPicking(false)} />
       <PoDocument open={papering !== null} no={papering} onClose={() => setPapering(null)} />
       <AckDialog no={acking} onClose={() => setAcking(null)} />
       <ExpediteDialog line={hurrying} onClose={() => setHurrying(null)} />
-    </div>
+    </>
   )
 }
