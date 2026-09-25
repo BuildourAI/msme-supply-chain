@@ -36,7 +36,7 @@ export function AccountPanel({ compact }: { compact?: boolean }) {
 
   if (account) {
     return (
-      <div className={`rounded-lg border border-good/30 bg-good-soft/30 ${compact ? 'p-2.5' : 'p-3.5'}`}>
+      <div className={`rounded-xl border border-good/30 bg-good-soft/30 ${compact ? 'p-2.5' : 'p-3.5'}`}>
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-semibold">
           <Icon name="check" className="size-4 shrink-0 text-good" />
           Saved to your account
@@ -85,8 +85,10 @@ export function AccountPanel({ compact }: { compact?: boolean }) {
   if (!open) {
     return (
       <button type="button" onClick={() => setOpen(true)}
-        className="press flex w-full items-start gap-2 rounded-lg border border-line bg-surface-2 px-3 py-2.5 text-left hover:bg-surface-3">
-        <Icon name="upload" className="mt-0.5 size-4 shrink-0 text-ink-3" />
+        className="press flex w-full items-start gap-2.5 rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-left hover:border-navy/30 hover:bg-navy/[0.04]">
+        <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-lg bg-navy/10 text-navy">
+          <Icon name="upload" className="size-3.5" />
+        </span>
         <span>
           <span className="block text-[12.5px] font-medium">Keep this on an account</span>
           <span className="mt-0.5 block text-[11.5px] leading-snug text-ink-3">
@@ -112,14 +114,14 @@ export function AccountPanel({ compact }: { compact?: boolean }) {
   }
 
   return (
-    <div className="rounded-lg border border-line bg-surface-2 p-3">
+    <div className="rounded-xl border border-line bg-surface-2 p-3">
       <div className="mb-2.5 flex items-center gap-2">
         <p className="text-[12.5px] font-semibold">
           {mode === 'up' ? 'Create an account' : 'Sign in'}
         </p>
         <button type="button"
           onClick={() => { setMode(mode === 'up' ? 'in' : 'up'); setError(null) }}
-          className="press ml-auto text-[11.5px] text-accent-ink underline underline-offset-2">
+          className="press ml-auto text-[11.5px] text-navy underline underline-offset-2">
           {mode === 'up' ? 'I already have one' : 'I need an account'}
         </button>
       </div>
@@ -134,7 +136,7 @@ export function AccountPanel({ compact }: { compact?: boolean }) {
           <input id="ac-password" type="password" value={password}
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') void submit() }}
-            className="w-full rounded-md border border-line bg-surface px-2.5 py-2 text-[13px] outline-none transition-colors focus:border-accent" />
+            className="w-full rounded-md border border-line bg-surface px-2.5 py-2 text-[13px] outline-none transition-colors focus:border-navy" />
         </Field>
       </div>
 
@@ -146,7 +148,7 @@ export function AccountPanel({ compact }: { compact?: boolean }) {
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => void submit()} disabled={busy}
-          className="press rounded-lg border border-accent-ink bg-accent-ink px-3 py-1.5 text-[12.5px] font-semibold text-on-accent hover:bg-accent disabled:opacity-40">
+          className="press rounded-lg bg-navy px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-navy-deep disabled:opacity-40">
           {busy ? 'One moment…' : mode === 'up' ? 'Create it' : 'Sign in'}
         </button>
         <button type="button" onClick={() => { setOpen(false); setError(null) }}
