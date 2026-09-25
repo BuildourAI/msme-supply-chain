@@ -1,9 +1,10 @@
 'use client'
 import { useState } from 'react'
-import { Icon } from '@/components/ui/icons'
+import Link from 'next/link'
+import { Icon, type IconName } from '@/components/ui/icons'
 import { useWorkspace } from '@/components/workspace/store'
 import { progressOf, stepsFor, type StepId } from '@/lib/workspace/checklist'
-import { STAGE_TILES, type StageId } from '@/lib/workspace/reveal'
+import { STAGE_HOME, STAGE_TILES, type StageId } from '@/lib/workspace/reveal'
 import { ChecksWizard } from './wizards/ChecksWizard'
 import { GateRulesWizard } from './wizards/GateRulesWizard'
 import { JobsWizard } from './wizards/JobsWizard'
@@ -39,13 +40,21 @@ import { TeamWizard } from './wizards/TeamWizard'
  * One component for every stage: the stage picks the list, and the list is
  * data in `checklist.ts`. The steps two stages share are the same objects, so
  * adding a material from the inbound card ticks it on the sourcing one too.
+ *
+ * On the Welcome page each stage is a column in the owner's colours: the stage
+ * itself at the top (a ring for how far its set-up has got, and a link into
+ * the desk), then its steps one line each. A finished step shows what it
+ * holds; the next one says why it matters and gets an outlined button (the
+ * one solid button on the page is the step to do first); the rest keep a
+ * quiet link, with why each matters in its tooltip rather than on every line.
  */
 const WORDS = ['none', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine']
-const cap = (w: string) => w.charAt(0).toUpperCase() + w.slice(1)
 
-export function Checklist({ compact = false, stage = 'sourcing' }: {
+export function Checklist({ compact = false, stage = 'sourcing', lead }: {
   compact?: boolean
   stage?: StageId
+  /** the step the page already explains above the columns — not said again here */
+  lead?: StepId
 }) {
   const { workspace } = useWorkspace()
   const [openStep, setOpenStep] = useState<StepId | null>(null)
@@ -84,56 +93,58 @@ export function Checklist({ compact = false, stage = 'sourcing' }: {
     )
   }
 
+  const tile = STAGE_TILES.find((t) => t.id === stage)!
   return (
-    <section className="anim-fade-up mb-3 min-w-0 rounded-lg border border-line panel">
-      <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line-soft px-4 py-3">
-        <div className="min-w-0">
-          <h2 className="text-[15px] font-bold leading-tight tracking-tight">
-            {p.complete ? `Your ${name} is set up` : `Set up your ${name}`}
-          </h2>
-          <p className="mt-0.5 text-[12px] leading-snug text-ink-2">
-            {p.complete
-              ? 'Every screen in the desk is running on your own numbers. Change any of it here.'
-              : `${cap(WORDS[p.total] ?? String(p.total))} short steps. Each one turns a screen on.`}
-          </p>
-        </div>
-        <span className="mono ml-auto shrink-0 rounded-full border border-line bg-surface px-2.5 py-0.5 text-[11px] text-ink-2">
-          {p.doneCount} of {p.total} done
+    <section data-setup={stage} className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface">
+      <Link href={STAGE_HOME[stage]} data-stage-tile={stage}
+        className="press group flex items-center gap-3 border-b border-line-soft px-3.5 py-3 transition-colors hover:bg-navy/[0.04]">
+        <StageRing icon={tile.icon} done={p.doneCount} total={p.total} />
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1 text-[14.5px] font-bold leading-tight tracking-tight">
+            {tile.label}
+            <Icon name="arrow-right" className="size-3.5 text-navy opacity-0 transition-opacity group-hover:opacity-100" />
+          </span>
+          <span className="mt-0.5 line-clamp-2 block text-[11.5px] leading-snug text-ink-3 xl:min-h-[2.75em]">{tile.blurb}</span>
+          <span className={`mono mt-1 block text-[10.5px] ${p.complete ? 'text-good' : 'text-navy'}`}>
+            {p.doneCount} of {p.total} set up{p.complete ? ' · ready' : ''}
+          </span>
         </span>
-      </header>
+      </Link>
 
-      <ol className="divide-y divide-line-soft">
+      <div className="flex items-baseline gap-2 px-3.5 pb-1.5 pt-2.5">
+        <h2 className="text-[12px] font-bold">{p.complete ? `Your ${name} is set up` : `Set up your ${name}`}</h2>
+        <span className="ml-auto shrink-0 text-[10.5px] text-ink-3">{WORDS[p.total] ?? p.total} short steps</span>
+      </div>
+
+      <ol className="flex flex-1 flex-col gap-1 px-2 pb-2">
         {p.steps.map(({ step, done }, n) => {
           const isNext = p.next?.id === step.id
           return (
-            <li key={step.id}
-              className={`flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 ${
-                isNext ? 'bg-accent-tint/40' : ''}`}>
-              <span aria-hidden
-                className={`grid size-6 shrink-0 place-items-center rounded-full text-[11px] font-bold ${
-                  done ? 'bg-good-soft text-good'
-                    : isNext ? 'bg-accent-ink text-on-accent' : 'bg-surface-3 text-ink-3'}`}>
-                {done ? <Icon name="check" className="size-3.5" /> : n + 1}
-              </span>
-
-              <span className="min-w-0 flex-1">
-                <span className={`block text-[13px] font-semibold leading-tight ${done ? 'text-ink-2' : 'text-ink'}`}>
-                  {step.title}
+            <li key={step.id} title={done ? step.summary(workspace) : step.why}
+              className={`rounded-xl px-1.5 py-1.5 ${isNext ? 'bg-navy/[0.06] ring-1 ring-inset ring-navy/25' : ''}`}>
+              <div className="flex items-start gap-2">
+                <span aria-hidden
+                  className={`mt-px grid size-5 shrink-0 place-items-center rounded-full text-[10.5px] font-bold ${
+                    done ? 'bg-good-soft text-good' : isNext ? 'bg-navy text-white' : 'bg-surface-3 text-ink-3'}`}>
+                  {done ? <Icon name="check" className="size-3" /> : n + 1}
                 </span>
-                <span className="mt-0.5 block text-[11.5px] leading-snug text-ink-3">
-                  {done ? step.summary(workspace) : step.why}
+                <span className="min-w-0 flex-1">
+                  <span className={`block text-[12.5px] font-semibold leading-snug ${done ? 'text-ink-2' : 'text-ink'}`}>{step.title}</span>
+                  {done && <span className="block truncate text-[11px] leading-snug text-ink-3">{step.summary(workspace)}</span>}
+                  {isNext && step.id !== lead && <span className="mt-0.5 line-clamp-2 block text-[11px] leading-snug text-ink-3">{step.why}</span>}
                 </span>
-              </span>
-
-              {isNext ? (
+                {!isNext && (
+                  <button type="button" onClick={() => setOpenStep(step.id)}
+                    className="press shrink-0 rounded-md px-1 py-0.5 text-[11px] text-ink-3 underline underline-offset-2 hover:text-navy">
+                    {done ? 'Change' : step.cta}
+                  </button>
+                )}
+              </div>
+              {isNext && (
                 <button type="button" onClick={() => setOpenStep(step.id)}
-                  className="press shrink-0 rounded-md border border-accent-ink bg-accent-ink px-3 py-1.5 text-[12.5px] font-medium text-on-accent hover:bg-accent">
+                  className="press ml-7 mt-1.5 inline-flex items-center gap-1 rounded-lg border border-navy/40 bg-surface px-2.5 py-1 text-[11.5px] font-semibold text-navy hover:bg-navy/[0.06]">
                   {step.cta}
-                </button>
-              ) : (
-                <button type="button" onClick={() => setOpenStep(step.id)}
-                  className="press shrink-0 rounded-md px-2 py-1 text-[12px] text-ink-3 underline underline-offset-2 hover:text-ink">
-                  {done ? 'Change' : step.cta}
+                  <Icon name="arrow-right" className="size-3" />
                 </button>
               )}
             </li>
@@ -146,7 +157,27 @@ export function Checklist({ compact = false, stage = 'sourcing' }: {
   )
 }
 
-function Wizards({ open, onClose }: { open: StepId | null; onClose: () => void }) {
+/** How far a stage's set-up has got, as a ring round the stage's own icon. */
+function StageRing({ icon, done, total }: { icon: IconName; done: number; total: number }) {
+  const R = 20, C = 2 * Math.PI * R
+  const full = done === total
+  return (
+    <span className="relative grid size-12 shrink-0 place-items-center">
+      <svg viewBox="0 0 48 48" className="absolute inset-0 size-12" aria-hidden>
+        <circle cx="24" cy="24" r={R} fill="none" stroke="var(--surface-3)" strokeWidth="4" />
+        {done > 0 && (
+          <circle cx="24" cy="24" r={R} fill="none" stroke={full ? 'var(--good)' : 'var(--navy)'} strokeWidth="4" strokeLinecap="round"
+            strokeDasharray={`${(C * done) / total} ${C}`} transform="rotate(-90 24 24)" />
+        )}
+      </svg>
+      <span aria-hidden className="grid size-8 place-items-center rounded-full bg-navy/10 text-navy">
+        <Icon name={icon} className="size-4" />
+      </span>
+    </span>
+  )
+}
+
+export function Wizards({ open, onClose }: { open: StepId | null; onClose: () => void }) {
   return (
     <>
       <TeamWizard open={open === 'company'} onClose={onClose} />
