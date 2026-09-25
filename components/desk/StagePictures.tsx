@@ -289,6 +289,7 @@ export function InventoryPictures({ ws, today }: { ws: Workspace; today: string 
       </OwnerCard>
       <OwnerCard chart="loss" title="Loss & scrap" sub="this month" href="/inventory/wastage"
         figure={worst ? (worst.pct > worst.target ? 'over target' : 'within target') : undefined}>
+        {!worst && loss.reasons.length === 0 ? <Empty icon="check" h={150}>Nothing issued or lost this month</Empty> : (
         <div className="flex min-h-[150px] items-center gap-3">
           <div className="shrink-0 text-center">
             <div className="num text-[22px] font-extrabold tracking-[-0.02em]">{compact(loss.net)}</div>
@@ -311,6 +312,7 @@ export function InventoryPictures({ ws, today }: { ws: Workspace; today: string 
             </ul>
           </div>
         </div>
+        )}
       </OwnerCard>
     </>
   )
