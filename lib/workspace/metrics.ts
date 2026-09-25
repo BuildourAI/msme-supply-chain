@@ -214,7 +214,7 @@ export const METRIC_LABEL: Record<MetricKey, string> = {
   returnRate: 'Returned',
   orderBook: 'Order book',
   dispatchedValue: 'Dispatched this month',
-  onOrder: 'On order from suppliers',
+  onOrder: 'On order',
 }
 
 /** One line each, for the dialog where the owner picks. */

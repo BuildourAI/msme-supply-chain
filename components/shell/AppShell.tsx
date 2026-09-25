@@ -152,7 +152,7 @@ function Chrome({ children }: { children: React.ReactNode }) {
       <>
         <div className="flex min-h-screen flex-col">
           <TopBar onMenu={() => setDrawer(true)} onActivity={() => setActivity(true)} />
-          <main className="min-w-0 flex-1 px-3 py-6 lg:px-4">{children}</main>
+          <main className="min-w-0 flex-1 px-3 py-4 lg:px-4">{children}</main>
         </div>
         <ActivityDrawer open={activity} onClose={() => setActivity(false)} />
         <Inspector />

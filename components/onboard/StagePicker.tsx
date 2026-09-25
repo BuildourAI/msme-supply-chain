@@ -2,7 +2,6 @@
 import Link from 'next/link'
 import { Icon } from '@/components/ui/icons'
 import { useWorkspace } from '@/components/workspace/store'
-import { longDate } from '@/lib/domain/format'
 import { progressOf, stepsFor } from '@/lib/workspace/checklist'
 import { hasRecords } from '@/lib/workspace/executive'
 import { BUILT, STAGE_HOME, STAGE_TILES } from '@/lib/workspace/reveal'
@@ -25,29 +24,31 @@ import { Gist } from './Gist'
  * button, because somebody who is operating already knows what they came for.
  */
 export function StagePicker() {
-  const { workspace, today } = useWorkspace()
+  const { workspace } = useWorkspace()
   if (!workspace) return null
   const running = hasRecords(workspace)
 
   return (
-    <div className={`mx-auto w-full ${running ? 'max-w-[72rem]' : 'max-w-[64rem]'}`}>
-      <header className="mb-6 flex flex-wrap items-end gap-x-4 gap-y-2">
-        <div className="min-w-0">
+    <>
+    {running && <Gist />}
+    <div className="mx-auto w-full max-w-[64rem]">
+      {running ? (
+        // the gist carries the welcome; underneath, the stages and their set-up lists
+        <h2 className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-3">
+          <span className="shrink-0">Your stages</span>
+          <span className="hidden font-normal normal-case tracking-normal sm:inline">· set-up and each desk</span>
+          <span aria-hidden className="h-px flex-1 bg-line" />
+        </h2>
+      ) : (
+        <header className="mb-6">
           <p className="mono text-[10.5px] uppercase tracking-wider text-ink-3">
             {workspace.company.name}
           </p>
           <h1 className="mt-1 text-[26px] font-extrabold leading-none tracking-[-0.03em]">
             Welcome, {workspace.owner.name}
           </h1>
-        </div>
-        {running && (
-          <p data-gist-date className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-ink-2">
-            <Icon name="calendar" className="size-3.5 text-ink-3" />{longDate(today)}
-          </p>
-        )}
-      </header>
-
-      {running && <Gist />}
+        </header>
+      )}
 
       <ul className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {STAGE_TILES.map((s, i) => {
@@ -105,5 +106,6 @@ export function StagePicker() {
           open stage, in the order the material moves. */}
       {BUILT.map((stage) => <Checklist key={stage} stage={stage} />)}
     </div>
+    </>
   )
 }

@@ -18,23 +18,23 @@
  * Welcome page re-renders every time a set-up wizard below it saves.
  */
 import { buildRows } from '@/lib/domain/derive'
-import { addDays } from '@/lib/domain/calc'
+import { addDays, productionCoverDays } from '@/lib/domain/calc'
 import { money, num, shortDate } from '@/lib/domain/format'
 import { bundleFor } from './bundle'
 import { customerOf, dispatchRulesOf } from './customers'
-import { decisionsFor, sortDecisions, type Decision } from './decisions'
+import { BAND_ORDER, decisionsFor, sortDecisions, type Band, type Decision, type DecisionKind } from './decisions'
 import { dispatchDecisionsFor } from './dispatch-decisions'
 import { handoff } from './dispatch-notes'
 import { atJobworkersValue } from './inbound'
 import { inboundDecisionsFor } from './inbound-decisions'
 import { inventoryDecisionsFor } from './inventory-decisions'
-import { coverLots, isPhysical } from './ledger'
+import { coverLots, isPhysical, usableOnHand } from './ledger'
 import { HALT_WORD } from './linewatch'
 import {
   METRIC_LABEL, metricsFor, nothingOf, picksOf, stageMetrics, stageMetricsFrom,
   type Metric, type MetricStage, type MetricTone,
 } from './metrics'
-import { jobPlanRows } from './plan'
+import { jobPlanRows, type PlanState } from './plan'
 import { productionDecisionsFor } from './production-decisions'
 import { fgOnHand } from './products'
 import { outstandingOn } from './receipts'
@@ -180,20 +180,20 @@ export function headlines(ws: Workspace, today: string, m: Money = moneyOf(ws, t
           : `${plural(m.openOrders, 'order')}${m.pastPromise > 0 ? ` · ${compact(m.pastPromise)} past the promise` : ''}`,
         m.pastPromise > 0 ? 'warn' : 'neutral', '/dispatch/orders',
         'Σ over open sales orders of what is still to go × the rate on the order, before GST')
-      : nothingOf('orderBook', 'No orders yet', 'needs a sales order taken'),
+      : nothingOf('orderBook', 'No orders yet', 'take a sales order'),
     ws.dispatchNotes.length > 0
       ? tile('dispatchedValue', m.dispatched,
         `${plural(m.dispatchedCount, 'challan')} · ${monthWord(monthsBack(today, 2)[0] ?? today.slice(0, 7))} ${compact(m.lastMonth)}`,
         'neutral', '/dispatch/notes',
         'Σ this month’s delivery challans at the sales order’s rates, before GST')
-      : nothingOf('dispatchedValue', 'Nothing sent yet', 'needs a delivery challan raised'),
+      : nothingOf('dispatchedValue', 'Nothing sent yet', 'raise a challan'),
     everPlaced
       ? tile('onOrder', m.onOrder,
         m.onOrderCount === 0 ? 'everything handed over has arrived'
-          : `${plural(m.onOrderCount, 'order')} · ${m.landThisWeek} land this week`,
+          : `${plural(m.onOrderCount, 'order')} · ${m.landThisWeek} due this week`,
         'neutral', '/sourcing/orders',
         'Σ over purchase orders handed to suppliers of what is still to arrive × the order’s price')
-      : nothingOf('onOrder', 'None handed over', 'needs a purchase order handed to its supplier'),
+      : nothingOf('onOrder', 'None handed over', 'place an order'),
     everStock && m.shelf > 0
       ? tile('stockValue', m.shelf,
         `${plural(m.lots, 'lot')}${m.held > 0 ? ` · ${compact(m.held)} held back` : ''}`,
@@ -201,15 +201,14 @@ export function headlines(ws: Workspace, today: string, m: Money = moneyOf(ws, t
         'Σ usable qty × last purchase rate — remnants and held stock left out')
       // counted but never bought: ₹0 would read as an empty shelf
       : everStock
-        ? nothingOf('stockValue', 'No price yet',
-          'needs a price for what is on the shelf — a supplier’s rate, or a receipt against an order')
-        : nothingOf('stockValue', 'Not counted yet', 'needs stock counted onto the book'),
+        ? nothingOf('stockValue', 'No price yet', 'priced by purchases')
+        : nothingOf('stockValue', 'Not counted yet', 'count your stock'),
     ws.challans.length > 0
       ? tile('atJobworkers', m.atJobworkers,
         `${plural(m.challansOut, 'challan')} out · limit ${compact(ws.policy.jobworkerExposureCeiling)}`,
         m.atJobworkers > ws.policy.jobworkerExposureCeiling ? 'warn' : 'neutral', '/inventory/jobwork',
         'what is still physically with each jobworker × the rate it left at')
-      : nothingOf('atJobworkers', 'Nothing sent out', 'needs a jobwork challan'),
+      : nothingOf('atJobworkers', 'Nothing sent out', 'send out for jobwork'),
   ]
 }
 
@@ -274,29 +273,78 @@ export function moneySits(m: Money): Segment[] {
   ]
 }
 
+export type PromiseZone = 'past' | 'soon' | 'later'
+
+export interface PromisedOrder { id: string; no: string; customer: string; promised: string; value: number; zone: PromiseZone }
+
 export interface Promise3 {
   past: { value: number; count: number }
   soon: { value: number; count: number }
   later: { value: number; count: number }
+  /** every open order, earliest promise first — the timeline's dots */
+  orders: PromisedOrder[]
   /** the orders past their promise, earliest first, for the owner to name */
-  late: { id: string; no: string; customer: string; promised: string; value: number }[]
+  late: PromisedOrder[]
 }
 
 /** What is still to go, by when it was promised: past, in the next seven days, later. */
 export function ordersByPromise(ws: Workspace, today: string): Promise3 {
   const week = today ? addDays(today, 7) : ''
-  const out: Promise3 = { past: { value: 0, count: 0 }, soon: { value: 0, count: 0 }, later: { value: 0, count: 0 }, late: [] }
+  const out: Promise3 = { past: { value: 0, count: 0 }, soon: { value: 0, count: 0 }, later: { value: 0, count: 0 }, orders: [], late: [] }
   for (const o of ws.customerOrders) {
     const left = pendingValue(ws, o)
     if (left <= 0 || !today) continue
-    const bucket = o.promisedDate < today ? out.past : o.promisedDate <= week ? out.soon : out.later
-    bucket.value += left; bucket.count += 1
-    if (o.promisedDate < today) {
-      out.late.push({ id: o.id, no: o.no, customer: customerOf(ws, o.customerId)?.name ?? 'a customer', promised: o.promisedDate, value: left })
-    }
+    const zone: PromiseZone = o.promisedDate < today ? 'past' : o.promisedDate <= week ? 'soon' : 'later'
+    out[zone].value += left; out[zone].count += 1
+    out.orders.push({ id: o.id, no: o.no, customer: customerOf(ws, o.customerId)?.name ?? 'a customer', promised: o.promisedDate, value: left, zone })
   }
-  out.late.sort((a, b) => a.promised.localeCompare(b.promised) || b.value - a.value)
+  out.orders.sort((a, b) => a.promised.localeCompare(b.promised) || b.value - a.value)
+  out.late = out.orders.filter((o) => o.zone === 'past')
   return out
+}
+
+/* ------------------------------------------------------- the floor, pictured -- */
+
+export interface JobRing { id: string; no: string; name: string; made: number; qty: number | null; state: PlanState; href: string }
+
+/**
+ * The open job cards, the ones needing a person first — made against the
+ * planned quantity, as a ring each. A card with no plan has no ring to fill.
+ */
+export function jobRings(ws: Workspace, today: string, n = 4): JobRing[] {
+  if (!today) return []
+  return jobPlanRows(ws, today)
+    .filter((r) => r.state !== 'closed')
+    .slice(0, n)
+    .map((r) => ({
+      id: r.job.id, no: r.job.no, name: r.job.name ?? r.product?.name ?? '',
+      made: r.made, qty: r.planned ? r.job.qty ?? null : null, state: r.state,
+      href: `/production/jobs?card=${r.job.id}`,
+    }))
+}
+
+export type CoverState = 'short' | 'tight' | 'ok'
+
+export interface Cover { id: string; name: string; days: number; lead: number | null; state: CoverState }
+
+/**
+ * Days the shelf lasts, per material, at the rate the owner gave for it —
+ * tightest first. Short when it runs out before a new order could land (the
+ * quickest supplier's lead time, or a week when nobody quotes it); tight
+ * inside twice that.
+ */
+export function stockCover(ws: Workspace, n = 5): Cover[] {
+  const out: Cover[] = []
+  for (const item of ws.items) {
+    const perDay = item.floorConsumptionPerDay || item.avgDailyConsumption
+    if (!(perDay > 0)) continue
+    const days = productionCoverDays(Math.max(0, usableOnHand(ws, item.id)), perDay, item.uom).value
+    const leads = ws.vendorItems.filter((v) => v.itemId === item.id).map((v) => v.quotedLeadTimeDays).filter((d) => d > 0)
+    const lead = leads.length ? Math.min(...leads) : null
+    const bar = lead ?? 7
+    out.push({ id: item.id, name: item.name, days: Math.round(days * 10) / 10, lead, state: days <= bar ? 'short' : days <= 2 * bar ? 'tight' : 'ok' })
+  }
+  return out.sort((a, b) => a.days - b.days || a.name.localeCompare(b.name)).slice(0, n)
 }
 
 /* ------------------------------------------------------------- needs you -- */
@@ -328,25 +376,93 @@ export function queuesOf(ws: Workspace, today: string, rows = today ? buildRows(
   ]
 }
 
+/**
+ * One line per kind of work, the way an owner names a pile: "Challans with no
+ * carrier 2". The card itself — which challan, which customer — is on the
+ * desk the line opens.
+ */
+export const QUEUE_WORD: Record<DecisionKind, string> = {
+  'at-risk': 'Materials running short',
+  late: 'Purchase orders late',
+  unsourced: 'Materials with no supplier',
+  flip: 'Cheaper supplier found',
+  stale: 'Supplier prices expired',
+  unfiled: 'Documents to file',
+  undecided: 'Quotes to decide',
+  unordered: 'Prices agreed, not ordered',
+  'no-qty': 'Orders missing a quantity',
+  unsent: 'Purchase orders not sent',
+  'no-reply': 'Quote requests unanswered',
+  'not-told': 'Order changes not sent',
+  'awaiting-ack': 'Changes not confirmed',
+  churn: 'Orders changed too often',
+  'lands-late': 'Orders landing late',
+  'to-receive': 'Goods due at the gate',
+  'at-gate': 'Goods to inspect',
+  'qc-overdue': 'Inspections overdue',
+  spike: 'Rejections rising',
+  'count-due': 'Stock counts due',
+  'no-rack': 'Lots with no rack',
+  'negative-stock': 'Stock below zero',
+  'count-variance': 'Counts off the book',
+  'held-long': 'Stock held too long',
+  'challan-overdue': 'Jobwork overdue',
+  'challan-unaccounted': 'Jobwork not settled',
+  'over-ceiling': 'Jobworkers over the limit',
+  'challan-gst': 'Jobwork near GST year',
+  'scrap-unsold': 'Scrap unsold',
+  'scrap-over': 'Scrap over target',
+  'remnant-aged': 'Old remnants',
+  'remnant-covers': 'Remnants could cover an order',
+  'cut-below-plan': 'Cuts below plan',
+  'job-halted': 'Job cards halted',
+  'job-will-halt': 'Job cards short of material',
+  'job-at-risk': 'Job cards at risk',
+  'job-behind': 'Job cards behind plan',
+  'job-late': 'Job cards past finish',
+  'no-plan': 'Job cards with no plan',
+  'no-bom': 'Products with no material list',
+  'order-late': 'Sales orders late',
+  'order-at-risk': 'Sales orders at risk',
+  'order-short-stock': 'Orders short of stock',
+  'order-no-style': 'Orders with no job card',
+  'note-no-carrier': 'Challans with no carrier',
+  'note-eway': 'E-way bills needed',
+  'delivery-due': 'Deliveries to confirm',
+  'carrier-late': 'Carriers running late',
+  'return-overdue': 'Returns overdue',
+}
+
+export interface WorkQueue { kind: DecisionKind; stage: MetricStage; label: string; count: number; band: Band; href: string }
+
 export interface NeedsYou {
   total: number
   stages: { stage: MetricStage; label: string; count: number; href: string }[]
-  /** the heaviest across every desk: what stops the line, then what costs money, then what is half-done */
-  top: { d: Decision; stage: MetricStage; label: string }[]
+  /** one line per kind of work: what stops the line first, then what costs money, then what is half-done */
+  queues: WorkQueue[]
 }
 
-export function needsYou(queues: Queue[], n = 3): NeedsYou {
+/** Every desk's cards, folded into one line per kind. */
+export function workQueues(queues: Queue[]): WorkQueue[] {
+  const by = new Map<DecisionKind, WorkQueue>()
+  for (const q of queues) {
+    for (const d of q.rows) {
+      const w = by.get(d.kind) ?? { kind: d.kind, stage: q.stage, label: QUEUE_WORD[d.kind], count: 0, band: d.band, href: dashboardOf(q.stage) }
+      w.count += 1
+      if (BAND_ORDER.indexOf(d.band) < BAND_ORDER.indexOf(w.band)) w.band = d.band
+      by.set(d.kind, w)
+    }
+  }
+  return [...by.values()].sort((a, b) =>
+    BAND_ORDER.indexOf(a.band) - BAND_ORDER.indexOf(b.band) || b.count - a.count || a.label.localeCompare(b.label))
+}
+
+export function needsYou(queues: Queue[]): NeedsYou {
   const label = (s: MetricStage) => GIST_STAGES.find((x) => x.stage === s)!.label
-  const tagged = queues.flatMap((q) => q.rows.map((d) => ({ d, stage: q.stage })))
-  const order = sortDecisions(tagged.map((t) => t.d))
-  const top = order.slice(0, n).map((d) => {
-    const t = tagged.find((x) => x.d === d)!
-    return { d, stage: t.stage, label: label(t.stage) }
-  })
   return {
-    total: tagged.length,
+    total: queues.reduce((a, q) => a + q.rows.length, 0),
     stages: queues.map((q) => ({ stage: q.stage, label: label(q.stage), count: q.rows.length, href: dashboardOf(q.stage) })),
-    top,
+    queues: workQueues(queues),
   }
 }
 
@@ -354,7 +470,17 @@ export function needsYou(queues: Queue[], n = 3): NeedsYou {
 
 export type GoalState = 'on' | 'risk' | 'off' | 'none'
 
-export interface Goal { key: string; label: string; detail: string; state: GoalState; href: string }
+export interface Goal {
+  key: string
+  /** a few words: what is being kept */
+  label: string
+  /** the rule, as short as it goes: ≥ 95% · ≤ ₹2.0 L */
+  target: string
+  /** the figure against it, for the tooltip */
+  detail: string
+  state: GoalState
+  href: string
+}
 
 const verdict = (m?: Metric): GoalState =>
   !m || !m.measured ? 'none' : m.tone === 'good' ? 'on' : m.tone === 'warn' ? 'risk' : m.tone === 'critical' ? 'off' : 'on'
@@ -376,37 +502,38 @@ export function goals(ws: Workspace, today: string, figures: Metric[]): Goal[] {
   const worst = [...late, ...behind][0]
 
   const inspectedState: GoalState = held?.measured && held.tone === 'critical' ? 'off' : verdict(inspected)
+  const scrapPct = Math.min(...Object.values(ws.policy.scrapTargetPct))
 
   return [
     {
-      key: 'otif', label: 'Delivered on time, in full', href: '/dispatch/consignments',
+      key: 'otif', label: 'On time, in full', target: `≥ ${dispatchRulesOf(ws).otifTargetPct}%`, href: '/dispatch/consignments',
       state: verdict(otif),
       detail: otif?.measured ? `${otif.value} · target ${dispatchRulesOf(ws).otifTargetPct}%` : 'nothing delivered to judge yet',
     },
     {
-      key: 'scrap', label: 'Scrap within target', href: '/inventory/wastage',
+      key: 'scrap', label: 'Scrap', target: `≤ ${scrapPct}%`, href: '/inventory/wastage',
       state: verdict(scrap),
       detail: scrap?.measured ? `${scrap.value} · ${scrap.sub}` : 'nothing issued this month to judge',
     },
     {
-      key: 'accuracy', label: 'Stock book believable', href: '/inventory/ledger',
+      key: 'accuracy', label: 'Counts match book', target: 'in tolerance', href: '/inventory/ledger',
       state: verdict(acc),
       detail: acc?.measured ? `${acc.value} of counts inside tolerance` : 'nothing recounted yet',
     },
     {
-      key: 'jobworkers', label: 'Jobworkers under the limit', href: '/inventory/jobwork',
+      key: 'jobworkers', label: 'At jobworkers', target: `≤ ${compact(ceiling)}`, href: '/inventory/jobwork',
       state: ws.challans.length === 0 ? 'none' : atJw <= ceiling ? 'on' : 'off',
       detail: ws.challans.length === 0 ? 'nothing sent out yet' : `${compact(atJw)} · limit ${compact(ceiling)}`,
     },
     {
-      key: 'inspected', label: 'Inspected in time', href: '/inbound/receiving',
+      key: 'inspected', label: 'Checked in time', target: `≤ ${plural(ws.policy.inboundQcDays, 'day')}`, href: '/inbound/receiving',
       state: inspectedState,
       detail: inspectedState === 'off' && held ? held.sub
         : inspected?.measured ? `${inspected.value} within ${plural(ws.policy.inboundQcDays, 'day')}`
           : 'nothing inspected yet',
     },
     {
-      key: 'pace', label: 'Floor on pace', href: worst ? `/production/jobs?card=${worst.job.id}` : '/production/jobs',
+      key: 'pace', label: 'Job cards on plan', target: 'none behind', href: worst ? `/production/jobs?card=${worst.job.id}` : '/production/jobs',
       state: plans.length === 0 ? 'none' : late.length > 0 ? 'off' : behind.length > 0 ? 'risk' : 'on',
       detail: plans.length === 0 ? 'nothing planned to judge'
         : worst ? (worst.state === 'late'
@@ -428,91 +555,66 @@ export interface Activity { on: string; kind: ActivityKind; what: string; who?: 
  * themselves — the portal keeps no separate log, so this cannot drift from
  * what happened.
  */
-export function recentActivity(ws: Workspace, n = 8): Activity[] {
+export function recentActivity(ws: Workspace, n = 5): Activity[] {
   const out: Activity[] = []
   let seq = 0
   const push = (a: Omit<Activity, 'seq'>) => out.push({ ...a, seq: seq++ })
   const item = (id: string) => ws.items.find((i) => i.id === id)
   const vendor = (id?: string) => ws.vendors.find((v) => v.id === id)?.name ?? 'a supplier'
   const job = (id: string) => ws.jobs.find((j) => j.id === id)
+  const customer = (id: string) => customerOf(ws, id)?.name ?? 'a customer'
 
   const handed = new Map<string, { on: string; vendorId: string }>()
   for (const o of ws.orders) if (o.notifiedOn && !handed.has(o.no)) handed.set(o.no, { on: o.notifiedOn, vendorId: o.vendorId })
-  for (const [no, h] of handed) push({ on: h.on, kind: 'cart', what: `${no} handed over to ${vendor(h.vendorId)}`, href: '/sourcing/orders' })
+  for (const [no, h] of handed) push({ on: h.on, kind: 'cart', what: `${no} to ${vendor(h.vendorId)}`, href: '/sourcing/orders' })
 
   for (const r of ws.receipts) {
-    const it = item(r.itemId)
     push({
       on: r.receivedOn, kind: 'tray', href: '/inbound/receiving', who: r.inspector,
-      what: `${num(r.qty, 3)} ${it?.uom ?? ''} ${it?.name ?? 'material'} ${r.challanId ? 'back from' : 'in from'} ${vendor(r.vendorId)}`,
+      what: `${num(r.qty, 3)} ${item(r.itemId)?.uom ?? ''} ${r.challanId ? 'back from' : 'in from'} ${vendor(r.vendorId)}`,
     })
   }
 
-  const counted = new Map<string, { on: string; rack?: string; lots: number; off: number; who: string }>()
+  const counted = new Map<string, { on: string; rack?: string; who: string }>()
   for (const c of ws.counts) {
     const k = `${c.on}|${c.rack ?? ''}`
-    const e = counted.get(k) ?? { on: c.on, rack: c.rack, lots: 0, off: 0, who: c.counter }
-    e.lots += 1
-    if (c.bookQty !== 0 && c.countedQty !== c.bookQty) e.off += 1
-    counted.set(k, e)
+    if (!counted.has(k)) counted.set(k, { on: c.on, rack: c.rack, who: c.counter })
   }
   for (const e of counted.values()) {
     const rack = e.rack ? ws.racks.find((r) => r.id === e.rack)?.name ?? e.rack : undefined
-    push({
-      on: e.on, kind: 'hash', href: '/inventory/ledger', who: e.who,
-      what: `${rack ? `Rack ${rack}` : 'Stock'} counted · ${plural(e.lots, 'lot')}${e.off ? ` · ${plural(e.off, 'difference')}` : ''}`,
-    })
+    push({ on: e.on, kind: 'hash', href: '/inventory/ledger', who: e.who, what: `${rack ? `Rack ${rack}` : 'Stock'} counted` })
   }
 
   for (const s of ws.issues) {
-    const qty = s.lines.reduce((a, l) => a + l.qty, 0)
-    const it = item(s.lines[0]?.itemId ?? '')
-    const j = job(s.jobId)
     push({
       on: s.on, kind: 'boxes', href: `/production/jobs?card=${s.jobId}`, who: s.actor,
-      what: `${s.no} · ${num(qty, 3)} ${it?.uom ?? ''} ${s.kind === 'issue' ? 'issued to' : 'back from'} ${j?.no ?? 'a job card'}`,
+      what: `${s.no} ${s.kind === 'issue' ? 'to' : 'back from'} ${job(s.jobId)?.no ?? 'a job card'}`,
     })
   }
 
-  for (const c of ws.challans) {
-    const it = item(c.itemId)
-    push({
-      on: c.sentOn, kind: 'share', href: '/inventory/jobwork',
-      what: `${c.no} · ${num(c.qtySent, 3)} ${it?.uom ?? ''} ${it?.name ?? 'material'} to ${vendor(c.vendorId)}`,
-    })
-  }
+  for (const c of ws.challans) push({ on: c.sentOn, kind: 'share', href: '/inventory/jobwork', what: `${c.no} to ${vendor(c.vendorId)}` })
 
   for (const o of ws.outputs) {
-    push({
-      on: o.on, kind: 'factory', href: `/production/jobs?card=${o.jobId}`, who: o.actor,
-      what: `${num(o.good, 0)} good booked on ${job(o.jobId)?.no ?? 'a job card'}${o.rejected ? ` · ${num(o.rejected, 0)} rejected` : ''}`,
-    })
+    push({ on: o.on, kind: 'factory', href: `/production/jobs?card=${o.jobId}`, who: o.actor, what: `${num(o.good, 0)} made on ${job(o.jobId)?.no ?? 'a job card'}` })
   }
 
   for (const h of ws.halts) {
-    push({ on: h.on, kind: 'alert', href: '/production/line-watch?view=halts', who: h.actor, what: `${job(h.jobId)?.no ?? 'A job card'} halted — ${HALT_WORD[h.cause].toLowerCase()}` })
+    push({ on: h.on, kind: 'alert', href: '/production/line-watch?view=halts', who: h.actor, what: `${job(h.jobId)?.no ?? 'A job card'} halted` })
   }
 
   for (const o of ws.customerOrders) {
     const value = o.lines.reduce((a, l) => a + l.qty * l.rate, 0)
-    push({ on: o.takenOn, kind: 'cash', href: '/dispatch/orders', what: `${o.no} taken · ${customerOf(ws, o.customerId)?.name ?? 'a customer'} · ${compact(value)}` })
+    push({ on: o.takenOn, kind: 'cash', href: '/dispatch/orders', what: `${o.no} · ${compact(value)}`, who: customer(o.customerId) })
   }
 
   for (const n2 of ws.dispatchNotes) {
-    const order = ws.customerOrders.find((o) => o.id === n2.orderId)
-    push({
-      on: n2.on, kind: 'doc', href: `/dispatch/notes?doc=${n2.id}`, who: n2.actor,
-      what: `${n2.no} raised${order ? ` for ${order.no}` : ''} · ${customerOf(ws, n2.customerId)?.name ?? 'a customer'}`,
-    })
+    push({ on: n2.on, kind: 'doc', href: `/dispatch/notes?doc=${n2.id}`, who: n2.actor, what: `${n2.no} to ${customer(n2.customerId)}` })
   }
 
   for (const c of ws.consignments) {
     if (!c.deliveredOn) continue
     const note = ws.dispatchNotes.find((x) => x.id === c.noteId)
-    push({
-      on: c.deliveredOn, kind: 'truck', href: '/dispatch/consignments', who: c.confirmedBy,
-      what: `${note?.no ?? 'A delivery challan'} delivered${note ? ` to ${customerOf(ws, note.customerId)?.name ?? 'the customer'}` : ''}`,
-    })
+    push({ on: c.deliveredOn, kind: 'truck', href: '/dispatch/consignments', who: c.confirmedBy, what: `${note?.no ?? 'A challan'} delivered` })
   }
 
   // newest first; within a day, the one written last first
@@ -532,21 +634,21 @@ export interface StageCard {
   stage: MetricStage
   label: string
   href: string
-  /** the owner's own picks on that desk, first four */
+  /** the owner's own picks on that desk, first three */
   figures: Metric[]
   open: number
-  work: { title: string; href: string }[]
+  /** its heaviest two kinds of work, one line each */
+  work: WorkQueue[]
 }
 
-export function stageCards(ws: Workspace, lists: Record<MetricStage, Metric[]>, queues: Queue[]): StageCard[] {
+export function stageCards(ws: Workspace, lists: Record<MetricStage, Metric[]>, queues: Queue[], lines = workQueues(queues)): StageCard[] {
   return GIST_STAGES.map(({ stage, label }) => {
     const picks = new Set(picksOf(ws, stage))
-    const q = queues.find((x) => x.stage === stage)?.rows ?? []
     return {
       stage, label, href: dashboardOf(stage),
-      figures: lists[stage].filter((m) => picks.has(m.key)).slice(0, 4),
-      open: q.length,
-      work: q.slice(0, 3).map((d) => ({ title: d.title, href: d.href })),
+      figures: lists[stage].filter((m) => picks.has(m.key)).slice(0, 3),
+      open: queues.find((x) => x.stage === stage)?.rows.length ?? 0,
+      work: lines.filter((w) => w.stage === stage).slice(0, 2),
     }
   })
 }
@@ -561,6 +663,8 @@ export interface Gist {
   promise: Promise3
   needs: NeedsYou
   goals: Goal[]
+  jobs: JobRing[]
+  cover: Cover[]
   activity: Activity[]
   cards: StageCard[]
   /** stock is on the book, whether or not anything has priced it */
@@ -578,16 +682,19 @@ export function gist(ws: Workspace, today: string): Gist {
     dispatch: stageMetrics(ws, today, 'dispatch'),
   }
   const queues = queuesOf(ws, today)
+  const needs = needsYou(queues)
   return {
     headlines: headlines(ws, today, m),
     dispatched: dispatchedByMonth(ws, today),
     spend: spendByMaterial(ws, today),
     sits: moneySits(m),
     promise: ordersByPromise(ws, today),
-    needs: needsYou(queues),
+    needs,
     goals: goals(ws, today, [...shared, ...lists.dispatch]),
+    jobs: jobRings(ws, today),
+    cover: stockCover(ws),
     activity: recentActivity(ws),
-    cards: stageCards(ws, lists, queues),
+    cards: stageCards(ws, lists, queues, needs.queues),
     counted: ws.stockLots.some((l) => isPhysical(l)),
   }
 }

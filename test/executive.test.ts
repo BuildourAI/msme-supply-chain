@@ -15,7 +15,8 @@ import { raiseNote } from '@/lib/workspace/dispatch-notes'
 import { emptyWorkspace } from '@/lib/workspace/defaults'
 import {
   compact, dispatchedByMonth, gist, goals, hasRecords, headlines, moneyOf, moneySits, monthsBack, needsYou,
-  ordersByPromise, pendingValue, queuesOf, recentActivity, spendByMaterial, stageCards, whenWord,
+  jobRings, ordersByPromise, pendingValue, queuesOf, QUEUE_WORD, recentActivity, spendByMaterial, stageCards,
+  stockCover, whenWord,
 } from '@/lib/workspace/executive'
 import { inboundOpenCount } from '@/lib/workspace/inbound-decisions'
 import { inventoryOpenCount } from '@/lib/workspace/inventory-decisions'
@@ -147,6 +148,28 @@ describe('the charts', () => {
     const p = ordersByPromise(booked(), TODAY)
     expect([p.past, p.soon, p.later]).toEqual([{ value: 90_000, count: 1 }, { value: 190_000, count: 1 }, { value: 0, count: 0 }])
     expect(p.late[0]).toMatchObject({ no: 'SO-1', customer: 'Bharat Panels', promised: '2026-09-20' })
+    // every open order is a dot on the timeline, earliest promise first
+    expect(p.orders.map((o) => [o.no, o.zone, o.value])).toEqual([['SO-1', 'past', 90_000], ['SO-2', 'soon', 190_000]])
+  })
+
+  it('rings each open job card by what was made against its plan', () => {
+    expect(jobRings(booked(), TODAY)).toEqual([{
+      id: 'JB-001', no: 'ST-1', name: 'Slim-fit jeans', made: 120, qty: 300, state: 'running', href: '/production/jobs?card=JB-001',
+    }])
+    expect(jobRings(made(60), TODAY)[0]).toMatchObject({ made: 60, state: 'behind' })
+    expect(jobRings(fresh(), TODAY)).toEqual([])
+  })
+
+  it('says how long the shelf lasts per material, tightest first', () => {
+    // 12.5 days on the shelf, nobody quotes it: a week is the bar, so inside two weeks is tight
+    expect(stockCover(booked())).toEqual([{ id: 'IT-001', name: 'Denim 14 oz', days: 12.5, lead: null, state: 'tight' }])
+    // a fortnight to get more in: it runs out first, so it is short
+    const quote = {
+      vendorId: 'VN-001', itemId: 'IT-001', rate: 240, freightPerUnit: 0, nonCreditableGst: 0, paymentTermCost: 0,
+      rejectionAllowance: 0, quotedLeadTimeDays: 14, trailingLeadTimeDays: 14, trailingRejectionRate: 0,
+      onTimePct: 100, score: 0, quoteValidUntil: '2026-12-31',
+    }
+    expect(stockCover({ ...booked(), vendorItems: [quote] })[0]).toMatchObject({ lead: 14, state: 'short' })
   })
 })
 
@@ -162,12 +185,19 @@ describe('what needs the owner', () => {
     ])
     expect(n.total).toBe(n.stages.reduce((a, s) => a + s.count, 0))
     expect(n.stages.map((s) => s.href)).toEqual(['/sourcing/dashboard', '/inbound/dashboard', '/inventory/dashboard', '/production/dashboard', '/dispatch/dashboard'])
-    // the heaviest first: what stops the line, then what costs money, then what is half-done
-    const bands = n.top.map((t) => BAND_ORDER.indexOf(t.d.band))
+    // one line per kind, heaviest first: what stops the line, then what costs money, then what is half-done
+    const bands = n.queues.map((w) => BAND_ORDER.indexOf(w.band))
     expect(bands).toEqual([...bands].sort((a, b) => a - b))
-    expect(n.top.length).toBeLessThanOrEqual(3)
+    expect(new Set(n.queues.map((w) => w.kind)).size).toBe(n.queues.length)
+    expect(n.queues.reduce((a, w) => a + w.count, 0)).toBe(n.total)
     // SO-1 is past its promise, so dispatch has something that stops
-    expect(n.stages.find((s) => s.stage === 'dispatch')!.count).toBeGreaterThan(0)
+    expect(n.queues.find((w) => w.kind === 'order-late')).toMatchObject({
+      stage: 'dispatch', label: 'Sales orders late', count: 1, band: 'stops', href: '/dispatch/dashboard',
+    })
+  })
+
+  it('names every kind of card in a few words', () => {
+    for (const w of Object.values(QUEUE_WORD)) expect(w.length).toBeLessThanOrEqual(30)
   })
 })
 
@@ -177,7 +207,8 @@ describe('goals, from the rules the owner set', () => {
   it('has nothing to judge where nothing has happened', () => {
     const g = judge(booked())
     expect(g.map((x) => x.key)).toEqual(['otif', 'scrap', 'accuracy', 'jobworkers', 'inspected', 'pace'])
-    expect(g.find((x) => x.key === 'otif')).toMatchObject({ state: 'none', detail: 'nothing delivered to judge yet' })
+    expect(g.find((x) => x.key === 'otif')).toMatchObject({ state: 'none', label: 'On time, in full', target: '≥ 95%', detail: 'nothing delivered to judge yet' })
+    expect(g.map((x) => x.label.length + x.target.length).every((n) => n <= 32)).toBe(true)
     expect(g.find((x) => x.key === 'jobworkers')!.state).toBe('none')
   })
 
@@ -200,25 +231,28 @@ describe('recent activity', () => {
   it('reads the last things written off the records, newest first', () => {
     const ws = sentSome(buying())
     const a = recentActivity(ws)
-    expect(a[0]).toMatchObject({ on: TODAY, what: 'DC-1 raised for SO-1 · Bharat Panels', who: 'K. Rao', kind: 'doc' })
+    expect(a[0]).toMatchObject({ on: TODAY, what: 'DC-1 to Bharat Panels', who: 'K. Rao', kind: 'doc' })
     expect(a.map((x) => x.on)).toEqual([...a.map((x) => x.on)].sort().reverse())
-    expect(a.some((x) => /SO-2 taken · Deccan Retail · ₹1.9 L/.test(x.what))).toBe(true)
+    expect(recentActivity(ws, 20).some((x) => x.what === 'SO-2 · ₹1.9 L' && x.who === 'Deccan Retail')).toBe(true)
+    expect(a.length).toBeLessThanOrEqual(5)
+    expect(a.every((x) => x.what.length <= 30)).toBe(true)
     expect(recentActivity(ws, 3)).toHaveLength(3)
   })
 })
 
 describe('the stage cards, and the whole', () => {
-  it('shows each desk’s own first four figures and what is open there', () => {
+  it('shows each desk’s own first three figures and its two heaviest kinds of work', () => {
     const ws = buying()
     const g = gist(ws, TODAY)
     expect(g.cards.map((c) => c.label)).toEqual(['Sourcing', 'Inbound', 'Inventory', 'Production', 'Dispatch'])
     for (const c of g.cards) {
-      expect(c.figures.length).toBeLessThanOrEqual(4)
-      expect(c.work.length).toBeLessThanOrEqual(3)
+      expect(c.figures.length).toBeLessThanOrEqual(3)
+      expect(c.work.length).toBeLessThanOrEqual(2)
+      expect(c.work.every((w) => w.stage === c.stage)).toBe(true)
       expect(c.open).toBe(g.needs.stages.find((s) => s.stage === c.stage)!.count)
     }
     expect(g.cards.find((c) => c.stage === 'production')!.figures.map((f) => f.key))
-      .toEqual(['lineRunsFor', 'jobsStopping', 'attainment', 'firstPass'])
+      .toEqual(['lineRunsFor', 'jobsStopping', 'attainment'])
     expect(stageCards(ws, {
       sourcing: [], inbound: [], inventory: [], production: [], dispatch: [],
     }, queuesOf(ws, TODAY)).every((c) => c.figures.length === 0)).toBe(true)

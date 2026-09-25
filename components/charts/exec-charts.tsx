@@ -324,12 +324,9 @@ export function Waterfall({ steps, unit = 'days', totalLabel }: {
  * would double-encode bar length as colour and spend the only free channel on
  * information the bar already shows.
  */
-export function RankedBars({ rows, format = 'money', fmt: own, hatched, unit, target, targetLabel, title, more, onPick, picked }: {
+export function RankedBars({ rows, format = 'money', hatched, unit, target, targetLabel, title, more, onPick, picked }: {
   rows: { label: string; value: number; sub?: string }[]
-  format?: 'money' | 'int' | 'pct'
-  /** the caller's own words for a value — ₹3.9 L rather than ₹3,90,000 — over `format` */
-  fmt?: (n: number) => string
-  hatched?: boolean; unit?: string
+  format?: 'money' | 'int' | 'pct'; hatched?: boolean; unit?: string
   /** a limit drawn as a rule across the bars, scaled in with them */
   target?: number; targetLabel?: string
   /** names the bars when they chart something other than the headline figure */
@@ -347,8 +344,8 @@ export function RankedBars({ rows, format = 'money', fmt: own, hatched, unit, ta
 }) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
   const top = Math.max(...rows.map((r) => r.value), target ?? 0, 1) * (target != null ? 1.06 : 1)
-  const fmt = own ?? ((n: number) =>
-    format === 'money' ? money(n) : format === 'pct' ? `${num(n, 1)}%` : num(n, 0))
+  const fmt = (n: number) =>
+    format === 'money' ? money(n) : format === 'pct' ? `${num(n, 1)}%` : num(n, 0)
   return (
     <div>
       {title && <p className="mb-1.5 text-[10.5px] uppercase tracking-wide text-ink-3">{title}</p>}
