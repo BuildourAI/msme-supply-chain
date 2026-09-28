@@ -28,8 +28,10 @@ const po = (over: Partial<PurchaseOrder> = {}): PurchaseOrder => ({
   orderedOn: '2026-09-20', expectedOn: '2026-09-30', state: 'draft', ...over,
 })
 
+// an owner who has been through the rules step — the holds are their rules
 const withSupplier = (ws: Workspace): Workspace => ({
   ...ws, vendors: [{ id: 'VN-001', name: 'Arvind Mills', paymentTermsDays: 30 }],
+  drafts: { ...ws.drafts, 'rules.agreed': true },
 })
 
 /* ------------------------------------------------------ 1. idle rules -- */
@@ -56,6 +58,11 @@ describe('the ceiling and the sign-off amount hold a draft order', () => {
     expect(holds[0].text).toMatch(/₹2,40,000 is above your ₹2,00,000 sign-off amount/)
   })
 
+  it('holds nothing until the owner has set their rules', () => {
+    const ws = { ...withSupplier(shop()), orders: [po({ qty: 5000, unitPrice: 240 })] }
+    expect(orderHolds({ ...ws, drafts: {} }, 'PO-1')).toEqual([])
+  })
+
   it('follows the rules as the owner sets them', () => {
     let ws = { ...withSupplier(shop()), orders: [po({ qty: 1000, unitPrice: 240 })] }
     ws = { ...ws, policy: { ...ws.policy, ownerApprovalThreshold: 5_00_000, coverageCeiling: { A: 1, B: 2, C: 2 } } }
@@ -67,7 +74,7 @@ describe('the ceiling and the sign-off amount hold a draft order', () => {
     const ws = { ...withSupplier(shop()), orders: [po({ qty: 1000, unitPrice: 240 })] }
     const rows = buildRows(bundleFor(ws, TODAY), ws.policy)
     const card = decisionsFor(ws, TODAY, rows).find((d) => d.kind === 'unsent')!
-    expect(card.detail).toMatch(/^held · ₹2,40,000 is above your ₹2,00,000 sign-off amount/)
+    expect(card.detail).toMatch(/^drafted, never sent · held: ₹2,40,000 is above your ₹2,00,000 sign-off amount/)
   })
 })
 

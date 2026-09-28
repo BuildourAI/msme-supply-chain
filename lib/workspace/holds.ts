@@ -34,8 +34,13 @@ function monthsAfter(ws: Workspace, itemId: string, adding: number, exceptNo: st
   return (usableOnHand(ws, itemId) + coming + adding) / (item.avgDailyConsumption * 30)
 }
 
-/** The holds on one order, by its number. Empty when nothing is held. */
+/**
+ * The holds on one order, by its number. Empty when nothing is held — and
+ * empty until the owner has been through the rules step: a hold says "your
+ * ceiling" and "your sign-off amount", and a number nobody chose is not theirs.
+ */
 export function orderHolds(ws: Workspace, no: string): Hold[] {
+  if (ws.drafts['rules.agreed'] !== true) return []
   const lines = ws.orders.filter((o) => o.no === no && o.state !== 'cancelled')
   if (lines.length === 0) return []
   const out: Hold[] = []

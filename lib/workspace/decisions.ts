@@ -420,7 +420,7 @@ function unfinished(ws: Workspace, today: string): Decision[] {
         kind: 'unsent',
         title: `${g.no} · ${g.vendor?.name ?? 'Unknown supplier'}`,
         detail: holds.length > 0
-          ? `held · ${holds.map((h) => h.text).join(' · ')}`
+          ? `drafted, never sent · held: ${holds.map((h) => h.text).join(' · ')}`
           : `drafted, never sent · ${g.rows.length} line${g.rows.length === 1 ? '' : 's'}`,
         act: 'paper',
         actLabel: 'Make the document',
