@@ -5,6 +5,7 @@ import { useWorkspace } from '@/components/workspace/store'
 import { PaperDialog, useSentTo, type Paper } from './PaperDialog'
 import { buildPo, poFileName, poSendableFor, renderPo } from '@/lib/paper/po'
 import { markHandedOver } from '@/lib/workspace/orders'
+import { orderHolds } from '@/lib/workspace/holds'
 import type { SendEntry } from '@/lib/workspace/types'
 
 /**
@@ -31,10 +32,13 @@ export function PoDocument({ open, onClose, no }: {
     if (!workspace || !no) return []
     const doc = buildPo(workspace, no)
     if (!doc) return []
+    // the owner's ceiling and sign-off rules, read before a draft goes out
+    const draft = workspace.orders.some((o) => o.no === no && o.state === 'draft')
     return [{
       vendor: doc.vendor ? { id: doc.vendor.id, name: doc.vendor.name } : null,
       problems: doc.problems,
       blanks: doc.blanks,
+      holds: draft ? orderHolds(workspace, no).map((h) => h.text) : [],
       fileName: poFileName(doc),
       sendable: poSendableFor(doc),
       render: () => renderPo(doc),

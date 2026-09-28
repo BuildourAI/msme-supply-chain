@@ -75,7 +75,7 @@ export function RfqForm({ open, onClose, editing }: {
       const [w, id] = editing ? [w0, editing.id] : issueId(w0, 'RF')
       const rfq: Rfq = {
         id,
-        no: editing?.no ?? nextNo('RFQ', w.rfqs),
+        no: editing?.no ?? nextNo('RFQ', w.rfqs, w.issuedNos),
         itemId,
         qty: qtyN,
         neededBy,

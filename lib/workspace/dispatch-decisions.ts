@@ -25,7 +25,14 @@ import type { Workspace } from './types'
 const money = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`
 
 export const riskNotedKey = (orderId: string) => `dispatch.riskNoted.${orderId}`
-export const shortNotedKey = (orderId: string) => `dispatch.shortNoted.${orderId}`
+/*
+ * One note per LINE: an order can be short on two products at once, and
+ * noting the second must not un-note the first. The old per-order key is
+ * still read, so a note written before stays a note — its value already names
+ * the line it was about.
+ */
+export const shortNotedKey = (orderId: string, lineId: string) => `dispatch.shortNoted.${orderId}.${lineId}`
+const legacyShortKey = (orderId: string) => `dispatch.shortNoted.${orderId}`
 export const noCarrierKey = (noteId: string) => `dispatch.noCarrier.${noteId}`
 export const ewayKey = (noteId: string) => `dispatch.eway.${noteId}`
 export const carrierKey = (carrierId: string, month: string) => `dispatch.carrier.${carrierId}.${month}`
@@ -128,7 +135,7 @@ export function dispatchDecisionsFor(ws: Workspace, today: string): Decision[] {
         })
       } else if (r.order.promisedDate <= soon && !r.overdue) {
         const sig = `${c.lineId}:${c.fromStock}:${c.need}`
-        if (ws.drafts[shortNotedKey(r.order.id)] === sig) continue
+        if (ws.drafts[shortNotedKey(r.order.id, c.lineId)] === sig || ws.drafts[legacyShortKey(r.order.id)] === sig) continue
         out.push({
           id: `order-short-stock:${c.lineId}`,
           band: 'costs',
@@ -264,7 +271,7 @@ export function noteDispatch(ws: Workspace, d: Decision, today: string): Workspa
   if (d.kind === 'order-at-risk') return set(riskNotedKey(orderId), riskSig(r))
   if (d.kind === 'order-short-stock') {
     const c = coverFromStock(ws, rows).find((x) => x.lineId === d.refs.lineId)
-    return c ? set(shortNotedKey(orderId), `${c.lineId}:${c.fromStock}:${c.need}`) : ws
+    return c ? set(shortNotedKey(orderId, c.lineId), `${c.lineId}:${c.fromStock}:${c.need}`) : ws
   }
   return ws
 }

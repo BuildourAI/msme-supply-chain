@@ -70,7 +70,7 @@ export function raiseNote(ws: Workspace, x: NoteInput, today: string): [Workspac
   const order = orderOf(ws, x.orderId)!
   const [w0, id] = issueId(ws, 'DN')
   // the delivery challan's own number — DC-1, DC-2 — which is what the paper says
-  const no = nextNo('DC', w0.dispatchNotes ?? [])
+  const no = nextNo('DC', w0.dispatchNotes ?? [], w0.issuedNos)
   const lines = x.lines.filter((l) => l.qty > 0).map((l) => ({ productId: l.productId, qty: l.qty }))
   const note: DispatchNote = {
     id, no, orderId: order.id, customerId: order.customerId, on: x.on, lines,

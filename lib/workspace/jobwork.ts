@@ -112,7 +112,7 @@ export function sendOutProblem(ws: Workspace, s: SendOut): string | null {
 export function sendOut(ws: Workspace, s: SendOut): [Workspace, string] {
   if (sendOutProblem(ws, s)) return [ws, '']
   const [issued, id] = issueId(ws, 'JW')
-  const no = nextNo('JW', issued.challans ?? [])
+  const no = nextNo('JW', issued.challans ?? [], issued.issuedNos)
   const vendor = issued.vendors.find((v) => v.id === s.vendorId)
   const item = issued.items.find((i) => i.id === s.itemId)
   const challan: Challan = {

@@ -72,7 +72,7 @@ export function authoriseReturn(ws: Workspace, x: ReturnInput, today: string): [
   const note = (ws.dispatchNotes ?? []).find((n) => n.id === x.noteId)!
   const [w, id] = issueId(ws, 'RM')
   const rma: WsRma = {
-    id, no: nextNo('RMA', w.rmas ?? []), orderId: note.orderId, noteId: note.id, customerId: note.customerId,
+    id, no: nextNo('RMA', w.rmas ?? [], w.issuedNos), orderId: note.orderId, noteId: note.id, customerId: note.customerId,
     productId: x.productId, qty: x.qty, reason: x.reason.trim(), raisedOn: x.raisedOn,
     dueBy: x.dueBy || dueByOf(ws, x.raisedOn), owner: x.owner.trim(), state: 'authorised',
   }

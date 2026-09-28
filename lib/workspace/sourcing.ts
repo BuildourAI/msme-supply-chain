@@ -32,14 +32,63 @@ import type {
  * The next document number. Counts up from the highest ever issued, never from
  * how many survive — a deleted RFQ-3 must not be handed out again, or last
  * month's quotes would attach themselves to a different request.
+ *
+ * "Ever issued" needs a memory, because the highest surviving number forgets a
+ * deletion of the newest one: `issued` is that memory (`ws.issuedNos`, kept by
+ * `keepIssued`), and the number handed out is one past whichever is higher.
  */
-export function nextNo(prefix: string, existing: { no: string }[]): string {
+export function nextNo(prefix: string, existing: { no: string }[], issued?: Record<string, number>): string {
   const re = new RegExp(`^${prefix}-(\\d+)$`)
   const highest = existing.reduce((max, e) => {
     const m = re.exec(e.no)
     return m ? Math.max(max, Number(m[1])) : max
-  }, 0)
+  }, issued?.[prefix] ?? 0)
   return `${prefix}-${highest + 1}`
+}
+
+/** The key a job prefix is remembered under — its own, so a job prefix can never share a document's count. */
+export const jobKey = (prefix: string) => `JOB:${prefix.toUpperCase()}`
+
+const NUMBERED = /^(.*?)-?(\d+)$/
+
+/** The highest number on each prefix among the documents a workspace holds now. */
+function highestOf(w: Workspace): Record<string, number> {
+  const out: Record<string, number> = {}
+  const note = (key: string, n: number) => { if (n > (out[key] ?? 0)) out[key] = n }
+  const docs = [w.rfqs, w.orders, w.customerOrders, w.dispatchNotes, w.rmas, w.challans, w.issues]
+  for (const list of docs) {
+    for (const d of (list ?? []) as { no?: string }[]) {
+      const m = d.no ? /^([A-Z]+)-(\d+)$/.exec(d.no) : null
+      if (m) note(m[1], Number(m[2]))
+    }
+  }
+  for (const c of w.cuts ?? []) {
+    const m = /^CUT-(\d+)$/.exec(c.cutNo)
+    if (m) note('CUT', Number(m[1]))
+  }
+  for (const j of w.jobs ?? []) {
+    const m = NUMBERED.exec(j.no.trim())
+    if (m && m[1]) note(jobKey(m[1]), Number(m[2]))
+  }
+  return out
+}
+
+/**
+ * Remember every number a change has seen, before the change can lose it.
+ *
+ * Run over each change as a pair: what the workspace held before and what it
+ * holds after. A deletion is exactly the change whose "after" no longer has the
+ * number, so reading the "before" too is what records it — one place, rather
+ * than every delete button having to remember to.
+ */
+export function keepIssued(prev: Workspace | null, next: Workspace): Workspace {
+  const merged: Record<string, number> = { ...(prev?.issuedNos ?? {}), ...(next.issuedNos ?? {}) }
+  for (const w of prev ? [prev, next] : [next]) {
+    for (const [k, n] of Object.entries(highestOf(w))) if (n > (merged[k] ?? 0)) merged[k] = n
+  }
+  const was = next.issuedNos ?? {}
+  const same = Object.keys(merged).length === Object.keys(was).length && Object.entries(merged).every(([k, n]) => was[k] === n)
+  return same ? next : { ...next, issuedNos: merged }
 }
 
 /* ----------------------------------------------------------------- joins -- */
@@ -325,7 +374,7 @@ export function orderFromQuote(
   ws: Workspace, quote: Quote, line: QuoteLine, today: string, rows: DerivedRow[] = [],
 ): Omit<PurchaseOrder, 'id'> {
   return {
-    no: nextNo('PO', ws.orders),
+    no: nextNo('PO', ws.orders, ws.issuedNos),
     vendorId: quote.vendorId,
     itemId: line.itemId,
     qty: orderQtyFor(ws, quote, line, rows),

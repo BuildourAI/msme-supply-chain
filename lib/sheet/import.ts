@@ -17,7 +17,7 @@
 import { issueId } from '@/lib/workspace/defaults'
 import { dropLots, newLot } from '@/lib/workspace/ledger'
 import {
-  buildItem, buildVendor, findItemByCode, findItemByName, findVendorByName,
+  buildItem, buildVendor, findItemByCode, findItemByName, findVendorByName, parseItemClass,
   parseNumber, parseUom,
 } from '@/lib/workspace/records'
 import { addField, BUILTIN, setValue } from '@/lib/workspace/fields'
@@ -531,6 +531,8 @@ export function applyImport(
         daily,
         cushionDays,
         lastPurchaseRate: rate ?? before?.lastPurchaseRate ?? 0,
+        // a blank or unreadable class keeps what the material already has
+        itemClass: parseItemClass(values.class ?? '') ?? undefined,
       }, before)
       w = {
         ...w,
@@ -628,7 +630,7 @@ export function applyImport(
         // issued here and never read from the sheet: two orders sharing a
         // number is a thing nobody can untangle afterwards. Read off what is
         // already there, so a second row in the same import gets the next one
-        no: nextNo('PO', w.orders),
+        no: nextNo('PO', w.orders, w.issuedNos),
         vendorId: plan.links!.vendorId,
         itemId: plan.links!.itemId,
         qty: parseNumber(values.qty ?? '') ?? 0,
@@ -689,7 +691,7 @@ export function applyImport(
       created.push(id)
       const rfq: Rfq = {
         id,
-        no: `RFQ-${(w.nextIds.RF ?? 0)}`,
+        no: nextNo('RFQ', w.rfqs, w.issuedNos),
         itemId: plan.matchId!,
         qty: parseNumber(values.qty ?? '') ?? 0,
         neededBy: toIsoDate(values.needed ?? '') ?? today,

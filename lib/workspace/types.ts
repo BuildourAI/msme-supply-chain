@@ -930,6 +930,14 @@ export interface Workspace {
    */
   reviewedFlips?: Record<string, string>
   /**
+   * The highest number ever issued on each document prefix (PO, RFQ, SO, DC,
+   * RMA, JW, IS, CUT) and each job prefix (under `JOB:<prefix>`). Kept apart
+   * from the documents because a deleted PO-7 leaves no trace among them, and
+   * the next order must still be PO-8. Written by `keepIssued`, read by
+   * `nextNo` and `nextJobNo`.
+   */
+  issuedNos?: Record<string, number>
+  /**
    * The inbound dashboard's figures, chosen separately from sourcing's. One
    * list for both would have every existing owner's sourcing choice decide
    * what the gate shows — and absent here means the same as there: nobody

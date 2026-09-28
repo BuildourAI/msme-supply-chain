@@ -29,6 +29,11 @@ export interface Paper {
   problems: Problem[]
   /** materials with no quantity on them — not ready to hand over at all */
   blanks?: string[]
+  /**
+   * The owner's own rules holding it — over the stock ceiling, above the
+   * sign-off amount. Read and ticked before it goes; never a refusal.
+   */
+  holds?: string[]
   fileName: string
   sendable: Sendable
   render: () => Promise<Blob>
@@ -59,9 +64,13 @@ export function PaperDialog({ open, onClose, title, sub, papers, sentTo, onSent 
   const [failed, setFailed] = useState<string | null>(null)
   const [askContact, setAskContact] = useState<'phone' | 'email' | null>(null)
   const [draft, setDraft] = useState('')
+  const [seen, setSeen] = useState(false)
 
   const paper: Paper | undefined = papers[at]
   const key = paper ? `${paper.fileName}` : ''
+  // a hold is read afresh for each copy, and every time the dialog opens
+  useEffect(() => { setSeen(false) }, [key, open])
+  const held = (paper?.holds?.length ?? 0) > 0 && !seen
 
   /*
    * The bytes are built when the copy changes, and the blob URL is revoked when
@@ -162,6 +171,25 @@ export function PaperDialog({ open, onClose, title, sub, papers, sentTo, onSent 
             </div>
           )}
 
+          {(paper.holds?.length ?? 0) > 0 && (
+            <div data-holds className="mb-3 rounded-lg border border-warn/30 bg-warn-soft px-3 py-2.5">
+              <p className="flex items-center gap-1.5 text-[12.5px] font-medium">
+                <Icon name="clock" className="size-3.5 shrink-0 text-warn" />
+                Held by your rules
+              </p>
+              <ul className="mt-1 space-y-0.5">
+                {paper.holds!.map((h) => (
+                  <li key={h} className="text-[12px] leading-snug text-ink-2">{h}</li>
+                ))}
+              </ul>
+              <label className="mt-2 flex items-start gap-2 text-[12px] leading-snug text-ink">
+                <input type="checkbox" checked={seen} onChange={(e) => setSeen(e.target.checked)}
+                  className="mt-0.5 size-3.5 accent-[var(--accent)]" />
+                I have looked at this, and want to hand it over
+              </label>
+            </div>
+          )}
+
           {paper.problems.length > 0 && (
             <div className="mb-3 rounded-lg border border-warn/30 bg-warn-soft px-3 py-2.5">
               <p className="text-[12.5px] font-medium">Some of this cannot be printed</p>
@@ -189,7 +217,7 @@ export function PaperDialog({ open, onClose, title, sub, papers, sentTo, onSent 
 
           <span className="ml-auto flex flex-wrap items-center gap-2">
             {file && canShareFile(file) && (
-              <Send icon="share" label="Share" onClick={async () => {
+              <Send icon="share" label="Share" disabled={held} onClick={async () => {
                 const r = await shareFile(file, paper.sendable)
                 // a cancel is not a send — recording one would make a document
                 // look delivered when nobody was ever handed it
@@ -197,20 +225,20 @@ export function PaperDialog({ open, onClose, title, sub, papers, sentTo, onSent 
               }} />
             )}
 
-            <Send icon="whatsapp" label="WhatsApp" disabled={busy} onClick={() => {
+            <Send icon="whatsapp" label="WhatsApp" disabled={busy || held} onClick={() => {
               const href = whatsappUrl(paper.sendable, contact?.phone)
               if (!href) { setAskContact('phone'); setDraft(contact?.phone ?? ''); return }
               if (file) download(file.name, file)
               openLink(href, 'whatsapp')
             }} />
 
-            <Send icon="mail" label="Email" disabled={busy} onClick={() => {
+            <Send icon="mail" label="Email" disabled={busy || held} onClick={() => {
               if (!contact?.email) { setAskContact('email'); setDraft(''); return }
               if (file) download(file.name, file)
               openLink(mailtoUrl(paper.sendable, contact.email), 'email')
             }} />
 
-            <Send icon="download" label="Download" primary disabled={busy || !file}
+            <Send icon="download" label="Download" primary disabled={busy || !file || held}
               onClick={() => { if (file) { download(file.name, file); record('download') } }} />
           </span>
         </footer>

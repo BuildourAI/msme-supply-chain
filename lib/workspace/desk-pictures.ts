@@ -96,13 +96,14 @@ export function landing(ws: Workspace, today: string, n = 10): LandingDay[] {
   }
   for (const c of ws.challans ?? []) {
     if (c.status !== 'out') continue
-    const late = c.dueBack < today
-    const cell = at(late ? today : c.dueBack)
+    // late only past the owner's grace days, as the challan card judges it
+    const late = daysBetween(c.dueBack, today) > ws.policy.jobworkGraceDays
+    const cell = at(c.dueBack < today ? today : c.dueBack)
     if (!cell) continue
     const it = item(c.itemId)
     cell.items.push({
       key: `jw:${c.id}`, kind: 'jobwork', what: c.no, qty: vendor(c.vendorId).split(' ')[0],
-      note: late ? `${daysBetween(c.dueBack, today)}d late` : 'due back', status: late ? 'critical' : 'none', href: '/inventory/jobwork',
+      note: late ? `${daysBetween(c.dueBack, today)}d late` : c.dueBack < today ? 'in grace' : 'due back', status: late ? 'critical' : 'none', href: '/inventory/jobwork',
       title: `${c.no} · ${it?.name ?? ''} back from ${vendor(c.vendorId)} ${late ? `was due ${c.dueBack}` : `due ${c.dueBack}`}`,
     })
   }

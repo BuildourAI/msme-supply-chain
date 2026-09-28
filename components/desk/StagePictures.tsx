@@ -16,6 +16,8 @@ import {
 import { compact, fyOf, ordersByPromise, stockCover } from '@/lib/workspace/executive'
 import { haltsByCause } from '@/lib/workspace/halts'
 import { HALT_WORD } from '@/lib/workspace/linewatch'
+import { BANDS, type MetricTone } from '@/lib/workspace/metrics'
+import { dispatchRulesOf } from '@/lib/workspace/customers'
 import type { Workspace } from '@/lib/workspace/types'
 
 /*
@@ -24,6 +26,9 @@ import type { Workspace } from '@/lib/workspace/types'
  * owner's kit in `components/charts/owner.tsx` — navy for the data, greys for
  * the rest, red / amber / green only for status.
  */
+
+// a figure's tone, as the status a picture draws — the bands never say neutral
+const tone = (t: MetricTone): Status => (t === 'neutral' ? 'none' : t)
 
 const qty = (n: number) => (Math.abs(n) >= 1000 ? Math.round(n).toLocaleString('en-IN') : String(Math.round(n * 1000) / 1000))
 const pct = (n: number) => `${Math.round(n * 10) / 10}%`
@@ -68,8 +73,9 @@ export function SourcingPictures({ ws, today }: { ws: Workspace; today: string }
           ? <DotRows head={['Supplier', 'Deliveries', 'On time', 'Rejected', 'Lead']} rows={scores.map((s) => ({
             key: s.vendorId, label: s.name, dots: s.deliveries, href: '/sourcing/suppliers',
             cells: [
-              { text: `${s.onTimePct}%`, status: s.onTimePct >= 90 ? 'good' : s.onTimePct >= 70 ? 'warn' : 'critical' },
-              { text: s.rejectedPct == null ? '—' : pct(s.rejectedPct), status: s.rejectedPct != null && s.rejectedPct > 2 ? 'critical' : undefined },
+              { text: `${s.onTimePct}%`, status: tone(BANDS.onTime(s.onTimePct)) },
+              // the same lines as the tile; coloured only when it is a problem
+              { text: s.rejectedPct == null ? '—' : pct(s.rejectedPct), status: s.rejectedPct != null && BANDS.rejected(s.rejectedPct) !== 'good' ? tone(BANDS.rejected(s.rejectedPct)) : undefined },
               { text: s.lead == null ? '—' : `${s.lead}d` },
             ],
           }))} />
@@ -417,7 +423,7 @@ export function ProductionPictures({ ws, today }: { ws: Workspace; today: string
       <OwnerCard chart="firstpass" title="Right first time" sub="this month" href="/production/line-watch" figure={bad ? `${bad} rejected` : undefined}>
         {fp.length > 0 ? (
           <div className="flex min-h-[150px] items-center gap-4">
-            <Ring pct={good + bad ? good / (good + bad) : 0} status={good + bad && good / (good + bad) >= 0.97 ? 'good' : 'warn'}
+            <Ring pct={good + bad ? good / (good + bad) : 0} status={good + bad ? tone(BANDS.floorRejects(bad / (good + bad))) : 'none'}
               label={pct(good + bad ? (good / (good + bad)) * 100 : 0)} sub="good" size={104} />
             <ul className="min-w-0 flex-1 space-y-2 text-[11.5px]">
               {fp.map((r) => {
@@ -481,6 +487,7 @@ export function DispatchPictures({ ws, today }: { ws: Workspace; today: string }
   const moving = road.filter((r) => !r.delivered && r.status !== 'warn').length
   const unbooked = road.filter((r) => r.status === 'warn').length
   const cust = customerScores(ws, today)
+  const otifTarget = dispatchRulesOf(ws).otifTargetPct
   const dots = cust.flatMap((c) => c.dots)
   const shelf = shelfVsPromised(ws)
   const ready = shelf.reduce((a, r) => a + Math.min(r.onShelf, r.promised), 0)
@@ -526,7 +533,7 @@ export function DispatchPictures({ ws, today }: { ws: Workspace; today: string }
           <div className="flex min-h-[150px] flex-col justify-center">
             <DotRows head={['Customer', 'Deliveries', 'OTIF', '', '']} rows={cust.map((c) => ({
               key: c.id, label: c.name, dots: c.dots, href: '/dispatch/consignments',
-              cells: [{ text: `${c.pct}%`, status: c.pct >= 95 ? 'good' : c.pct >= 70 ? 'warn' : 'critical' }, { text: '' }, { text: '' }],
+              cells: [{ text: `${c.pct}%`, status: tone(BANDS.otif(c.pct, otifTarget)) }, { text: '' }, { text: '' }],
             }))} />
             <p className="mt-2 flex gap-3 text-[10.5px] text-ink-3">
               <span className="flex items-center gap-1"><i className="size-2.5 rounded-full bg-good" />on time, in full</span>

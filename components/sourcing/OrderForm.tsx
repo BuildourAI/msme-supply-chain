@@ -174,7 +174,7 @@ export function OrderForm({ open, onClose, editing }: {
        * is what makes them one order to the Orders screen and one page to the
        * document.
        */
-      const no = nextNo('PO', w0.orders)
+      const no = nextNo('PO', w0.orders, w0.issuedNos)
       let w = w0
       const made: PurchaseOrder[] = []
       for (const l of lines) {

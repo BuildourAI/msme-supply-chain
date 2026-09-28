@@ -456,6 +456,7 @@ function migrate(raw: Partial<Workspace>): Workspace {
      */
     metricPicks: raw.metricPicks,
     reviewedFlips: map<string>(raw.reviewedFlips),
+    issuedNos: map<number>(raw.issuedNos),
     inboundMetricPicks: raw.inboundMetricPicks,
     /*
      * All empty on anything saved before the store opened, and nothing is

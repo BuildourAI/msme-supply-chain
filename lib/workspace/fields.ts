@@ -73,6 +73,9 @@ export const BUILTIN: Record<SheetEntity, BuiltinColumn[]> = {
       aliases: ['safety qty', 'safety quantity', 'buffer stock', 'minimum stock'] },
     { key: 'minOrder', label: 'Smallest order', kind: 'number',
       aliases: ['moq', 'min order', 'minimum order', 'minimum order quantity', 'min order qty'] },
+    // A, B or C: which of the store rules' three columns this material follows
+    { key: 'class', label: 'Class', kind: 'text',
+      aliases: ['abc', 'abc class', 'item class', 'material class', 'class'] },
     { key: 'suppliers', label: 'Suppliers', derived: true },
   ],
   rfq: [
@@ -451,6 +454,8 @@ const HIDDEN_UNTIL_USED: Record<string, (ws: Workspace, entity: SheetEntity) => 
   cushion: (ws) => ws.items.some((i) => i.safetyStock > 0),
   safety: (ws) => ws.items.some((i) => i.safetyStock > 0),
   minOrder: (ws) => ws.items.some((i) => i.moq > 0),
+  // everything starts as B, so the column earns its place once something is not
+  class: (ws) => ws.items.some((i) => i.itemClass !== 'B'),
 }
 
 /* -------------------------------------------------------------- reading -- */

@@ -148,6 +148,9 @@ export function TeamWizard({ open, onClose }: { open: boolean; onClose: () => vo
     update((w) => ({
       ...w,
       company: {
+        // everything this wizard does not ask about stays as it was — the state
+        // is set in the dispatch rules, and saving the team must not erase it
+        ...w.company,
         name: company.trim(),
         makes: makes.trim(),
         // kept undefined rather than '' when blank, so the document knows the

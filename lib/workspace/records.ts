@@ -13,7 +13,7 @@
  * An importer that reimplemented any of that would drift from the dialog within
  * a release. So the dialogs call these too.
  */
-import type { Item, Uom, Vendor, VendorItem } from '@/lib/domain/types'
+import type { Item, ItemClass, Uom, Vendor, VendorItem } from '@/lib/domain/types'
 import { gstCost, rejectionCost } from './landed'
 import type { Workspace } from './types'
 
@@ -102,6 +102,12 @@ export interface ItemInput {
   /** days of cushion — safety stock is the product of the two */
   cushionDays: number
   lastPurchaseRate?: number
+  /**
+   * How closely it is watched — A, B or C — which picks the count cadence,
+   * count tolerance, scrap target and order cover from the owner's rules.
+   * Left out, a new material is B and an edited one keeps what it had.
+   */
+  itemClass?: ItemClass
 }
 
 /**
@@ -109,16 +115,21 @@ export interface ItemInput {
  * the dialog fills them.
  *
  * `previous` carries an edit: everything measured about the material —
- * its class, what it feeds — survives, and only what was asked is replaced.
+ * what it feeds, its last rate — survives, and only what was asked is
+ * replaced. Its class is kept unless the input names one.
  */
 export function buildItem(ws: Workspace, input: ItemInput, previous?: Item): Item {
+  const itemClass = input.itemClass ?? previous?.itemClass ?? 'B'
   return {
     ...(previous ?? {
-      itemClass: 'B' as const,
-      coverageCeilingMonths: ws.policy.coverageCeiling.B,
       lastPurchaseRate: 0,
       feeds: [],
     }),
+    itemClass,
+    // the ceiling belongs to the class: a material moved from B to A takes A's
+    coverageCeilingMonths: previous && previous.itemClass === itemClass
+      ? previous.coverageCeilingMonths
+      : ws.policy.coverageCeiling[itemClass],
     id: input.id,
     code: input.code.trim().toUpperCase(),
     name: input.name.trim(),
@@ -239,4 +250,10 @@ export function backfillRates(items: Item[], rates: VendorItem[]): Item[] {
     const q = rates.find((r) => r.itemId === it.id && r.rate > 0)
     return q ? { ...it, lastPurchaseRate: q.rate } : it
   })
+}
+
+/** "A", "class b", "C class" — the class a sheet or a person writes, or null when it is none of the three. */
+export function parseItemClass(raw: string): ItemClass | null {
+  const m = /^\s*(?:class\s*)?([abc])(?:\s*class)?\s*$/i.exec(raw)
+  return m ? (m[1].toUpperCase() as ItemClass) : null
 }

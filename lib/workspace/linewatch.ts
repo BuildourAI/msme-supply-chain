@@ -24,7 +24,7 @@
  * The domain's words are used for the three it shares (`STATUS_LABEL`), and
  * the "line runs for" figure is the domain's own production cover.
  */
-import { productionCoverDays } from '@/lib/domain/calc'
+import { daysBetween, productionCoverDays } from '@/lib/domain/calc'
 import { STATUS_LABEL, num, shortDate } from '@/lib/domain/format'
 import type { Derived, Item } from '@/lib/domain/types'
 import { challanRow } from './inbound'
@@ -82,7 +82,9 @@ export function incomingOf(ws: Workspace, today: string): Incoming[] {
       const left = stillExpected(challanRow(ws, c, today))
       return {
         itemId: c.itemId, on: c.dueBack, qty: left,
-        what: `back from ${vendorName(c.vendorId)} on ${c.no}`, late: c.dueBack < today,
+        // late only past the owner's grace days — the same line the challan card draws
+        what: `back from ${vendorName(c.vendorId)} on ${c.no}`,
+        late: daysBetween(c.dueBack, today) > ws.policy.jobworkGraceDays,
         jobId: c.jobId,
       }
     })

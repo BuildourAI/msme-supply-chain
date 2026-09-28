@@ -1,13 +1,16 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
-import { Field, NumberInput, Select, TextInput } from '@/components/ui/Field'
+import { Chips, Field, NumberInput, Select, TextInput } from '@/components/ui/Field'
 import { useWorkspace } from '@/components/workspace/store'
 import { setValues } from '@/lib/workspace/fields'
 import { CustomFields } from '@/components/sheet/CustomFields'
 import { UOM_LABEL, issueId, suggestCode } from '@/lib/workspace/defaults'
 import { buildItem } from '@/lib/workspace/records'
-import type { Item, Uom } from '@/lib/domain/types'
+import type { Item, ItemClass, Uom } from '@/lib/domain/types'
+
+// what each class means to a store, in the owner's words
+const CLASS_WORD: Record<ItemClass, string> = { A: 'watched closely', B: 'usual', C: 'loosely' }
 
 /**
  * Add or change a material.
@@ -37,6 +40,7 @@ export function MaterialForm({ open, onClose, editing }: {
   const [moq, setMoq] = useState('')
   const [daily, setDaily] = useState('')
   const [cushion, setCushion] = useState('7')
+  const [cls, setCls] = useState<ItemClass>('B')
   const [custom, setCustom] = useState<Record<string, string>>({})
   const [tried, setTried] = useState(false)
 
@@ -53,11 +57,12 @@ export function MaterialForm({ open, onClose, editing }: {
       setCushion(editing.avgDailyConsumption > 0
         ? String(Math.round(editing.safetyStock / editing.avgDailyConsumption))
         : '0')
+      setCls(editing.itemClass)
     } else {
       setName(''); setCode('')
       setGroup(workspace.categories.materialGroup[0] ?? '')
       setUom(workspace.categories.units[0] ?? 'kg')
-      setMoq(''); setDaily(''); setCushion('7')
+      setMoq(''); setDaily(''); setCushion('7'); setCls('B')
     }
   }, [open, editing]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -95,6 +100,7 @@ export function MaterialForm({ open, onClose, editing }: {
         moq: moqN,
         daily: dailyN,
         cushionDays: cushionN,
+        itemClass: cls,
       }, editing ?? undefined)
       return setValues({
         ...w,
@@ -164,6 +170,18 @@ export function MaterialForm({ open, onClose, editing }: {
             </strong> back as cushion.
           </p>
         )}
+
+        <Field label="Class" hint="Which column of your store rules it follows: how often it is counted, how much difference a count may show, and the scrap you accept.">
+          <Chips value={cls} onChange={(v) => setCls(v as ItemClass)}
+            options={(['A', 'B', 'C'] as const).map((c) => ({
+              value: c,
+              label: `${c} · ${CLASS_WORD[c]}`,
+              hint: `Counted every ${ws.policy.countCadenceDays[c]} days · ${ws.policy.countTolerancePct[c]}% difference allowed · ${ws.policy.scrapTargetPct[c]}% scrap accepted`,
+            }))} />
+          <p className="mt-1.5 text-[11.5px] text-ink-3">
+            {cls}: counted every {ws.policy.countCadenceDays[cls]} days, {ws.policy.countTolerancePct[cls]}% difference allowed, {ws.policy.scrapTargetPct[cls]}% scrap accepted.
+          </p>
+        </Field>
 
         <CustomFields entity="material" values={custom} onChange={setCustom} />
       </div>

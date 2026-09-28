@@ -7,6 +7,7 @@ import { SAMPLE_BUNDLE, bundleFor } from '@/lib/workspace/bundle'
 import { emptyWorkspace } from '@/lib/workspace/defaults'
 import { browserStore, type Stored, type WorkspaceStore } from '@/lib/workspace/storage'
 import { chosen, fetchRemote, pushRemote, resolve } from '@/lib/workspace/remote'
+import { keepIssued } from '@/lib/workspace/sourcing'
 import { useAuth } from './auth'
 import type { PersonRole, Session, Workspace, WorkspaceMode } from '@/lib/workspace/types'
 
@@ -189,7 +190,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const update = useCallback<WorkspaceCtx['update']>((fn) => {
     setWorkspace((prev) => {
       if (!prev) return prev
-      const next = fn(prev)
+      // a number a change deletes is remembered on the way out, never reissued
+      const next = keepIssued(prev, fn(prev))
       if (store) {
         setPersistent(store.save({
           workspace: next, session: { actor: next.owner.name, role: 'owner' }, mode: 'mine',

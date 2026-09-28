@@ -101,7 +101,7 @@ export function recordCut(ws: Workspace, c: CutInput): [Workspace, string] {
   const lot = cutLot(ws, c)!
   const job = c.jobId ? (ws.jobs ?? []).find((j) => j.id === c.jobId) : undefined
   const [w0, id] = issueId(ws, 'CT')
-  const cutNo = nextNo('CUT', (ws.cuts ?? []).map((x) => ({ no: x.cutNo })))
+  const cutNo = nextNo('CUT', (ws.cuts ?? []).map((x) => ({ no: x.cutNo })), ws.issuedNos)
   const [w1, moveId] = post(w0, {
     lotId: lot.id, itemId: c.itemId, on: c.on, kind: 'issue', qty: -round3(c.inputQty),
     source: 'cut', sourceRef: cutNo, actor: c.operator, jobId: c.jobId,
@@ -211,7 +211,7 @@ export function useRemnant(ws: Workspace, u: UseRemnant): [Workspace, string] {
   const job = (ws.jobs ?? []).find((j) => j.id === u.jobId)!
   const qty = Math.min(piecesQty(lot, u.pieces), lot.qty)
   const [w0, id] = issueId(ws, 'IS')
-  const no = nextNo('IS', w0.issues ?? [])
+  const no = nextNo('IS', w0.issues ?? [], w0.issuedNos)
   const [w1, moveId] = post(w0, {
     lotId: lot.id, itemId: lot.itemId, on: u.on, kind: 'offcut_issue', qty: -qty,
     source: 'job', sourceRef: no, actor: u.actor, jobId: u.jobId,

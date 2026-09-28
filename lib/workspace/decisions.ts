@@ -26,6 +26,7 @@ import { churnNotedKey, syncOrders } from './orders'
 import { orderGroups, orderRows, quoteRows, unorderedLines, expired } from './sourcing'
 import { flipSignature, flippingItems, sourcing } from './metrics'
 import { awaitingArrival } from './receipts'
+import { orderHolds } from './holds'
 import type { Workspace } from './types'
 
 /**
@@ -202,7 +203,8 @@ function stops(ws: Workspace, today: string, rows: DerivedRow[]): Decision[] {
         : `${cover} day${cover === 1 ? '' : 's'} of cover left`,
       act: 'open',
       actLabel: 'Order now',
-      href: '/sourcing/desk',
+      // purchase orders, where "New order" is — the desk page is the sample's
+      href: '/sourcing/orders',
       refs: { itemId: r.item.id },
       // the closer to zero, the higher it sits
       weight: 1000 - Math.max(0, cover),
@@ -409,14 +411,17 @@ function unfinished(ws: Workspace, today: string): Decision[] {
       })
     }
 
-    /* Drafted and never handed over. */
+    /* Drafted and never handed over — and, if the owner's rules hold it, why. */
     if (g.state === 'draft' && !sentOn.has(g.no) && blank.length === 0) {
+      const holds = orderHolds(ws, g.no)
       out.push({
         id: `unsent:${g.no}`,
         band: 'unfinished',
         kind: 'unsent',
         title: `${g.no} · ${g.vendor?.name ?? 'Unknown supplier'}`,
-        detail: `drafted, never sent · ${g.rows.length} line${g.rows.length === 1 ? '' : 's'}`,
+        detail: holds.length > 0
+          ? `held · ${holds.map((h) => h.text).join(' · ')}`
+          : `drafted, never sent · ${g.rows.length} line${g.rows.length === 1 ? '' : 's'}`,
         act: 'paper',
         actLabel: 'Make the document',
         href: '/sourcing/orders',

@@ -10,7 +10,7 @@
  */
 import { issueId } from './defaults'
 import { allocate, dropLots, newLot, post, postMany, reverse, usableOnHand } from './ledger'
-import { nextNo } from './sourcing'
+import { jobKey, nextNo } from './sourcing'
 import type { IssueSlip, Job, JobNumbering, Workspace, WsLoss } from './types'
 
 export const JOB_WORD: Record<JobNumbering['word'], { one: string; many: string }> = {
@@ -56,10 +56,11 @@ const prefixOf = (ws: Workspace) =>
 export function nextJobNo(ws: Workspace): string {
   const prefix = prefixOf(ws)
   const re = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-?(\\d+)$`, 'i')
+  // one past the highest ever issued: a deleted ST-9 is remembered, not reissued
   const highest = (ws.jobs ?? []).reduce((max, j) => {
     const m = re.exec(j.no)
     return m ? Math.max(max, Number(m[1])) : max
-  }, 0)
+  }, ws.issuedNos?.[jobKey(prefix)] ?? 0)
   return `${prefix}-${highest + 1}`
 }
 
@@ -224,7 +225,7 @@ export function issueMaterial(ws: Workspace, i: IssueInput): [Workspace, string]
   if (issueProblem(ws, i)) return [ws, '']
   const from = allocate(ws, i.itemId, i.qty, { lotId: i.lotId })!
   const [w0, id] = issueId(ws, 'IS')
-  const no = nextNo('IS', w0.issues ?? [])
+  const no = nextNo('IS', w0.issues ?? [], w0.issuedNos)
   const job = (ws.jobs ?? []).find((j) => j.id === i.jobId)!
   const [w1, moves] = postMany(w0, from.map((f) => ({
     lotId: f.lotId, itemId: i.itemId, on: i.on, kind: 'issue' as const, qty: -f.qty,
@@ -298,7 +299,7 @@ export function returnToStore(ws: Workspace, r: ReturnInput): [Workspace, string
   if (returnProblem(ws, r)) return [ws, '']
   const job = (ws.jobs ?? []).find((j) => j.id === r.jobId)!
   const [w0, id] = issueId(ws, 'IS')
-  const no = nextNo('IS', w0.issues ?? [])
+  const no = nextNo('IS', w0.issues ?? [], w0.issuedNos)
   const note = `back from ${job.no}${r.note?.trim() ? ` — ${r.note.trim()}` : ''}`
   let w = w0
   let lotId = ''

@@ -69,7 +69,7 @@ export function addOrder(ws: Workspace, o: OrderInput): [Workspace, string] {
   if (orderProblem(ws, o)) return [ws, '']
   const [w, id] = issueId(ws, 'SO')
   const order: CustomerOrder = {
-    id, no: nextNo('SO', w.customerOrders ?? []), customerId: o.customerId, takenOn: o.takenOn,
+    id, no: nextNo('SO', w.customerOrders ?? [], w.issuedNos), customerId: o.customerId, takenOn: o.takenOn,
     promisedDate: o.promisedDate, state: 'open', note: o.note?.trim() || undefined, lines: linesOf(id, o.lines),
   }
   return [{ ...w, customerOrders: [...(w.customerOrders ?? []), order] }, id]

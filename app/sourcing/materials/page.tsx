@@ -102,6 +102,10 @@ function Materials() {
         : <span className="text-ink-4">—</span>),
       text: (r) => (r.item.moq > 0 ? String(r.item.moq) : ''),
     },
+    class: {
+      cell: (r) => r.item.itemClass,
+      text: (r) => r.item.itemClass,
+    },
     suppliers: {
       align: 'right',
       cell: (r) => (r.suppliers === 0

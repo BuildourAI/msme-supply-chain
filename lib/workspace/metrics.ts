@@ -44,6 +44,25 @@ import type { Workspace } from './types'
 export type MetricTone = 'good' | 'warn' | 'critical' | 'neutral'
 
 /**
+ * Where a measure turns from fine to tight to bad — one line per measure.
+ *
+ * Every screen that colours one of these reads it from here: the tile, the
+ * ring on a dashboard, the column in a scorecard. Before, the same supplier
+ * could be amber on the tile and green in the scorecard beside it, and a
+ * customer's on-time-in-full ignored the target the owner had set.
+ */
+export const BANDS = {
+  /** supplier deliveries on or before the promised day, as a % */
+  onTime: (pct: number): MetricTone => (pct >= 90 ? 'good' : pct >= 75 ? 'warn' : 'critical'),
+  /** share of what arrived that was rejected, as a % */
+  rejected: (pct: number): MetricTone => (pct <= 1 ? 'good' : pct <= 4 ? 'warn' : 'critical'),
+  /** share of output rejected on the floor, as a fraction */
+  floorRejects: (share: number): MetricTone => (share <= 0.02 ? 'good' : share <= 0.05 ? 'warn' : 'critical'),
+  /** on time and in full against the owner's own target, both as % */
+  otif: (pct: number, target: number): MetricTone => (pct >= target ? 'good' : pct >= target - 10 ? 'warn' : 'critical'),
+}
+
+/**
  * The little picture on a tile, as data rather than as marks.
  *
  * Built here so it is pure and testable, and so a shape can only ever be made
@@ -517,7 +536,7 @@ export function metricsFor(ws: Workspace, today: string): Metric[] {
       ? {
         key: 'onTime', label: METRIC_LABEL.onTime, value: pct(ot.pct),
         sub: `of ${ot.of} deliver${ot.of === 1 ? 'y' : 'ies'}`,
-        tone: ot.pct >= 90 ? 'good' : ot.pct >= 75 ? 'warn' : 'critical',
+        tone: BANDS.onTime(ot.pct),
         measured: true, href: '/sourcing/orders',
         how: 'received_on ≤ expected_on, over every receipt carrying a promised date',
         chart: { kind: 'dots', dots: run },
@@ -543,7 +562,7 @@ export function metricsFor(ws: Workspace, today: string): Metric[] {
       ? {
         key: 'defects', label: METRIC_LABEL.defects, value: pct(def.pct),
         sub: `across ${def.of} deliver${def.of === 1 ? 'y' : 'ies'}`,
-        tone: def.pct <= 1 ? 'good' : def.pct <= 4 ? 'warn' : 'critical',
+        tone: BANDS.rejected(def.pct),
         measured: true, href: '/sourcing/compare',
         how: 'Σ rejected ÷ Σ received, over every receipt',
         chart: { kind: 'split', good: def.good, bad: def.bad },
@@ -940,7 +959,7 @@ function productionMetrics(
       ? {
         key: 'firstPass', label: METRIC_LABEL.firstPass, value: pct1((good / (good + bad)) * 100),
         sub: `${good} good, ${bad} rejected this month`,
-        tone: bad / (good + bad) <= 0.02 ? 'good' : bad / (good + bad) <= 0.05 ? 'warn' : 'critical',
+        tone: BANDS.floorRejects(bad / (good + bad)),
         measured: true, href: '/production/jobs',
         how: 'good ÷ (good + rejected) over this month’s bookings',
         chart: { kind: 'split', good, bad },
@@ -1026,7 +1045,7 @@ function dispatchMetrics(
       ? {
         key: 'otif', label: METRIC_LABEL.otif, value: pct(otif.value as number),
         sub: `${landed.filter((r) => r.onTime && r.inFull).length} of ${plural(landed.length, 'delivery')} · target ${rules.otifTargetPct}%`,
-        tone: (otif.value as number) >= rules.otifTargetPct ? 'good' : (otif.value as number) >= rules.otifTargetPct - 10 ? 'warn' : 'critical',
+        tone: BANDS.otif(otif.value as number, rules.otifTargetPct),
         measured: true, href: '/dispatch/consignments',
         how: 'delivered by the promised day with everything ordered gone ÷ deliveries somebody confirmed; still in transit counts neither way',
         chart: { kind: 'dots', dots: landed.slice(0, 14).map((r) => r.onTime && r.inFull) },

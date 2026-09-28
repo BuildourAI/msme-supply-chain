@@ -1,4 +1,5 @@
 'use client'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Icon, type IconName } from '@/components/ui/icons'
 import { NavyDisc, STATUS, type Status } from '@/components/charts/owner'
@@ -166,13 +167,14 @@ const BAND_EDGE: Record<Band, string> = { stops: 'var(--critical)', costs: 'var(
  * thing you do — with the real alternative beside it, as quietly as before.
  * The band is the coloured edge; the words say which band it is.
  */
-export function WaitingList({ rows, onAct, showAll, onShowAll, clear }: {
+export function WaitingList({ rows, onAct: act, showAll, onShowAll, clear }: {
   rows: Decision[]
   onAct: (d: Decision, act: Act) => void
   showAll: Set<Band>
   onShowAll: (b: Band) => void
   clear?: string
 }) {
+  const { noted, onAct, undo } = useUndoNoted(act)
   return (
     <section data-waiting className="flex min-h-0 shrink flex-col rounded-xl border border-line bg-surface p-3">
       <h2 className="flex shrink-0 items-center gap-2 text-[12.5px] font-bold tracking-tight">
@@ -181,6 +183,17 @@ export function WaitingList({ rows, onAct, showAll, onShowAll, clear }: {
         <span className={`mono rounded-full px-1.5 text-[10.5px] leading-[18px] ${rows.length > 0 ? 'bg-critical text-white' : 'bg-good-soft text-good'}`}>{rows.length}</span>
         <span className="ml-auto text-[11px] font-normal text-ink-3">one tap each</span>
       </h2>
+      {noted?.keys && (
+        <p data-undo-noted role="status"
+          className="mt-2 flex shrink-0 items-center gap-2 rounded-lg bg-navy/[0.06] px-2.5 py-1.5 text-[11.5px]">
+          <Icon name="check" className="size-3.5 shrink-0 text-navy" />
+          <span className="min-w-0 flex-1 truncate">Noted: {noted.title}</span>
+          <button type="button" onClick={undo}
+            className="press shrink-0 rounded-md px-1.5 py-0.5 font-semibold text-navy underline underline-offset-2 hover:bg-navy/10">
+            Undo
+          </button>
+        </p>
+      )}
       {rows.length === 0 ? (
         <div className="mt-2 flex items-start gap-2.5 rounded-lg bg-good-soft/50 px-3 py-3">
           <Icon name="check" className="mt-0.5 size-4 shrink-0 text-good" />
@@ -230,6 +243,66 @@ export function WaitingList({ rows, onAct, showAll, onShowAll, clear }: {
       )}
     </section>
   )
+}
+
+/*
+ * "Noted", taken back.
+ *
+ * An acknowledgement is one tap and used to be for ever — a card waved away by
+ * a slip of the thumb stayed away until its facts changed. So a note can be
+ * undone for a few seconds after it is made: what the tap wrote is found by
+ * comparing the notes before and after it, and undo puts back exactly those,
+ * nothing else the owner may have done in between.
+ */
+type Snapshot = Record<string, unknown>
+const changedKeys = (before: Snapshot, after: Snapshot) =>
+  [...new Set([...Object.keys(before), ...Object.keys(after)])]
+    .filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))
+
+function useUndoNoted(act: (d: Decision, a: Act) => void) {
+  const { workspace, update } = useWorkspace()
+  const [noted, setNoted] = useState<{
+    title: string; drafts: Snapshot; flips: Snapshot; keys?: { drafts: string[]; flips: string[] }
+  } | null>(null)
+
+  const onAct = (d: Decision, a: Act) => {
+    setNoted(a === 'keep' && workspace
+      ? { title: d.title, drafts: { ...workspace.drafts }, flips: { ...(workspace.reviewedFlips ?? {}) } }
+      : null)
+    act(d, a)
+  }
+
+  // once the note has landed, remember which keys it wrote
+  useEffect(() => {
+    if (!noted || noted.keys || !workspace) return
+    const drafts = changedKeys(noted.drafts, workspace.drafts)
+    const flips = changedKeys(noted.flips, workspace.reviewedFlips ?? {})
+    if (drafts.length + flips.length > 0) setNoted({ ...noted, keys: { drafts, flips } })
+  }, [workspace, noted])
+
+  // and offer the undo for a few seconds, not for ever
+  useEffect(() => {
+    if (!noted?.keys) return
+    const t = setTimeout(() => setNoted(null), 12000)
+    return () => clearTimeout(t)
+  }, [noted?.keys])
+
+  const undo = () => {
+    const n = noted
+    if (!n?.keys) return
+    const restore = (now: Snapshot, was: Snapshot, keys: string[]) => {
+      const out = { ...now }
+      for (const k of keys) { if (k in was) out[k] = was[k]; else delete out[k] }
+      return out
+    }
+    update((w) => ({
+      ...w,
+      drafts: restore(w.drafts, n.drafts, n.keys!.drafts),
+      reviewedFlips: restore(w.reviewedFlips ?? {}, n.flips, n.keys!.flips) as Record<string, string>,
+    }))
+    setNoted(null)
+  }
+  return { noted, onAct, undo }
 }
 
 /** The thing to do, and the real alternative — a link when it only opens a screen. */

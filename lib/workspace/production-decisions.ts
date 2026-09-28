@@ -36,7 +36,14 @@ export function noteProduction(ws: Workspace, d: Decision, today: string): Works
   const jobId = d.refs.jobId
   if (!jobId) return ws
   const set = (k: string, v: unknown): Workspace => ({ ...ws, drafts: { ...ws.drafts, [k]: v } })
-  if (d.kind === 'job-behind') return set(behindNotedKey(jobId, today), true)
+  if (d.kind === 'job-behind') {
+    // a note for today only: yesterday's can never be read again, so they go
+    const drafts = Object.fromEntries(Object.entries(ws.drafts).filter(([k]) => {
+      const m = /^production\.behindNoted\..+\.(\d{4}-\d{2}-\d{2})$/.exec(k)
+      return !m || m[1] >= today
+    }))
+    return { ...ws, drafts: { ...drafts, [behindNotedKey(jobId, today)]: true } }
+  }
   const w = lineWatch(ws, today).find((x) => x.job.id === jobId)
   if (!w) return ws
   if (d.kind === 'job-will-halt') return set(shortNotedKey(jobId), shortSig(w))

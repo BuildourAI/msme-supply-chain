@@ -164,9 +164,9 @@ export function MaterialWizard({ open, onClose }: { open: boolean; onClose: () =
     update((w0) => {
       const [w, id] = issueId(w0, 'IT')
       const item = {
-        // §13-4 flags a single class for everything as something to agree with
-        // the client; the rules step is where that is settled, so the default
-        // comes from `buildItem` rather than being a guess dressed as a question.
+        // Every new material starts as class B rather than a guess dressed as a
+        // question; the class is set on the material itself (Materials › edit),
+        // where the store rules' A, B and C columns then apply to it.
         ...buildItem(w, {
           id,
           name,
