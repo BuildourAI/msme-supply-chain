@@ -1,10 +1,12 @@
 'use client'
 import { useState } from 'react'
 import { ListPage } from '@/components/ui/ListPage'
-import { StatePill, type PillTone } from '@/components/ui/DataTable'
+import { DataTable, StatePill, type PillTone } from '@/components/ui/DataTable'
+import { Tabs } from '@/components/ui/Tabs'
 import { Icon } from '@/components/ui/icons'
+import { Count, JourneyGroups, JourneyRow, Quiet } from '@/components/desk/JourneyList'
+import { InspectForm } from '@/components/inbound/desk/InspectForm'
 import { DeskTools } from '@/components/sheet/DeskTools'
-import { JourneyStrip } from '@/components/charts/journey'
 import { buildColumns, type DrawnColumn } from '@/components/sheet/columns'
 import { OrderForm } from './OrderForm'
 import { PoDocument, PoSentPill } from './PoDocument'
@@ -15,7 +17,9 @@ import { useWorkspace } from '@/components/workspace/store'
 import { dropFile } from '@/lib/intake/blobs'
 import { mirrorRemove } from '@/lib/intake/mirror'
 import { boardLines, type BoardLine } from '@/lib/workspace/board'
-import { purchaseJourney, type Journey } from '@/lib/workspace/journeys'
+import {
+  PURCHASE_WHERE, matchesPick, purchaseBoard, purchaseJourney, type PurchaseAct,
+} from '@/lib/workspace/journeys'
 import { SYNC_WORDS, syncOrders, type SyncOrder } from '@/lib/workspace/orders'
 import { AckDialog, ackPath } from './AckDialog'
 import { ExpediteDialog } from './ExpediteDialog'
@@ -27,6 +31,8 @@ import {
 import { outstandingOn, receivedAgainst } from '@/lib/workspace/receipts'
 import { money, num, shortDate } from '@/lib/domain/format'
 import type { OrderState, PurchaseOrder } from '@/lib/workspace/types'
+
+type View = 'journey' | 'table'
 
 /**
  * What you have ordered — and, once the supplier has it, what they are making.
@@ -87,12 +93,21 @@ export function PurchaseOrders() {
   const [deleting, setDeleting] = useState<PurchaseOrder | null>(null)
   const [papering, setPapering] = useState<string | null>(null)
   const [receiving, setReceiving] = useState<PurchaseOrder | null>(null)
+  const [inspecting, setInspecting] = useState<string | null>(null)
+  const [view, setView] = useState<View>('journey')
+  const [opened, setOpened] = useState<string | null>(null)
 
   if (!workspace) return null
   const ws = workspace
   const rows = orderRows(ws)
   // where each order has got to, over all its lines — a search that narrows the lines does not narrow this
   const journeys = new Map(orderGroups(rows).map((g) => [g.no, purchaseJourney(ws, g, today)]))
+  const jof = (no: string) => journeys.get(no)!
+  const act = (a: PurchaseAct, no: string) => {
+    if (a.kind === 'paper') setPapering(no)
+    else if (a.kind === 'receive') setReceiving(ws.orders.find((o) => o.id === a.orderId) ?? null)
+    else if (a.kind === 'inspect') setInspecting(a.receiptId)
+  }
   const sync = new Map(syncOrders(ws, today).map((o) => [o.no, o]))
   const board = boardLines(ws, today)
 
@@ -203,11 +218,7 @@ export function PurchaseOrders() {
           const s = sync.get(r.order.no)
           return `${r.order.no} ${r.vendor?.name ?? ''} ${r.item?.name ?? ''} ${s ? SYNC_WORDS[s.state] : ''} ${kit.searchText(r)}`
         }}
-        filter={{
-          label: 'All statuses',
-          options: (Object.keys(LABEL) as OrderState[]).map((s) => ({ value: s, label: LABEL[s] })),
-          of: (r) => r.order.state,
-        }}
+        filter={{ label: 'Where it is', options: PURCHASE_WHERE, match: (r, pick) => matchesPick(jof(r.order.no), pick) }}
         action={{ label: 'New order', onClick: () => setAdding(true) }}
         tools={<DeskTools entity="order" noun="order" title="Purchase orders"
           rows={() => kit.toRows(rows)} />}
@@ -217,18 +228,59 @@ export function PurchaseOrders() {
         }}>
         {(shown) => (
           <>
-            <div className="space-y-3">
-              {orderGroups(shown).map((g) => (
-                <Order
-                  key={g.no} group={g} today={today} columns={kit.columns} journey={journeys.get(g.no)}
-                  sync={sync.get(g.no)} board={board.filter((l) => l.order.no === g.no)}
-                  onPaper={() => setPapering(g.no)}
-                  onReceive={setReceiving} onEdit={setEditing} onDelete={setDeleting}
-                  onRevise={setRevising} onAck={() => setAcking(g.no)} onHurry={setHurrying}
-                  onRemoveImage={(id) => removeImage(g.no, id)}
-                />
-              ))}
-            </div>
+            <Tabs label="How to show the purchase orders" value={view} onChange={setView} items={[
+              { id: 'journey', label: 'Journey', badge: <Count n={[...journeys.values()].filter((j) => !j.done && !j.cancelled).length} /> },
+              { id: 'table', label: 'Table', badge: <Count n={rows.length} /> },
+            ]} />
+            {view === 'table' ? (
+              /* every line, flat, with every column — the same rows the export writes */
+              <DataTable columns={kit.columns} rows={shown} keyOf={(r) => r.order.id}
+                extra={{ icon: 'tray', label: (r) => `Record what arrived against ${r.order.no}`, onClick: (r) => setReceiving(r.order) }}
+                extra2={{ icon: 'doc', label: (r) => `Make the ${r.order.no} document`, onClick: (r) => setPapering(r.order.no) }}
+                onEdit={(r) => setEditing(r.order)}
+                onDelete={(r) => setDeleting(r.order)}
+                editLabel={(r) => `Edit the ${r.item?.name ?? 'line'} on ${r.order.no}`}
+                deleteLabel={(r) => `Delete the ${r.item?.name ?? 'line'} from ${r.order.no}`} />
+            ) : (() => {
+              const groups = orderGroups(shown)
+              const b = purchaseBoard(groups, (g) => jof(g.no), today)
+              const received = b.over.filter((g) => jof(g.no).done).length
+              const called = b.over.length - received
+              const row = (g: OrderGroup) => {
+                const j = jof(g.no)
+                const first = g.rows[0]
+                const what = g.rows.length === 1
+                  ? `${num(first.order.qty, 3)}${first.item ? ` ${first.item.uom} ${first.item.name}` : ''}`
+                  : `${g.rows.length} materials · ${first.item?.name ?? ''} and more`
+                return (
+                  <JourneyRow key={g.no} kind="order" no={g.no} who={g.vendor?.name ?? 'Unknown supplier'} what={what}
+                    value={money(g.total)} when={`expected ${shortDate(g.expectedOn)}`} journey={j} doneText="Received"
+                    open={opened === g.no} onToggle={() => setOpened((o) => (o === g.no ? null : g.no))}
+                    onAct={j.act ? () => act(j.act!, g.no) : undefined}>
+                    <Order
+                      group={g} columns={kit.columns}
+                      sync={sync.get(g.no)} board={board.filter((l) => l.order.no === g.no)}
+                      onPaper={() => setPapering(g.no)}
+                      onReceive={setReceiving} onEdit={setEditing} onDelete={setDeleting}
+                      onRevise={setRevising} onAck={() => setAcking(g.no)} onHurry={setHurrying}
+                      onRemoveImage={(id) => removeImage(g.no, id)}
+                    />
+                  </JourneyRow>
+                )
+              }
+              return (
+                <JourneyGroups name="purchase-orders" row={row} empty="No purchase orders match."
+                  groups={[
+                    { key: 'late', title: 'Late', rows: b.late },
+                    { key: 'desk', title: 'Not handed over yet', rows: b.desk },
+                    { key: 'soon', title: 'Due this week', rows: b.soon },
+                    { key: 'later', title: 'Later', rows: b.later },
+                  ]}
+                  over={b.over}
+                  overWords={[received > 0 && `${received} received`, called > 0 && `${called} cancelled`].filter(Boolean).join(' · ')}
+                  overTitle={called > 0 && received > 0 ? 'Received and cancelled' : received > 0 ? 'Received' : 'Cancelled'} />
+              )
+            })()}
             {outstanding.length > 0 && (() => {
               const open = new Set(outstanding.map((r) => r.order.no)).size
               return (
@@ -251,6 +303,7 @@ export function PurchaseOrders() {
 
       <ReceiveForm open={receiving !== null} order={receiving}
         onClose={() => setReceiving(null)} />
+      <InspectForm receiptId={inspecting} onClose={() => setInspecting(null)} />
 
       <OrderForm open={adding || editing !== null} editing={editing}
         onClose={() => { setAdding(false); setEditing(null) }} />
@@ -277,13 +330,10 @@ export function PurchaseOrders() {
  * change it and to record that they confirmed.
  */
 function Order({
-  group, today, columns, journey, sync, board, onPaper, onReceive, onEdit, onDelete, onRevise, onAck, onHurry, onRemoveImage,
+  group, columns, sync, board, onPaper, onReceive, onEdit, onDelete, onRevise, onAck, onHurry, onRemoveImage,
 }: {
   group: OrderGroup
-  today: string
   columns: { key: string; head: string; align?: 'left' | 'right'; cell: (r: OrderRow) => React.ReactNode }[]
-  /** where it has got to: handed over, confirmed, at the gate, checked, on the shelf */
-  journey?: Journey
   /** absent until it has been handed over */
   sync?: SyncOrder
   board: BoardLine[]
@@ -296,7 +346,7 @@ function Order({
   onHurry: (l: BoardLine) => void
   onRemoveImage: (id: string) => void
 }) {
-  const { no, rows, vendor, state, total, expectedOn } = group
+  const { no, rows, state, total } = group
 
   /*
    * A column every line agrees about is a fact of the order, so it goes up.
@@ -312,52 +362,29 @@ function Order({
   const lifted = FOLD.filter(same)
   const head = columns.filter((c) => lifted.includes(c.key))
   /*
-   * The status leaves the lines when they all agree — the header pill has
+   * The status leaves the lines when they all agree — the line above has
    * already said it — and comes back the moment one line moves on without the
    * others, which is the only time it tells you anything.
    */
   const body = columns.filter((c) => !CHROME.has(c.key) && !lifted.includes(c.key)
     && !(c.key === 'state' && same('state')))
-
-  const open = state !== 'delivered' && state !== 'cancelled'
-  const late = open && expectedOn < today
-
   return (
-    <article data-order={no} className={`rounded-xl border bg-surface p-4 ${
-      late ? 'border-critical/40' : 'border-line'}`}>
-      <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
-        <div className="min-w-0 flex-1">
-          <h3 className="flex flex-wrap items-center gap-2">
-            <span className="mono text-[13px] font-bold">{no}</span>
-            <StatePill label={LABEL[state]} tone={TONE[state]} />
-            <PoSentPill no={no} fallback={null} />
-            {sync && <SyncPill state={sync.state} />}
-            <span className="truncate text-[13.5px] font-semibold">
-              {vendor?.name ?? 'Unknown supplier'}
-            </span>
-          </h3>
-          <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[12px]">
-            {head.map((c) => (
-              <span key={c.key} className="inline-flex items-baseline gap-1">
-                <span className="text-ink-3">{c.head}</span>
-                <span className="num font-medium">{c.cell(rows[0])}</span>
-              </span>
-            ))}
-            <span className="mono text-[11px] text-ink-3">
-              {rows.length} line{rows.length === 1 ? '' : 's'}
-            </span>
-          </div>
-        </div>
-        {/* the document is the ORDER's, so it is offered once rather than per line */}
-        <button type="button" onClick={onPaper}
-          title={`Make the ${no} document`}
-          className="press inline-flex shrink-0 items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1 text-[12px] font-medium hover:bg-surface-2">
-          <Icon name="doc" className="size-3.5" />
-          Make the document
-        </button>
+    <div data-order-body={no}>
+      {/* what is true of the whole order, said once: its state, whether it went, and the dates every line shares */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px]">
+        <StatePill label={LABEL[state]} tone={TONE[state]} />
+        <PoSentPill no={no} fallback={null} />
+        {sync && <SyncPill state={sync.state} />}
+        {head.map((c) => (
+          <span key={c.key} className="inline-flex items-baseline gap-1">
+            <span className="text-ink-3">{c.head}</span>
+            <span className="num font-medium">{c.cell(rows[0])}</span>
+          </span>
+        ))}
+        <span className="mono text-[11px] text-ink-3">
+          {rows.length} line{rows.length === 1 ? '' : 's'}
+        </span>
       </div>
-
-      {journey && !journey.cancelled && <JourneyStrip journey={journey} label={no} className="mt-3.5 mb-1" />}
 
       <div className="scroll-x relative mt-3 overflow-x-auto">
         <table className="w-full border-collapse text-[13px]">
@@ -423,7 +450,12 @@ function Order({
           onRevise={onRevise} onSend={onPaper} onAck={onAck}
           onRemoveImage={onRemoveImage} onHurry={onHurry} />
       )}
-    </article>
+
+      {/* the document is the ORDER's, so it is offered once rather than per line */}
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        <Quiet onClick={onPaper}>Make the document</Quiet>
+      </div>
+    </div>
   )
 }
 

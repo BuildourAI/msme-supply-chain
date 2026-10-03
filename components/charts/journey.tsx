@@ -2,7 +2,7 @@
 import Link from 'next/link'
 import { Icon } from '@/components/ui/icons'
 import { shortDate } from '@/lib/domain/format'
-import type { Journey, JourneyDoc, JourneyStep, OrderJourney } from '@/lib/workspace/journeys'
+import type { Journey, JourneyDoc, JourneyStep } from '@/lib/workspace/journeys'
 
 /**
  * Where a record has got to, drawn as a row of steps (the styles are the
@@ -104,8 +104,8 @@ export function JourneyStrip({ journey, label, small = false, hideLate = false, 
   )
 }
 
-/** Five dots and a word — where an order is, for a row on a phone. */
-export function JourneyDots({ journey }: { journey: OrderJourney }) {
+/** A dot a step and a word — where a record is, for a row on a phone. */
+export function JourneyDots({ journey }: { journey: Journey<unknown> }) {
   const { steps } = journey
   const reached = (s: JourneyStep) => s.state === 'done' || s.state === 'part' || s.state === 'skip' || s.current
   const late = journey.late > 0
@@ -122,7 +122,8 @@ export function JourneyDots({ journey }: { journey: OrderJourney }) {
         })}
       </span>
       <small className={`whitespace-nowrap text-[11px] ${late ? 'font-semibold text-critical' : 'text-ink-2'}`}>
-        {journey.word}{late ? ` · ${journey.late} ${journey.late === 1 ? 'day' : 'days'} late` : ''}
+        {/* late at the gate is against the owner's rule, so it says how long it has waited instead */}
+        {!late ? journey.word : /at the gate$/.test(journey.lateShort ?? '') ? journey.lateShort : `${journey.word} · ${journey.lateShort}`}
       </small>
     </span>
   )

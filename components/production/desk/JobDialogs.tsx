@@ -162,15 +162,8 @@ export function JobCard({ jobId, onClose, onAct }: {
   const job = (ws.jobs ?? []).find((j) => j.id === jobId)
   if (!job) return null
   const word = JOB_CARD.one
-  const row = jobPlanRow(ws, job, today)
-  const store = jobRows(ws).find((r) => r.job.id === jobId)
-  // built from the planned, open jobs — a closed or unplanned one has no line to watch
-  const watch = lineWatch(ws, today).find((w) => w.job.id === jobId)
-  const challans = challanRows(ws, today).filter((r) => r.challan.jobId === jobId)
   const madeFor = madeForText(ws, job)
   const open = !job.closedOn
-  const hasSlips = (store?.materials.length ?? 0) > 0
-  const uom = row.product?.uom ?? ''
   const act = (kind: CardAct, ref?: string) => onAct(kind, jobId, ref)
 
   return (
@@ -179,74 +172,7 @@ export function JobCard({ jobId, onClose, onAct }: {
       <div className="space-y-5 px-4 py-4" data-job-card={job.no}>
         <JourneyStrip journey={jobJourney(ws, job, today)} label={job.no}
           onDoc={(d) => { if (d.kind === 'slip') act('slip', d.id) }} />
-        <Section title="Plan" actions={open && (
-          <>
-            <Quiet onClick={() => act('plan')}>{row.planned ? 'Re-plan' : 'Plan it'}</Quiet>
-            {row.planned && <Quiet onClick={() => act('output')}>Book output</Quiet>}
-          </>
-        )}>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]">
-            <StatePill label={PLAN_STATE_WORD[row.state]} tone={PLAN_STATE_TONE[row.state]} />
-            {row.planned ? (
-              <span className="text-ink-2">
-                <strong className="text-ink">{row.product?.name ?? 'no product'}</strong> · {num(job.qty!, 0)} {uom} ·{' '}
-                {shortDate(job.plannedStart!)} – {shortDate(job.plannedFinish!)} · {num(job.perDay ?? 0, 0)} a day
-              </span>
-            ) : (
-              <span className="text-ink-2">No plan yet — say what it makes, how many and when. Line watch cannot judge it until then.</span>
-            )}
-          </div>
-          {row.planned && (
-            <p className="text-[12px] text-ink-3">
-              <strong className="num text-ink">{row.made}</strong> made
-              {row.rejected > 0 && <>, <span className="num text-critical">{row.rejected}</span> rejected</>}
-              {row.target > 0 && <> · {row.target} due by today{row.vsTarget < 0 ? ` · ${-row.vsTarget} behind` : row.vsTarget > 0 ? ` · ${row.vsTarget} ahead` : ''}</>}
-            </p>
-          )}
-        </Section>
-
-        <Section title="Material" actions={open && (
-          <>
-            <Quiet onClick={() => act('issue')}>Issue material</Quiet>
-            {hasSlips && <Quiet onClick={() => act('return')}>Return slip</Quiet>}
-            {hasSlips && <Quiet onClick={() => act('waste')}>Record wastage</Quiet>}
-          </>
-        )}>
-          {watch
-            ? <NeedsTable needs={watch.needs} reasons={watch.reasons} onIssue={open ? (itemId) => act('issue', itemId) : undefined} />
-            : <JobMaterials materials={store?.materials ?? []} word={word} />}
-        </Section>
-
-        <Section title="At jobworkers" actions={open && jobworkers(ws).length > 0 && (
-          <Quiet onClick={() => act('sendout')}>Send for jobwork</Quiet>
-        )}>
-          {challans.length === 0 ? (
-            <p className="text-[12.5px] text-ink-3">Nothing has gone out for it.</p>
-          ) : (
-            <ul className="space-y-1.5 text-[12.5px]" data-job-challans>
-              {challans.map((r) => {
-                const pill = statePill(r)
-                const back = r.acct.returned.value + r.acct.inQc.value
-                return (
-                  <li key={r.challan.id} className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="mono font-semibold text-ink">{r.challan.no}</span>
-                    <span className="text-ink-2">
-                      {r.vendor?.name ?? 'a jobworker'} · {num(r.challan.qtySent, 3)} {r.uom} of {r.item?.name ?? 'material'} out
-                      {back > 0 ? ` · ${num(back, 3)} ${r.uom} back` : ''} · due {shortDate(r.challan.dueBack)}
-                    </span>
-                    <StatePill label={pill.label} tone={pill.tone} />
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </Section>
-
-        {hasSlips && (
-          <Section title="Slips and cuts">
-            <JobHistory jobId={jobId} onSlip={(id) => act('slip', id)} onTakeBack={(id) => act('takeback', id)} />
-          </Section>
-        )}
+        <JobCardBody jobId={jobId} onAct={onAct} />
       </div>
       <footer className="flex flex-wrap items-center gap-2 border-t border-line-soft px-4 py-3">
         <Quiet onClick={() => act('edit')}>Edit</Quiet>
@@ -257,5 +183,105 @@ export function JobCard({ jobId, onClose, onAct }: {
         </button>
       </footer>
     </Dialog>
+  )
+}
+
+/**
+ * What a job card holds, without its frame: the plan and what has come off
+ * it, the material it needs and has had, what is out at jobworkers, and its
+ * slips. The card dialog draws it under its strip; the Job cards list draws it
+ * under a row when the row is opened.
+ */
+export function JobCardBody({ jobId, onAct }: {
+  jobId: string
+  onAct: (kind: CardAct, jobId: string, ref?: string) => void
+}) {
+  const { workspace, today } = useWorkspace()
+  if (!workspace) return null
+  const ws = workspace
+  const job = (ws.jobs ?? []).find((j) => j.id === jobId)
+  if (!job) return null
+  const word = JOB_CARD.one
+  const row = jobPlanRow(ws, job, today)
+  const store = jobRows(ws).find((r) => r.job.id === jobId)
+  // built from the planned, open jobs — a closed or unplanned one has no line to watch
+  const watch = lineWatch(ws, today).find((w) => w.job.id === jobId)
+  const challans = challanRows(ws, today).filter((r) => r.challan.jobId === jobId)
+  const open = !job.closedOn
+  const hasSlips = (store?.materials.length ?? 0) > 0
+  const uom = row.product?.uom ?? ''
+  const act = (kind: CardAct, ref?: string) => onAct(kind, jobId, ref)
+
+  return (
+    <>
+      <Section title="Plan" actions={open && (
+        <>
+          <Quiet onClick={() => act('plan')}>{row.planned ? 'Re-plan' : 'Plan it'}</Quiet>
+          {row.planned && <Quiet onClick={() => act('output')}>Book output</Quiet>}
+        </>
+      )}>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]">
+          <StatePill label={PLAN_STATE_WORD[row.state]} tone={PLAN_STATE_TONE[row.state]} />
+          {row.planned ? (
+            <span className="text-ink-2">
+              <strong className="text-ink">{row.product?.name ?? 'no product'}</strong> · {num(job.qty!, 0)} {uom} ·{' '}
+              {shortDate(job.plannedStart!)} – {shortDate(job.plannedFinish!)} · {num(job.perDay ?? 0, 0)} a day
+            </span>
+          ) : (
+            <span className="text-ink-2">No plan yet — say what it makes, how many and when. Line watch cannot judge it until then.</span>
+          )}
+        </div>
+        {row.planned && (
+          <p className="text-[12px] text-ink-3">
+            <strong className="num text-ink">{row.made}</strong> made
+            {row.rejected > 0 && <>, <span className="num text-critical">{row.rejected}</span> rejected</>}
+            {row.target > 0 && <> · {row.target} due by today{row.vsTarget < 0 ? ` · ${-row.vsTarget} behind` : row.vsTarget > 0 ? ` · ${row.vsTarget} ahead` : ''}</>}
+          </p>
+        )}
+      </Section>
+
+      <Section title="Material" actions={open && (
+        <>
+          <Quiet onClick={() => act('issue')}>Issue material</Quiet>
+          {hasSlips && <Quiet onClick={() => act('return')}>Return slip</Quiet>}
+          {hasSlips && <Quiet onClick={() => act('waste')}>Record wastage</Quiet>}
+        </>
+      )}>
+        {watch
+          ? <NeedsTable needs={watch.needs} reasons={watch.reasons} onIssue={open ? (itemId) => act('issue', itemId) : undefined} />
+          : <JobMaterials materials={store?.materials ?? []} word={word} />}
+      </Section>
+
+      <Section title="At jobworkers" actions={open && jobworkers(ws).length > 0 && (
+        <Quiet onClick={() => act('sendout')}>Send for jobwork</Quiet>
+      )}>
+        {challans.length === 0 ? (
+          <p className="text-[12.5px] text-ink-3">Nothing has gone out for it.</p>
+        ) : (
+          <ul className="space-y-1.5 text-[12.5px]" data-job-challans>
+            {challans.map((r) => {
+              const pill = statePill(r)
+              const back = r.acct.returned.value + r.acct.inQc.value
+              return (
+                <li key={r.challan.id} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="mono font-semibold text-ink">{r.challan.no}</span>
+                  <span className="text-ink-2">
+                    {r.vendor?.name ?? 'a jobworker'} · {num(r.challan.qtySent, 3)} {r.uom} of {r.item?.name ?? 'material'} out
+                    {back > 0 ? ` · ${num(back, 3)} ${r.uom} back` : ''} · due {shortDate(r.challan.dueBack)}
+                  </span>
+                  <StatePill label={pill.label} tone={pill.tone} />
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </Section>
+
+      {hasSlips && (
+        <Section title="Slips and cuts">
+          <JobHistory jobId={jobId} onSlip={(id) => act('slip', id)} onTakeBack={(id) => act('takeback', id)} />
+        </Section>
+      )}
+    </>
   )
 }

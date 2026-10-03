@@ -4,6 +4,7 @@ import { ListPage } from '@/components/ui/ListPage'
 import { DataTable, StatePill } from '@/components/ui/DataTable'
 import { Icon } from '@/components/ui/icons'
 import { Tabs } from '@/components/ui/Tabs'
+import { JourneyGroups, JourneyRow, Quiet } from '@/components/desk/JourneyList'
 import { DeskTools } from '@/components/sheet/DeskTools'
 import { buildColumns, type DrawnColumn } from '@/components/sheet/columns'
 import { ConfirmDelete } from '@/components/sourcing/ConfirmDelete'
@@ -17,14 +18,15 @@ import {
 } from '@/lib/workspace/jobs'
 import { outputRows, removeOutput, removeOutputProblem, type OutputRow } from '@/lib/workspace/output'
 import {
-  PLAN_STATE_TONE, PLAN_STATE_WORD, floorOf, isWorkingDay, jobPlanRows, type JobPlanRow, type PlanState,
+  PLAN_STATE_TONE, PLAN_STATE_WORD, floorOf, isWorkingDay, jobPlanRows, type JobPlanRow,
 } from '@/lib/workspace/plan'
+import { JOB_WHERE, jobBoard, jobJourney, matchesPick, type JobAct } from '@/lib/workspace/journeys'
 import { madeForText } from '@/lib/workspace/sales'
 import type { Job } from '@/lib/workspace/types'
-import { JobCard, JobForm, type CardAct } from './JobDialogs'
+import { JobCard, JobCardBody, JobForm, type CardAct } from './JobDialogs'
 import { OutputForm, PlanForm } from './PlanDialogs'
 
-type View = 'jobs' | 'log' | 'days'
+type View = 'journey' | 'jobs' | 'log' | 'days'
 
 function Count({ n }: { n: number }) {
   return n > 0 ? <span className="mono rounded-full bg-surface-3 px-1.5 text-[10.5px] leading-[17px] text-ink-3">{n}</span> : null
@@ -47,7 +49,8 @@ const pct = (v: number | null) => (v === null ? '—' : `${num(v, 1)}%`)
  */
 export function Jobs() {
   const { workspace, update, today } = useWorkspace()
-  const [view, setView] = useState<View>('jobs')
+  const [view, setView] = useState<View>('journey')
+  const [opened, setOpened] = useState<string | null>(null)
   const [card, setCard] = useState<string | null>(null)
   // the card a form was opened from, to come back to when the form closes
   const [returnTo, setReturnTo] = useState<string | null>(null)
@@ -92,10 +95,15 @@ export function Jobs() {
   // the card steps aside for a form, and comes back when the form closes
   const leave = (id: string) => { setCard(null); setReturnTo(id) }
   const back = () => { if (returnTo) { setCard(returnTo); setReturnTo(null) } }
-  const act = (kind: CardAct, id: string, ref?: string) => {
+  /*
+   * From the card dialog a form takes the card's place and gives it back when
+   * it closes. From an opened row there is no dialog to step aside, so the
+   * form simply opens over the list.
+   */
+  const act = (kind: CardAct, id: string, ref?: string, fromCard = true) => {
     if (kind === 'close') { update((w) => closeJob(w, id, today)); return }
     if (kind === 'reopen') { update((w) => reopenJob(w, id)); return }
-    leave(id)
+    if (fromCard) leave(id)
     if (kind === 'edit') setOpening((ws.jobs ?? []).find((j) => j.id === id) ?? null)
     else if (kind === 'plan') setPlanning(id)
     else if (kind === 'output') setBooking({ jobId: id })
@@ -180,6 +188,11 @@ export function Jobs() {
   }
   const jobKit = buildColumns<JobPlanRow>(ws, 'job', (r) => r.job.id, jobDrawn)
 
+  // where each card has got to, read once a render
+  const journeys = new Map(rows.map((r) => [r.job.id, jobJourney(ws, r.job, today)]))
+  const jof = (r: JobPlanRow) => journeys.get(r.job.id)!
+  const rowAct = (a: JobAct, id: string) => act(a.kind, id, undefined, false)
+
   // the floor's last fourteen days, working days only, oldest first
   const days = Array.from({ length: 14 }, (_, i) => addDays(today, i - 13)).filter((d) => isWorkingDay(d, floor))
   const dayRows = days.map((d) => {
@@ -202,13 +215,7 @@ export function Jobs() {
       <ListPage
         title={word.many} noun={word.one.toLowerCase()} rows={rows}
         search={(r) => `${r.job.no} ${r.job.name ?? ''} ${r.product?.name ?? ''} ${madeForText(ws, r.job)} ${PLAN_STATE_WORD[r.state]} ${jobKit.searchText(r)}`}
-        filter={{
-          label: 'Every state',
-          options: (Object.keys(PLAN_STATE_WORD) as PlanState[])
-            .filter((s) => rows.some((r) => r.state === s))
-            .map((s) => ({ value: s, label: PLAN_STATE_WORD[s] })),
-          of: (r) => r.state,
-        }}
+        filter={{ label: 'Where it is', options: JOB_WHERE, match: (r, pick) => matchesPick(jof(r), pick) }}
         action={{ label: `Open a ${word.one.toLowerCase()}`, icon: 'plus', onClick: () => setOpening(null) }}
         tools={
           <>
@@ -216,7 +223,7 @@ export function Jobs() {
               className="press inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-[13px] font-medium hover:bg-surface-2">
               <Icon name="check" className="size-3.5" /> Book output
             </button>
-            {view === 'jobs' && <DeskTools entity="job" noun="job card" title="Job cards" rows={() => jobKit.toRows(rows)} />}
+            {(view === 'jobs' || view === 'journey') && <DeskTools entity="job" noun="job card" title="Job cards" rows={() => jobKit.toRows(rows)} />}
             {view === 'log' && <DeskTools entity="output" noun="booking" title="Output log" rows={() => logKit.toRows(log)} />}
           </>
         }
@@ -229,12 +236,53 @@ export function Jobs() {
           const shownLog = log.filter((r) => ids.has(r.output.jobId))
           return (
             <div className="space-y-3">
-              <Tabs<View> label={`${word.many}, output log or by day`} value={view} onChange={setView}
+              <Tabs<View> label={`${word.many} as journeys, a table, the output log or by day`} value={view} onChange={setView}
                 items={[
-                  { id: 'jobs', label: word.many, badge: <Count n={shown.filter((r) => r.state === 'behind' || r.state === 'late').length} /> },
+                  { id: 'journey', label: 'Journey', badge: <Count n={shown.filter((r) => !jof(r).done).length} /> },
+                  { id: 'jobs', label: 'Table', badge: <Count n={shown.length} /> },
                   { id: 'log', label: 'Output log', badge: <Count n={shownLog.length} /> },
                   { id: 'days', label: 'By day' },
                 ]} />
+
+              {view === 'journey' && (() => {
+                const b = jobBoard(shown, jof, (r) => r.state === 'behind')
+                const row = (r: JobPlanRow) => {
+                  const j = jof(r)
+                  const madeFor = madeForText(ws, r.job) || 'for stock'
+                  const forWhat = madeFor === 'for stock' ? madeFor : `for ${madeFor}`
+                  const uom = r.product?.uom ?? ''
+                  return (
+                    <JourneyRow key={r.job.id} kind="job" no={r.job.no} who={r.product?.name ?? r.job.name ?? 'no product yet'}
+                      what={r.planned ? `${num(r.job.qty!, 0)}${uom ? ` ${uom}` : ''} · ${forWhat}` : `not planned yet · ${forWhat}`}
+                      when={r.planned ? `finish ${shortDate(r.job.plannedFinish!)}` : `opened ${shortDate(r.job.openedOn)}`}
+                      journey={j} doneText={r.job.closedOn ? `Closed ${shortDate(r.job.closedOn)}` : 'Closed'}
+                      open={opened === r.job.id} onToggle={() => setOpened((o) => (o === r.job.id ? null : r.job.id))}
+                      onAct={j.act ? () => rowAct(j.act!, r.job.id) : undefined}
+                      onDoc={(d) => { if (d.kind === 'slip') setPaper(d.id) }}>
+                      <div className="space-y-5" data-job-body={r.job.no}>
+                        <JobCardBody jobId={r.job.id} onAct={(k, id, ref) => act(k, id, ref, false)} />
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        <Quiet onClick={() => act('edit', r.job.id, undefined, false)}>Edit</Quiet>
+                        <Quiet onClick={() => act(r.job.closedOn ? 'reopen' : 'close', r.job.id, undefined, false)}>
+                          {r.job.closedOn ? 'Reopen' : `Close the ${word.one.toLowerCase()}`}
+                        </Quiet>
+                        <Quiet onClick={() => setDeletingJob(r)} danger>Delete</Quiet>
+                      </div>
+                    </JourneyRow>
+                  )
+                }
+                return (
+                  <JourneyGroups name="jobs" row={row} empty={`No ${word.many.toLowerCase()} match.`}
+                    groups={[
+                      { key: 'late', title: 'Past its finish', rows: b.late },
+                      { key: 'behind', title: 'Behind the plan', rows: b.behind },
+                      { key: 'track', title: 'On track', rows: b.track },
+                      { key: 'unplanned', title: 'Not planned yet', rows: b.unplanned },
+                    ]}
+                    over={b.over} overWords={`${b.over.length} closed`} overTitle="Closed" />
+                )
+              })()}
 
               {view === 'jobs' && (
                 <DataTable rows={shown} keyOf={(r) => r.job.id}

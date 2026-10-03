@@ -5,10 +5,11 @@
 import { describe, expect, it } from 'vitest'
 import { bookConsignment, markDelivered } from '@/lib/workspace/consignments'
 import { raiseNote } from '@/lib/workspace/dispatch-notes'
-import { issueMaterial, closeJob } from '@/lib/workspace/jobs'
+import { addJob, issueMaterial, closeJob } from '@/lib/workspace/jobs'
 import { JOBWORKER, bookReturn, closeChallan, sendOut } from '@/lib/workspace/jobwork'
 import {
-  jobJourney, jobworkJourney, matchesWhere, orderBoard, orderJourney, purchaseJourney, type Journey,
+  jobBoard, jobJourney, jobworkBoard, jobworkJourney, matchesPick, matchesWhere, orderBoard, orderJourney,
+  purchaseBoard, purchaseJourney, type Journey,
 } from '@/lib/workspace/journeys'
 import { markHandedOver, recordAck, reviseOrder, v1Of } from '@/lib/workspace/orders'
 import { arrive, closeReceipt, recordReceipt } from '@/lib/workspace/receipts'
@@ -276,5 +277,125 @@ describe('material out for jobwork', () => {
     j = jobworkJourney(ws, ws.challans.find((c) => c.id === id)!, TODAY)
     expect(j.done).toBe(true)
     expect(j.steps[4]).toMatchObject({ state: 'done', sub: '40 m written off' })
+  })
+})
+
+/* ------------------------------------------------ where, word and the one thing to do -- */
+
+describe('a purchase order says where it is, and the one thing to do', () => {
+  it('a draft is not handed over: make the document', () => {
+    const j = poj(buying(po({ state: 'draft', notifiedOn: undefined })))
+    expect(j).toMatchObject({ where: 'handed', word: 'Not handed over', act: { kind: 'paper', label: 'Make the document' } })
+  })
+
+  it('handed over and not here: record what arrived, on the line still short', () => {
+    const j = poj(buying(po()))
+    expect(j).toMatchObject({ where: 'gate', word: 'Not here yet', lateShort: '5 days late' })
+    expect(j.act).toEqual({ kind: 'receive', label: 'Record what arrived', orderId: 'PO-001' })
+  })
+
+  it('a lorry at the gate: check it, and the phone says how long it has waited', () => {
+    const ws0 = buying(po())
+    const [ws, id] = arrive(ws0, { order: ws0.orders[0], qty: 200, receivedOn: '2026-09-19' })
+    const j = poj(ws)
+    expect(j).toMatchObject({ where: 'checked', word: 'At the gate', lateShort: '4 days at the gate' })
+    expect(j.act).toEqual({ kind: 'inspect', label: 'Check it', receiptId: id })
+    expect(matchesPick(j, 'checked')).toBe(true)
+    expect(matchesPick(j, 'gate')).toBe(false)
+  })
+
+  it('received: nothing left to do', () => {
+    const ws0 = buying(po())
+    const ws = recordReceipt(ws0, { order: ws0.orders[0], qty: 200, accepted: 200, rejected: 0, receivedOn: '2026-09-17', inspector: 'S. Kale' })
+    expect(poj(ws)).toMatchObject({ where: 'done', word: 'Received', done: true })
+    expect(poj(ws).act).toBeUndefined()
+  })
+
+  it('lists what is late first, then what is on your desk, then this week, then later, and folds the rest', () => {
+    const ws0 = buying(
+      po(),                                                                                            // late
+      po({ id: 'PO-002', no: 'PO-2', state: 'draft', notifiedOn: undefined, expectedOn: '2026-10-20' }), // on your desk
+      po({ id: 'PO-003', no: 'PO-3', expectedOn: '2026-09-27' }),                                      // this week
+      po({ id: 'PO-004', no: 'PO-4', expectedOn: '2026-10-15' }),                                      // later
+      po({ id: 'PO-005', no: 'PO-5' }),                                                                // received
+    )
+    const ws = recordReceipt(ws0, { order: ws0.orders[4], qty: 200, accepted: 200, rejected: 0, receivedOn: '2026-09-17', inspector: 'S. Kale' })
+    const groups = orderGroups(orderRows(ws))
+    const b = purchaseBoard(groups, (g) => purchaseJourney(ws, g, TODAY), TODAY)
+    const nos = (xs: { no: string }[]) => xs.map((g) => g.no)
+    expect({ late: nos(b.late), desk: nos(b.desk), soon: nos(b.soon), later: nos(b.later), over: nos(b.over) })
+      .toEqual({ late: ['PO-1'], desk: ['PO-2'], soon: ['PO-3'], later: ['PO-4'], over: ['PO-5'] })
+  })
+})
+
+describe('a job card says where it is, and the one thing to do', () => {
+  const jj = (ws: Workspace, id = 'JB-001') => jobJourney(ws, ws.jobs.find((j) => j.id === id)!, TODAY)
+
+  it('a card nobody has planned needs its plan first', () => {
+    const [ws, id] = addJob(booked(), { no: 'ST-2', openedOn: TODAY })
+    expect(jj(ws, id)).toMatchObject({ where: 'plan', word: 'Needs a plan', act: { kind: 'plan', label: 'Plan it' } })
+  })
+
+  it('planned with nothing issued: issue material', () => {
+    expect(jj(booked(0))).toMatchObject({ where: 'issued', word: 'Waiting for material', act: { kind: 'issue' } })
+  })
+
+  it('part made: book output, and the ring says how far', () => {
+    expect(jj(booked())).toMatchObject({ where: 'made', word: 'Made 40%', act: { kind: 'output', label: 'Book output' } })
+  })
+
+  it('all made: close it; closed: nothing left', () => {
+    expect(jj(booked(300))).toMatchObject({ where: 'closed', word: 'Made — to close', act: { kind: 'close' } })
+    expect(jj(closeJob(booked(300), 'JB-001', TODAY))).toMatchObject({ where: 'done', word: 'Closed', act: undefined })
+  })
+
+  it('lists past its finish, then behind, then on track, then not planned, and folds the closed', () => {
+    let ws = booked()                                     // ST-1, planned to the 30th: on track by the journey
+    ;[ws] = addJob(ws, { no: 'ST-2', openedOn: TODAY })    // not planned
+    ;[ws] = addJob(ws, { no: 'ST-3', openedOn: '2026-09-01' })
+    ws = closeJob(ws, 'JB-003', TODAY)                     // closed
+    const rows = ws.jobs.map((job) => ({ job }))
+    const b = jobBoard(rows, (r) => jobJourney(ws, r.job, TODAY), () => false)
+    const nos = (xs: { job: { no: string } }[]) => xs.map((r) => r.job.no)
+    expect({ late: nos(b.late), behind: nos(b.behind), track: nos(b.track), unplanned: nos(b.unplanned), over: nos(b.over) })
+      .toEqual({ late: [], behind: [], track: ['ST-1'], unplanned: ['ST-2'], over: ['ST-3'] })
+    const late = jobBoard(rows, (r) => jobJourney(ws, r.job, '2026-10-05'), () => false)
+    expect(nos(late.late)).toEqual(['ST-1'])
+    expect(nos(jobBoard(rows, (r) => jobJourney(ws, r.job, TODAY), (r) => r.job.no === 'ST-1').behind)).toEqual(['ST-1'])
+  })
+})
+
+describe('material out for jobwork says where it is, and the one thing to do', () => {
+  const out = () => {
+    const ws: Workspace = { ...booked(), vendors: [{ id: 'VN-002', name: 'Shree Wash', paymentTermsDays: 0 }], vendorType: { 'VN-002': JOBWORKER } }
+    return sendOut(ws, { vendorId: 'VN-002', itemId: 'IT-001', qty: 100, sentOn: '2026-09-10', dueBack: '2026-09-20', expectedYield: 1, process: 'Stone wash' })
+  }
+  const jw = (ws: Workspace, id: string) => jobworkJourney(ws, ws.challans.find((c) => c.id === id)!, TODAY)
+
+  it('out: it came back, and the phone says how late', () => {
+    const [ws, id] = out()
+    expect(jw(ws, id)).toMatchObject({ where: 'with', word: 'With the jobworker', lateShort: '3 days late', act: { kind: 'return', label: 'It came back' } })
+  })
+
+  it('some back at the gate: inspect it first; inspected, wait for the rest', () => {
+    let [ws, id] = out()
+    let gr: string
+    ;[ws, gr] = bookReturn(ws, id, { qty: 60, receivedOn: '2026-09-21' })
+    expect(jw(ws, id)).toMatchObject({ where: 'gate', word: 'Back at the gate 60%', act: { kind: 'inspect', receiptId: gr } })
+    ws = closeReceipt(ws, gr, { rejected: 0, inspector: 'S. Kale', closedAt: TODAY })
+    expect(jw(ws, id).act).toEqual({ kind: 'return', label: 'It came back' })
+    ws = closeChallan(ws, id, { reason: 'Rest lost in the wash', on: TODAY, unaccounted: 40 })
+    expect(jw(ws, id)).toMatchObject({ where: 'done', word: 'Settled' })
+    expect(jw(ws, id).act).toBeUndefined()
+  })
+
+  it('lists past due back first, then due this week, then later', () => {
+    let [ws] = out()                                                                                                       // due the 20th: late
+    ;[ws] = sendOut(ws, { vendorId: 'VN-002', itemId: 'IT-001', qty: 50, sentOn: '2026-09-20', dueBack: '2026-09-28', expectedYield: 1 })   // this week
+    ;[ws] = sendOut(ws, { vendorId: 'VN-002', itemId: 'IT-001', qty: 50, sentOn: '2026-09-20', dueBack: '2026-10-20', expectedYield: 1 })   // later
+    const rows = ws.challans.map((challan) => ({ challan }))
+    const b = jobworkBoard(rows, (r) => jobworkJourney(ws, r.challan, TODAY), TODAY)
+    const nos = (xs: { challan: { no: string } }[]) => xs.map((r) => r.challan.no)
+    expect({ late: nos(b.late), soon: nos(b.soon), later: nos(b.later) }).toEqual({ late: ['JW-1'], soon: ['JW-2'], later: ['JW-3'] })
   })
 })

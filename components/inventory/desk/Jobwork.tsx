@@ -4,7 +4,7 @@ import { ListPage } from '@/components/ui/ListPage'
 import { DataTable, StatePill, type PillTone } from '@/components/ui/DataTable'
 import { Tabs } from '@/components/ui/Tabs'
 import { Icon } from '@/components/ui/icons'
-import { JourneyStrip } from '@/components/charts/journey'
+import { JourneyGroups, JourneyRow } from '@/components/desk/JourneyList'
 import { DeskTools } from '@/components/sheet/DeskTools'
 import { buildColumns, type DrawnColumn } from '@/components/sheet/columns'
 import { ConfirmDelete } from '@/components/sourcing/ConfirmDelete'
@@ -17,7 +17,7 @@ import {
   GST_JOBWORK_WARN_DAYS, challanLedger, gstDaysLeft, gstDueBy, registerLedger, removeChallan, type LedgerKind,
 } from '@/lib/workspace/jobwork'
 import { isOpen } from '@/lib/workspace/receipts'
-import { jobworkJourney } from '@/lib/workspace/journeys'
+import { JOBWORK_WHERE, jobworkBoard, jobworkJourney, matchesPick, type JobworkAct } from '@/lib/workspace/journeys'
 import { ChaseDialog } from '@/components/sourcing/ChaseDialog'
 import { InspectForm } from '@/components/inbound/desk/InspectForm'
 import { GrnDocument } from '@/components/inbound/desk/GrnDocument'
@@ -75,6 +75,7 @@ export function Jobwork() {
   const [closing, setClosing] = useState<string | null>(null)
   const [chasing, setChasing] = useState<ChallanRow | null>(null)
   const [deleting, setDeleting] = useState<ChallanRow | null>(null)
+  const [opened, setOpened] = useState<string | null>(null)
 
   // what just came back goes straight on to its inspection
   useEffect(() => {
@@ -90,6 +91,14 @@ export function Jobwork() {
   const rows = challanRows(ws, today)
   const holdings = jobworkerHoldings(ws, today)
   const ledger = registerLedger(ws)
+  // where each challan has got to, read once a render
+  const journeys = new Map(rows.map((r) => [r.challan.id, jobworkJourney(ws, r.challan, today)]))
+  const jof = (r: ChallanRow) => journeys.get(r.challan.id)!
+  const act = (a: JobworkAct, id: string) => {
+    if (a.kind === 'return') setReturning(id)
+    else if (a.kind === 'inspect') setInspecting(a.receiptId)
+    else if (a.kind === 'close') setClosing(id)
+  }
 
   const drawn: Record<string, DrawnColumn<ChallanRow>> = {
     no: {
@@ -137,9 +146,9 @@ export function Jobwork() {
         title="Sent for jobwork" noun="jobwork challan" rows={rows}
         search={(r) => `${r.challan.no} ${r.vendor?.name ?? ''} ${r.item?.name ?? ''} ${r.challan.process ?? ''} ${r.job?.no ?? ''}`}
         filter={{
-          label: 'Out and closed',
-          options: [{ value: 'out', label: 'Out' }, { value: 'closed', label: 'Closed' }],
-          of: (r) => r.challan.status,
+          label: 'Where it is',
+          options: [...JOBWORK_WHERE, { value: 'done', label: 'Closed' }],
+          match: (r, pick) => matchesPick(jof(r), pick),
         }}
         action={{ label: 'Send material out', icon: 'truck', onClick: () => setSending(true) }}
         tools={<DeskTools entity="challan" noun="jobwork challan" title={view === 'register' ? 'Jobwork challans' : 'Jobwork ledger'} rows={exportRows} />}
@@ -194,17 +203,37 @@ export function Jobwork() {
                     <section>
                       <Heading icon="truck" title="Out" count={out.length}
                         sub={`${money(out.reduce((a, r) => a + r.valueOut.value, 0))} of material neither on your shelf nor used`} />
-                      <ul className="grid items-start gap-3 md:grid-cols-2">
-                        {out.map((r, i) => (
-                          <ChallanCard key={r.challan.id} r={r} i={i}
-                            onReturn={() => setReturning(r.challan.id)}
-                            onChase={() => setChasing(r)}
-                            onExtend={() => setExtending(r.challan.id)}
-                            onClose={() => setClosing(r.challan.id)}
-                            onInspect={(id) => setInspecting(id)}
-                            onDelete={() => setDeleting(r)} />
-                        ))}
-                      </ul>
+                      {(() => {
+                        const b = jobworkBoard(out, jof, today)
+                        const row = (r: ChallanRow) => {
+                          const j = jof(r)
+                          const c = r.challan
+                          return (
+                            <JourneyRow key={c.id} kind="challan" no={c.no} who={r.item?.name ?? 'Unknown material'}
+                              what={`${num(c.qtySent, 3)} ${r.uom} to ${r.vendor?.name ?? 'Unknown jobworker'}${c.process ? ` · ${c.process.toLowerCase()}` : ''}${r.job ? ` · for ${r.job.no}` : ''}`}
+                              when={`due back ${shortDate(c.dueBack)}`} journey={j}
+                              open={opened === c.id} onToggle={() => setOpened((o) => (o === c.id ? null : c.id))}
+                              onAct={j.act ? () => act(j.act!, c.id) : undefined}
+                              onDoc={(d) => { if (d.kind === 'receipt') setPapering(d.id) }}>
+                              <ChallanBody r={r} returnIsAct={j.act?.kind === 'return'}
+                                onReturn={() => setReturning(c.id)}
+                                onChase={() => setChasing(r)}
+                                onExtend={() => setExtending(c.id)}
+                                onClose={() => setClosing(c.id)}
+                                onInspect={(id) => setInspecting(id)}
+                                onDelete={() => setDeleting(r)} />
+                            </JourneyRow>
+                          )
+                        }
+                        return (
+                          <JourneyGroups name="jobwork" row={row} empty="Nothing out matches."
+                            groups={[
+                              { key: 'late', title: 'Past due back', rows: b.late },
+                              { key: 'soon', title: 'Due this week', rows: b.soon },
+                              { key: 'later', title: 'Later', rows: b.later },
+                            ]} />
+                        )
+                      })()}
                     </section>
                   )}
 
@@ -296,12 +325,13 @@ function Heading({ icon, title, count, sub }: {
 }
 
 /**
- * One challan out. The bar is the point: every unit that left, as one of
- * five colours, summing to what was sent.
+ * One challan out, opened under its row. The bar is the point: every unit
+ * that left, as one of five colours, summing to what was sent.
  */
-function ChallanCard({ r, i, onReturn, onChase, onExtend, onClose, onInspect, onDelete }: {
+function ChallanBody({ r, returnIsAct, onReturn, onChase, onExtend, onClose, onInspect, onDelete }: {
   r: ChallanRow
-  i: number
+  /** "It came back" is already the row's own button */
+  returnIsAct: boolean
   onReturn: () => void
   onChase: () => void
   onExtend: () => void
@@ -315,34 +345,17 @@ function ChallanCard({ r, i, onReturn, onChase, onExtend, onClose, onInspect, on
   const gstLeft = gstDaysLeft(c, today)
   const pill = statePill(r)
   const back = r.acct.returned.value + r.acct.inQc.value
-  const fill = r.overdue ? 'bg-critical-soft' : r.atGate.length > 0 ? 'bg-warn-soft' : 'bg-surface-2'
   const entries = workspace ? challanLedger(workspace, c.id) : []
   const hasReturns = (workspace?.receipts ?? []).some((x) => x.challanId === c.id)
   return (
-    <li style={{ '--i': i } as React.CSSProperties} data-challan={c.no}
-      className={`anim-fade-up min-w-0 rounded-xl px-3.5 py-3 ${fill}`}>
-      <div className="flex items-start gap-3">
-        <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-full bg-surface text-ink-2">
-          <Icon name="factory" className="size-4" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13.5px] font-bold">
-            <span className="mono">{c.no}</span> · {r.item?.name ?? 'Unknown material'}
-          </span>
-          <span className="block truncate text-[11.5px] text-ink-2">
-            {num(c.qtySent, 3)} {r.uom} to {r.vendor?.name ?? 'Unknown jobworker'}
-            {c.process && <> · {c.process.toLowerCase()}</>}
-            {r.job && <> · for <span className="mono" data-for-job>{r.job.no}</span></>}
-          </span>
-        </span>
+    <div data-challan-body={c.no}>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-2">
         <StatePill label={pill.label} tone={pill.tone} />
+        {r.job && <span>for <span className="mono" data-for-job>{r.job.no}</span></span>}
       </div>
 
-      {/* where it has got to: sent, with them, back at the gate, back on the shelf, settled */}
-      {workspace && <JourneyStrip journey={jobworkJourney(workspace, c, today)} label={c.no} className="mt-3" />}
-
       {/* the five-way split, summing to what was sent */}
-      <span className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-surface" data-split
+      <span className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-surface-3" data-split
         title={segs.map((s) => `${s.label} — ${num(s.qty, 3)} ${r.uom}`).join(' · ')}>
         {segs.map((s, k) => (
           <span key={s.key} data-seg={s.key} className={`anim-reveal h-full ${s.cls}`}
@@ -395,10 +408,8 @@ function ChallanCard({ r, i, onReturn, onChase, onExtend, onClose, onInspect, on
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <button type="button" onClick={onReturn}
-          className="press rounded-lg border border-accent-ink bg-accent-ink px-3 py-1.5 text-[12.5px] font-semibold text-on-accent hover:bg-accent">
-          It came back
-        </button>
+        {/* when it is the one thing to do it is the row's own button; otherwise it is still here */}
+        {!returnIsAct && <Quiet onClick={onReturn}>It came back</Quiet>}
         <Quiet onClick={onChase}>Chase</Quiet>
         <Quiet onClick={onExtend}>New date</Quiet>
         <Quiet onClick={onClose}>Close</Quiet>
@@ -427,7 +438,7 @@ function ChallanCard({ r, i, onReturn, onChase, onExtend, onClose, onInspect, on
           ))}
         </ol>
       </details>
-    </li>
+    </div>
   )
 }
 

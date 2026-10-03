@@ -4,9 +4,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ListPage } from '@/components/ui/ListPage'
 import { DataTable, StatePill, type PillTone } from '@/components/ui/DataTable'
-import { Icon } from '@/components/ui/icons'
 import { Tabs } from '@/components/ui/Tabs'
-import { JourneyDots, JourneyStrip } from '@/components/charts/journey'
+import { Count, JourneyGroups, JourneyRow, Quiet, Sub } from '@/components/desk/JourneyList'
 import { DeskTools } from '@/components/sheet/DeskTools'
 import { buildColumns, type DrawnColumn } from '@/components/sheet/columns'
 import { ConfirmDelete } from '@/components/sourcing/ConfirmDelete'
@@ -61,7 +60,6 @@ export function Orders() {
   const [outputFor, setOutputFor] = useState<string | null>(null)
   const [view, setView] = useState<View>('journey')
   const [opened, setOpened] = useState<string | null>(null)
-  const [showOver, setShowOver] = useState(false)
 
   const rows = useMemo(() => (workspace ? orderRows(workspace, today) : []), [workspace, today])
   const journeys = useMemo(
@@ -167,20 +165,18 @@ export function Orders() {
                 editLabel={(r) => `Edit ${r.order.no}`}
                 deleteLabel={(r) => `Delete ${r.order.no}`} />
             ) : (
-              <Board rows={shown} today={today} jof={jof} opened={opened} showOver={showOver}
-                onShowOver={() => setShowOver((s) => !s)}
-                row={(r, isOpen) => (
-                  <OrderStrip key={r.order.id} r={r} j={jof(r)} open={isOpen}
-                    onToggle={() => setOpened((o) => (o === r.order.id ? null : r.order.id))}
-                    onAct={(a) => act(r, a)}
-                    onDoc={setDoc}
-                    onDispatch={() => setNoting(r.order.id)}
-                    onEdit={() => setEditing(r.order)}
-                    onCancel={() => toggleCancel(r)}
-                    onDelete={() => setDeleting(r)}
-                    onBook={setBooking}
-                    onDeliver={setDelivering} />
-                )} />
+              <OrderBoard rows={shown} today={today} jof={jof} row={(r) => (
+                <OrderStrip key={r.order.id} r={r} j={jof(r)} open={opened === r.order.id}
+                  onToggle={() => setOpened((o) => (o === r.order.id ? null : r.order.id))}
+                  onAct={(a) => act(r, a)}
+                  onDoc={setDoc}
+                  onDispatch={() => setNoting(r.order.id)}
+                  onEdit={() => setEditing(r.order)}
+                  onCancel={() => toggleCancel(r)}
+                  onDelete={() => setDeleting(r)}
+                  onBook={setBooking}
+                  onDeliver={setDelivering} />
+              )} />
             )}
           </>
         )}
@@ -204,10 +200,6 @@ export function Orders() {
   )
 }
 
-const Count = ({ n }: { n: number }) => (
-  <span className="mono rounded-full bg-surface-3 px-1.5 text-[10.5px] font-normal text-ink-3">{n}</span>
-)
-
 function Risk({ r }: { r: OrderRow }) {
   if (!r.risk) return null
   return (
@@ -217,55 +209,26 @@ function Risk({ r }: { r: OrderRow }) {
   )
 }
 
-/**
- * The list in its groups: past the promise, due this week, later — and what
- * is over folded under one line. When nothing open is left in view (a search
- * for an old order, or the Delivered filter) the over ones are simply shown.
- */
-function Board({ rows, today, jof, opened, showOver, onShowOver, row }: {
+/** Past the promise, due this week, later — and what is over folded under one line. */
+function OrderBoard({ rows, today, jof, row }: {
   rows: OrderRow[]
   today: string
   jof: (r: OrderRow) => OrderJourney
-  opened: string | null
-  showOver: boolean
-  onShowOver: () => void
-  row: (r: OrderRow, open: boolean) => React.ReactNode
+  row: (r: OrderRow) => React.ReactNode
 }) {
-  if (rows.length === 0) {
-    return <p className="rounded-xl border border-line bg-surface px-6 py-10 text-center text-[13px] text-ink-3">No sales orders match.</p>
-  }
   const b = orderBoard(rows, jof, today)
-  const openCount = b.late.length + b.soon.length + b.later.length
   const delivered = b.over.filter((r) => jof(r).done).length
   const cancelled = b.over.length - delivered
-  const overWords = [delivered > 0 && `${delivered} delivered`, cancelled > 0 && `${cancelled} cancelled`].filter(Boolean).join(' · ')
-  const group = (key: string, title: string, list: OrderRow[]) => list.length > 0 && (
-    <section key={key} data-group={key} className="space-y-2">
-      <h3 className="flex items-center gap-2 px-1 pt-1 text-[11px] font-bold uppercase tracking-[0.07em] text-ink-3">
-        {title}<Count n={list.length} />
-      </h3>
-      <ul className="space-y-2">{list.map((r) => row(r, opened === r.order.id))}</ul>
-    </section>
-  )
   return (
-    <div className="space-y-3" data-order-board>
-      {group('late', 'Past the promise', b.late)}
-      {group('soon', 'Due this week', b.soon)}
-      {group('later', 'Later', b.later)}
-      {b.over.length > 0 && (openCount === 0
-        ? group('over', cancelled > 0 && delivered > 0 ? 'Delivered and cancelled' : delivered > 0 ? 'Delivered' : 'Cancelled', b.over)
-        : (
-          <>
-            <button type="button" onClick={onShowOver} data-fold aria-expanded={showOver}
-              className="flex w-full items-center gap-3 px-1 pt-2 text-[12.5px] text-ink-3">
-              <i className="flex-1 border-t border-line" />
-              <span>{overWords} · <span className="font-semibold text-accent-ink underline underline-offset-2">{showOver ? 'hide them' : 'show them'}</span></span>
-              <i className="flex-1 border-t border-line" />
-            </button>
-            {showOver && group('over', 'Over', b.over)}
-          </>
-        ))}
-    </div>
+    <JourneyGroups name="orders" row={row} empty="No sales orders match."
+      groups={[
+        { key: 'late', title: 'Past the promise', rows: b.late },
+        { key: 'soon', title: 'Due this week', rows: b.soon },
+        { key: 'later', title: 'Later', rows: b.later },
+      ]}
+      over={b.over}
+      overWords={[delivered > 0 && `${delivered} delivered`, cancelled > 0 && `${cancelled} cancelled`].filter(Boolean).join(' · ')}
+      overTitle={cancelled > 0 && delivered > 0 ? 'Delivered and cancelled' : delivered > 0 ? 'Delivered' : 'Cancelled'} />
   )
 }
 
@@ -287,158 +250,95 @@ function OrderStrip({ r, j, open, onToggle, onAct, onDoc, onDispatch, onEdit, on
   const { order } = r
   const what = j.lines.length === 1 ? `${num(j.qty, 0)} ${j.lines[0].product ?? 'pieces'}` : `${num(j.qty, 0)} pieces · ${j.lines.length} lines`
   const lastOn = j.steps[4].on
-  const flag = j.cancelled ? { tone: 'neutral', text: 'Cancelled' }
-    : j.late > 0 ? { tone: 'late', text: j.lateText! }
-      : j.done ? { tone: 'good', text: `Delivered${lastOn ? ` ${shortDate(lastOn)}` : ''}` } : null
-  const stop = (e: React.MouseEvent) => e.stopPropagation()
   const last = j.papers.at(-1)
 
   return (
-    <li data-so={order.no} data-where={j.where}
-      className={`rounded-[14px] border bg-surface ${open ? 'border-accent/40 shadow-[inset_0_0_0_1px_var(--accent-soft)]' : 'border-line'}`}>
-      {/* the whole top of the row opens it; the chevron is the same, for a keyboard */}
-      <div className="cursor-pointer px-3.5 pb-2 pt-3 sm:px-4" onClick={onToggle}>
-        <div className="flex items-center gap-3">
-          <div className="min-w-0 flex-1 sm:flex sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1">
-            <div className="flex min-w-0 items-baseline gap-2">
-              <span className="mono whitespace-nowrap text-[13.5px] font-bold text-ink">{order.no}</span>
-              <span className="truncate text-[13.5px] font-semibold text-ink">{r.customer?.name ?? 'Unknown customer'}</span>
-            </div>
-            <div className="truncate text-[12px] text-ink-3 sm:text-[12.5px]">
-              <span className="sm:text-ink-2">{what}</span>
-              <span className="hidden sm:inline"> · <span className="num">{money(j.value)}</span></span>
-              <span> · promised <span className="num">{shortDate(order.promisedDate)}</span></span>
-            </div>
-            {flag && (
-              <span data-flag={flag.tone} className={`hidden items-center gap-1 rounded-full px-2.5 py-0.5 text-[11.5px] font-bold sm:inline-flex ${
-                flag.tone === 'late' ? 'bg-critical-soft text-critical' : flag.tone === 'good' ? 'bg-good-soft text-good' : 'bg-surface-2 text-ink-3'}`}>
-                <Icon name={flag.tone === 'late' ? 'alert' : flag.tone === 'good' ? 'check' : 'close'} className="size-3" />
-                {flag.text}
-              </span>
-            )}
-            {r.risk && <span className="hidden sm:inline"><Risk r={r} /></span>}
-          </div>
-          <span className="sm:hidden"><JourneyDots journey={j} /></span>
-          {j.act && (
-            <button type="button" data-act={j.act.kind} onClick={(e) => { stop(e); onAct(j.act!) }}
-              className="press hidden shrink-0 items-center gap-1.5 rounded-lg bg-accent-ink px-3 py-1.5 text-[12.5px] font-semibold text-on-accent hover:bg-accent sm:inline-flex">
-              {j.act.label}<Icon name="arrow-right" className="size-3.5" />
-            </button>
-          )}
-          <button type="button" onClick={(e) => { stop(e); onToggle() }} aria-expanded={open} data-open-so={order.no}
-            title={open ? `Close ${order.no}` : `Open ${order.no}`}
-            className="press -mr-1.5 shrink-0 rounded-md p-0.5 text-ink-3 hover:bg-surface-2 hover:text-ink sm:mr-0 sm:p-1">
-            <Icon name="chevron" className={`size-4 transition-transform ${open ? 'rotate-90' : ''}`} />
-            <span className="sr-only">{open ? 'Close' : 'Open'} {order.no}</span>
-          </button>
-        </div>
-        {/* on a phone the dots stand in for the strip until the row is opened */}
-        <JourneyStrip journey={j} label={order.no} small hideLate
-          onDoc={(d) => { if (d.kind === 'note') onDoc(d.id) }}
-          className={`mt-2.5 ${open ? '' : 'hidden sm:block'}`} />
-      </div>
-
-      {open && (
-        <div data-so-open={order.no} className="grid gap-4 rounded-b-[14px] border-t border-line-soft bg-surface-2/60 px-3.5 py-3 sm:px-4 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-          <section className="min-w-0">
-            <h4 className="mb-1.5 text-[10.5px] font-bold uppercase tracking-[0.07em] text-ink-3">What they ordered</h4>
-            <div className="scroll-x overflow-x-auto">
-              <table className="w-full border-collapse text-[12.5px]">
-                <thead>
-                  <tr className="border-b border-line text-left text-[11px] text-ink-3">
-                    <th className="py-1.5 pr-2 font-semibold">Product</th>
-                    <th className="px-2 py-1.5 text-right font-semibold">Qty</th>
-                    <th className="px-2 py-1.5 text-right font-semibold">Rate</th>
-                    <th className="px-2 py-1.5 text-right font-semibold">Made</th>
-                    <th className="px-2 py-1.5 text-right font-semibold">Dispatched</th>
-                    <th className="py-1.5 pl-2 text-right font-semibold">Still to go</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {j.lines.map((l) => (
-                    <tr key={l.lineId} className="border-b border-line-soft last:border-0">
-                      <td className="py-2 pr-2">
-                        {l.product ?? 'Unknown product'}
-                        {l.job && (
-                          <Link href={`/production/jobs?card=${l.job.id}`} className="mono text-[11px] text-ink-3 hover:text-ink hover:underline">
-                            {' '}· {l.job.no}
-                          </Link>
-                        )}
-                      </td>
-                      <td className="num px-2 py-2 text-right">{num(l.qty, 0)}</td>
-                      <td className="num px-2 py-2 text-right">{money(l.rate)}</td>
-                      <td className="num px-2 py-2 text-right">{l.made === null ? <span className="text-ink-4">—</span> : num(l.made, 0)}</td>
-                      <td className="num px-2 py-2 text-right">{num(l.sent, 0)}</td>
-                      <td className="num py-2 pl-2 text-right font-semibold">{num(l.still, 0)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {r.risk && <p className="mt-2 sm:hidden"><Risk r={r} /></p>}
-          </section>
-
-          <section className="min-w-0">
-            <h4 className="mb-1.5 text-[10.5px] font-bold uppercase tracking-[0.07em] text-ink-3">Papers</h4>
-            {j.papers.length === 0 ? (
-              <p className="py-1.5 text-[12.5px] text-ink-3">Nothing dispatched yet.</p>
-            ) : (
-              <ul className="divide-y divide-line-soft text-[12.5px]">
-                {j.papers.map((p) => (
-                  <li key={p.note.id} data-paper={p.note.no} className="flex flex-wrap items-center gap-x-2 gap-y-1 py-1.5">
-                    <button type="button" onClick={() => onDoc(p.note.id)} title={`Open ${p.note.no}`}
-                      className="jr-doc text-[11.5px]">{p.note.no}</button>
-                    <span className="num text-ink-2">{shortDate(p.note.on)}</span>
-                    <span className="num">{num(p.qty, 0)}</span>
-                    {p.carrier && <span className="text-ink-2">{p.carrier}{p.consignment?.lrNo ? ` · ${p.consignment.lrNo}` : ''}</span>}
-                    {p.state === 'delivered' ? (
-                      <span className="font-semibold text-good">
-                        delivered {shortDate(p.consignment!.deliveredOn!)}{p.consignment?.confirmedBy ? <span className="font-normal text-ink-3"> · {p.consignment.confirmedBy}</span> : null}
-                      </span>
-                    ) : p.state === 'road' ? (
-                      <>
-                        <span className={p.late ? 'font-semibold text-critical' : 'text-ink-2'}>
-                          on the road {p.days === 0 ? 'since today' : `${p.days} ${p.days === 1 ? 'day' : 'days'}`} · promised {shortDate(p.consignment!.promisedDate)}
-                        </span>
-                        <Quiet onClick={() => onDeliver(p.consignment!.id)}>Mark delivered</Quiet>
-                      </>
-                    ) : (
-                      <>
-                        <span className={p.late ? 'font-semibold text-critical' : 'text-ink-2'}>no carrier booked</span>
-                        <Quiet onClick={() => onBook(p.note.id)}>Book the carrier</Quiet>
-                      </>
+    <JourneyRow kind="so" no={order.no} who={r.customer?.name ?? 'Unknown customer'} what={what} value={money(j.value)}
+      when={`promised ${shortDate(order.promisedDate)}`} journey={j} doneText={`Delivered${lastOn ? ` ${shortDate(lastOn)}` : ''}`}
+      note={r.risk ? <Risk r={r} /> : undefined} open={open} onToggle={onToggle}
+      onAct={j.act ? () => onAct(j.act!) : undefined}
+      onDoc={(d) => { if (d.kind === 'note') onDoc(d.id) }}
+      detailsClass="grid gap-4 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+      <section className="min-w-0">
+        <Sub>What they ordered</Sub>
+        <div className="scroll-x overflow-x-auto">
+          <table className="w-full border-collapse text-[12.5px]">
+            <thead>
+              <tr className="border-b border-line text-left text-[11px] text-ink-3">
+                <th className="py-1.5 pr-2 font-semibold">Product</th>
+                <th className="px-2 py-1.5 text-right font-semibold">Qty</th>
+                <th className="px-2 py-1.5 text-right font-semibold">Rate</th>
+                <th className="px-2 py-1.5 text-right font-semibold">Made</th>
+                <th className="px-2 py-1.5 text-right font-semibold">Dispatched</th>
+                <th className="py-1.5 pl-2 text-right font-semibold">Still to go</th>
+              </tr>
+            </thead>
+            <tbody>
+              {j.lines.map((l) => (
+                <tr key={l.lineId} className="border-b border-line-soft last:border-0">
+                  <td className="py-2 pr-2">
+                    {l.product ?? 'Unknown product'}
+                    {l.job && (
+                      <Link href={`/production/jobs?card=${l.job.id}`} className="mono text-[11px] text-ink-3 hover:text-ink hover:underline">
+                        {' '}· {l.job.no}
+                      </Link>
                     )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          <div className="flex flex-wrap gap-1.5 md:col-span-2" data-so-actions>
-            {j.act && (
-              <button type="button" onClick={() => onAct(j.act!)}
-                className="press inline-flex items-center gap-1.5 rounded-lg bg-accent-ink px-3 py-1.5 text-[12.5px] font-semibold text-on-accent hover:bg-accent sm:hidden">
-                {j.act.label}<Icon name="arrow-right" className="size-3.5" />
-              </button>
-            )}
-            {!j.cancelled && !r.complete && <Quiet onClick={onDispatch}>Dispatch against {order.no}</Quiet>}
-            <Quiet onClick={onEdit}>Edit</Quiet>
-            {last && <Quiet onClick={() => onDoc(last.note.id)}>Open {last.note.no}</Quiet>}
-            <Quiet onClick={onCancel}>{j.cancelled ? `Reopen ${order.no}` : `Cancel ${order.no}`}</Quiet>
-            <Quiet onClick={onDelete} danger>Delete</Quiet>
-          </div>
+                  </td>
+                  <td className="num px-2 py-2 text-right">{num(l.qty, 0)}</td>
+                  <td className="num px-2 py-2 text-right">{money(l.rate)}</td>
+                  <td className="num px-2 py-2 text-right">{l.made === null ? <span className="text-ink-4">—</span> : num(l.made, 0)}</td>
+                  <td className="num px-2 py-2 text-right">{num(l.sent, 0)}</td>
+                  <td className="num py-2 pl-2 text-right font-semibold">{num(l.still, 0)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      )}
-    </li>
-  )
-}
+      </section>
 
-function Quiet({ onClick, danger = false, children }: { onClick: () => void; danger?: boolean; children: React.ReactNode }) {
-  return (
-    <button type="button" onClick={onClick}
-      className={`press rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12.5px] font-medium hover:bg-surface-2 ${
-        danger ? 'text-critical hover:bg-critical-soft' : 'text-ink'}`}>
-      {children}
-    </button>
+      <section className="min-w-0">
+        <Sub>Papers</Sub>
+        {j.papers.length === 0 ? (
+          <p className="py-1.5 text-[12.5px] text-ink-3">Nothing dispatched yet.</p>
+        ) : (
+          <ul className="divide-y divide-line-soft text-[12.5px]">
+            {j.papers.map((p) => (
+              <li key={p.note.id} data-paper={p.note.no} className="flex flex-wrap items-center gap-x-2 gap-y-1 py-1.5">
+                <button type="button" onClick={() => onDoc(p.note.id)} title={`Open ${p.note.no}`}
+                  className="jr-doc text-[11.5px]">{p.note.no}</button>
+                <span className="num text-ink-2">{shortDate(p.note.on)}</span>
+                <span className="num">{num(p.qty, 0)}</span>
+                {p.carrier && <span className="text-ink-2">{p.carrier}{p.consignment?.lrNo ? ` · ${p.consignment.lrNo}` : ''}</span>}
+                {p.state === 'delivered' ? (
+                  <span className="font-semibold text-good">
+                    delivered {shortDate(p.consignment!.deliveredOn!)}{p.consignment?.confirmedBy ? <span className="font-normal text-ink-3"> · {p.consignment.confirmedBy}</span> : null}
+                  </span>
+                ) : p.state === 'road' ? (
+                  <>
+                    <span className={p.late ? 'font-semibold text-critical' : 'text-ink-2'}>
+                      on the road {p.days === 0 ? 'since today' : `${p.days} ${p.days === 1 ? 'day' : 'days'}`} · promised {shortDate(p.consignment!.promisedDate)}
+                    </span>
+                    <Quiet onClick={() => onDeliver(p.consignment!.id)}>Mark delivered</Quiet>
+                  </>
+                ) : (
+                  <>
+                    <span className={p.late ? 'font-semibold text-critical' : 'text-ink-2'}>no carrier booked</span>
+                    <Quiet onClick={() => onBook(p.note.id)}>Book the carrier</Quiet>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <div className="flex flex-wrap gap-1.5 md:col-span-2" data-so-actions>
+        {!j.cancelled && !r.complete && <Quiet onClick={onDispatch}>Dispatch against {order.no}</Quiet>}
+        <Quiet onClick={onEdit}>Edit</Quiet>
+        {last && <Quiet onClick={() => onDoc(last.note.id)}>Open {last.note.no}</Quiet>}
+        <Quiet onClick={onCancel}>{j.cancelled ? `Reopen ${order.no}` : `Cancel ${order.no}`}</Quiet>
+        <Quiet onClick={onDelete} danger>Delete</Quiet>
+      </div>
+    </JourneyRow>
   )
 }

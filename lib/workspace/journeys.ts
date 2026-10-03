@@ -73,9 +73,15 @@ export interface Journey<A = never> {
   late: number
   /** the words for it, as said on the current step */
   lateText?: string
+  /** the same, short enough for a phone row — "3 days late", "9 days at the gate" */
+  lateShort?: string
   /** nothing left to happen */
   done: boolean
   cancelled?: boolean
+  /** where it is, as one key for the filter — the step holding it, or done */
+  where: string
+  /** the where, in a few words — "Made 87%", "Not here yet" */
+  word: string
   /** the one thing to do next, when the screen can do it */
   act?: A
 }
@@ -106,12 +112,20 @@ function settle(steps: JourneyStep[]): JourneyStep | undefined {
 }
 
 /** Lateness goes on the step holding it up. */
-function lateOn<J extends Journey<unknown>>(j: J, days: number, text: string): J {
+function lateOn<J extends Journey<unknown>>(j: J, days: number, text: string, short?: string): J {
   if (days <= 0) return j
   const at = j.steps.find((s) => s.current)
   if (at) at.late = text
-  return { ...j, late: days, lateText: text }
+  return { ...j, late: days, lateText: text, lateShort: short ?? `${plural(days, 'day')} late` }
 }
+
+/** "Made 87%" while a step is part-way, else the step's own word for waiting on it. */
+const wordAt = (at: JourneyStep, waiting: string) => (at.state === 'part' ? `${at.label} ${at.pct}%` : waiting)
+
+/** A filter's choice, and whether a journey is one it picked. "late" cuts across every place. */
+export interface WhereOption { value: string; label: string }
+export const matchesPick = (j: Journey<unknown>, pick: string, alias: Record<string, string[]> = {}): boolean =>
+  !pick || (pick === 'late' ? j.late > 0 : (alias[pick] ?? [pick]).includes(j.where))
 
 /* ---------------------------------------------------------- sales order -- */
 
@@ -340,8 +354,7 @@ function orderAct(
 }
 
 /** Whether an order is one the "Where it is" filter picked. */
-export const matchesWhere = (j: OrderJourney, pick: string): boolean =>
-  !pick || (pick === 'late' ? j.late > 0 : j.where === pick)
+export const matchesWhere = (j: OrderJourney, pick: string): boolean => matchesPick(j, pick)
 
 /** The list, the way it is read: what is late first, then what is due this week, then later. */
 export interface OrderBoard<T> {
@@ -376,7 +389,21 @@ export function orderBoard<T extends { order: CustomerOrder }>(
  * of paper with one supplier. Received, checked and accepted are summed over
  * its lines against what was ordered.
  */
-export function purchaseJourney(ws: Workspace, group: OrderGroup, today: string): Journey {
+export type PurchaseAct =
+  | { kind: 'paper'; label: string }
+  | { kind: 'receive'; label: string; orderId: string }
+  | { kind: 'inspect'; label: string; receiptId: string }
+
+/** Where a purchase order is. A short delivery waiting on the rest is still "not here yet". */
+export const PURCHASE_WHERE: WhereOption[] = [
+  { value: 'late', label: 'Late' },
+  { value: 'handed', label: 'Not handed over' },
+  { value: 'gate', label: 'Not here yet' },
+  { value: 'checked', label: 'At the gate' },
+  { value: 'done', label: 'Received' },
+]
+
+export function purchaseJourney(ws: Workspace, group: OrderGroup, today: string): Journey<PurchaseAct> {
   const orders = group.rows.map((r) => r.order)
   const ids = new Set(orders.map((o) => o.id))
   const receipts = (ws.receipts ?? []).filter((r) => r.orderId && ids.has(r.orderId))
@@ -456,8 +483,22 @@ export function purchaseJourney(ws: Workspace, group: OrderGroup, today: string)
   const between: (JourneyLine | null)[] = [null, null, null, null]
   const cancelled = group.state === 'cancelled'
   const at = cancelled ? undefined : settle(steps)
-  let j: Journey = { steps, between, late: 0, done: !at && !cancelled, cancelled }
+  const where = cancelled ? 'cancelled' : !at ? 'done' : at.key === 'shelf' ? 'checked' : at.key
+  let j: Journey<PurchaseAct> = {
+    steps, between, late: 0, done: !at && !cancelled, cancelled, where,
+    word: cancelled ? 'Cancelled' : !at ? 'Received'
+      : at.key === 'handed' ? 'Not handed over'
+        : at.key === 'gate' ? wordAt(at, 'Not here yet')
+          : at.key === 'checked' ? wordAt(at, 'At the gate') : wordAt(at, 'Checked'),
+  }
   if (cancelled || !at) return j
+
+  // the next thing: hand it over, record what came (on the first line still short), or check what is waiting
+  const short = orders.find((o) => o.state !== 'cancelled' && o.qty - receipts.filter((r) => r.orderId === o.id).reduce((a, r) => a + r.qty, 0) > 0)
+  j.act = at.key === 'handed' ? { kind: 'paper', label: 'Make the document' }
+    : waiting.length > 0 && (at.key === 'checked' || at.key === 'shelf') ? { kind: 'inspect', label: 'Check it', receiptId: waiting[0].id }
+      : short && at.key === 'gate' ? { kind: 'receive', label: 'Record what arrived', orderId: short.id }
+        : undefined
 
   const over = daysBetween(expectedOn, today)
   if (handed && received === 0) {
@@ -469,14 +510,49 @@ export function purchaseJourney(ws: Workspace, group: OrderGroup, today: string)
     // a lorry checked late is the gate's lateness, against the owner's own rule
     const waited = daysBetween(waiting[0].receivedOn, today)
     const rule = ws.policy.inboundQcDays
-    j = lateOn(j, waited > rule ? waited - rule : 0, `${plural(waited, 'day')} at the gate — your rule is ${rule}`)
+    j = lateOn(j, waited > rule ? waited - rule : 0, `${plural(waited, 'day')} at the gate — your rule is ${rule}`, `${plural(waited, 'day')} at the gate`)
   }
   return j
 }
 
+/**
+ * The purchase orders, the way they are read: what is late first, most late
+ * at the top; then what is still on your desk; then what is due this week,
+ * then later. Received and cancelled fold away.
+ */
+export function purchaseBoard<T extends { no: string; expectedOn: string }>(
+  groups: T[], journeyOf: (g: T) => Journey<unknown>, today: string,
+) {
+  const open = groups.filter((g) => { const j = journeyOf(g); return !j.done && !j.cancelled })
+  const byDue = (a: T, b: T) => a.expectedOn.localeCompare(b.expectedOn) || a.no.localeCompare(b.no, undefined, { numeric: true })
+  const late = open.filter((g) => journeyOf(g).late > 0).sort((a, b) => journeyOf(b).late - journeyOf(a).late || byDue(a, b))
+  const rest = open.filter((g) => journeyOf(g).late === 0)
+  const desk = rest.filter((g) => journeyOf(g).where === 'handed').sort(byDue)
+  const out = rest.filter((g) => journeyOf(g).where !== 'handed')
+  const soon = out.filter((g) => daysBetween(today, g.expectedOn) <= 7).sort(byDue)
+  const later = out.filter((g) => daysBetween(today, g.expectedOn) > 7).sort(byDue)
+  const over = groups.filter((g) => !open.includes(g)).sort((a, b) => byDue(b, a))
+  return { late, desk, soon, later, over }
+}
+
 /* -------------------------------------------------------------- job card -- */
 
-export function jobJourney(ws: Workspace, job: Job, today: string): Journey {
+export type JobAct =
+  | { kind: 'plan'; label: string }
+  | { kind: 'issue'; label: string }
+  | { kind: 'output'; label: string }
+  | { kind: 'close'; label: string }
+
+export const JOB_WHERE: WhereOption[] = [
+  { value: 'late', label: 'Past its finish' },
+  { value: 'plan', label: 'Needs a plan' },
+  { value: 'issued', label: 'Waiting for material' },
+  { value: 'made', label: 'Being made' },
+  { value: 'closed', label: 'Made — to close' },
+  { value: 'done', label: 'Closed' },
+]
+
+export function jobJourney(ws: Workspace, job: Job, today: string): Journey<JobAct> {
   const made = madeOn(ws, job.id)
   const rejected = rejectedOn(ws, job.id)
   const slips = (ws.issues ?? []).filter((s) => s.jobId === job.id && s.kind === 'issue')
@@ -510,7 +586,21 @@ export function jobJourney(ws: Workspace, job: Job, today: string): Journey {
   // once closed it is over, whatever was made; until then nothing after it is done
   if (job.closedOn) for (const s of steps) if (s.state !== 'done') s.state = 'skip'
   const at = settle(steps)
-  let j: Journey = { steps, between: [null, null, null], late: 0, done: !at }
+  /*
+   * A card nobody has planned needs its plan before anything else: Line watch
+   * cannot judge it, and its material list comes from the plan.
+   */
+  const needsPlan = Boolean(at) && !planned && at!.key !== 'closed'
+  const where = !at ? 'done' : needsPlan ? 'plan' : at.key
+  let j: Journey<JobAct> = {
+    steps, between: [null, null, null], late: 0, done: !at, where,
+    word: !at ? 'Closed' : needsPlan ? 'Needs a plan'
+      : at.key === 'issued' ? 'Waiting for material'
+        : at.key === 'made' ? wordAt(at, 'Being made') : 'Made — to close',
+    act: !at ? undefined : needsPlan ? { kind: 'plan', label: 'Plan it' }
+      : at.key === 'issued' ? { kind: 'issue', label: 'Issue material' }
+        : at.key === 'made' ? { kind: 'output', label: 'Book output' } : { kind: 'close', label: 'Close it' },
+  }
   if (at && planned && made < job.qty!) {
     const over = daysBetween(job.plannedFinish!, today)
     j = lateOn(j, over, `${plural(over, 'day')} past its finish`)
@@ -518,9 +608,35 @@ export function jobJourney(ws: Workspace, job: Job, today: string): Journey {
   return j
 }
 
+/**
+ * The job cards, the way the floor reads them: past its finish first, most
+ * late at the top; then behind the plan; then on track; then the ones nobody
+ * has planned. Closed cards fold away. `behind` is the plan's own verdict.
+ */
+export function jobBoard<T extends { job: Job }>(
+  rows: T[], journeyOf: (r: T) => Journey<unknown>, behind: (r: T) => boolean,
+) {
+  const open = rows.filter((r) => !journeyOf(r).done)
+  const byFinish = (a: T, b: T) => (a.job.plannedFinish ?? '9999').localeCompare(b.job.plannedFinish ?? '9999')
+    || a.job.no.localeCompare(b.job.no, undefined, { numeric: true })
+  const late = open.filter((r) => journeyOf(r).late > 0).sort((a, b) => journeyOf(b).late - journeyOf(a).late || byFinish(a, b))
+  const rest = open.filter((r) => journeyOf(r).late === 0)
+  const unplanned = rest.filter((r) => journeyOf(r).where === 'plan').sort((a, b) => a.job.openedOn.localeCompare(b.job.openedOn))
+  const planned = rest.filter((r) => journeyOf(r).where !== 'plan')
+  const slow = planned.filter(behind).sort(byFinish)
+  const track = planned.filter((r) => !behind(r)).sort(byFinish)
+  const over = rows.filter((r) => journeyOf(r).done).sort((a, b) => (b.job.closedOn ?? '').localeCompare(a.job.closedOn ?? ''))
+  return { late, behind: slow, track, unplanned, over }
+}
+
 /* --------------------------------------------------------------- jobwork -- */
 
-export function jobworkJourney(ws: Workspace, c: Challan, today: string): Journey {
+export type JobworkAct =
+  | { kind: 'return'; label: string }
+  | { kind: 'inspect'; label: string; receiptId: string }
+  | { kind: 'close'; label: string }
+
+export function jobworkJourney(ws: Workspace, c: Challan, today: string): Journey<JobworkAct> {
   const r = challanRow(ws, c, today)
   const who = r.vendor?.name ?? 'the jobworker'
   const back = r.acct.returned.value + r.acct.inQc.value
@@ -558,9 +674,41 @@ export function jobworkJourney(ws: Workspace, c: Challan, today: string): Journe
   if (settled) for (const s of steps) if (s.state !== 'done') s.state = 'skip'
   const at = settle(steps)
   const between: (JourneyLine | null)[] = [null, null, null, null]
-  let j: Journey = { steps, between, late: 0, done: !at }
+  const where = !at ? 'done' : at.key
+  let j: Journey<JobworkAct> = {
+    steps, between, late: 0, done: !at, where,
+    word: !at ? 'Settled' : at.key === 'with' ? 'With the jobworker'
+      : at.key === 'gate' ? wordAt(at, 'Coming back')
+        : at.key === 'shelf' ? wordAt(at, 'At the gate') : 'To settle',
+  }
   if (!at) return j
+  // what came back waits at the gate to be inspected before anything else
+  j.act = r.atGate.length > 0 ? { kind: 'inspect', label: 'Inspect', receiptId: r.atGate[0].id }
+    : at.key === 'with' || at.key === 'gate' ? { kind: 'return', label: 'It came back' }
+      : { kind: 'close', label: 'Close it' }
   const over = daysBetween(c.dueBack, today)
   if (back < expected) j = lateOn(j, over, `${plural(over, 'day')} past due back`)
   return j
+}
+
+export const JOBWORK_WHERE: WhereOption[] = [
+  { value: 'late', label: 'Past due back' },
+  { value: 'with', label: 'With the jobworker' },
+  { value: 'gate', label: 'Coming back' },
+  { value: 'shelf', label: 'At the gate' },
+  { value: 'settled', label: 'To settle' },
+]
+
+/** Material out, the way it is chased: past due back first, then due this week, then later. */
+export function jobworkBoard<T extends { challan: Challan }>(
+  rows: T[], journeyOf: (r: T) => Journey<unknown>, today: string,
+) {
+  const open = rows.filter((r) => !journeyOf(r).done)
+  const byDue = (a: T, b: T) => a.challan.dueBack.localeCompare(b.challan.dueBack)
+    || a.challan.no.localeCompare(b.challan.no, undefined, { numeric: true })
+  const late = open.filter((r) => journeyOf(r).late > 0).sort((a, b) => journeyOf(b).late - journeyOf(a).late || byDue(a, b))
+  const rest = open.filter((r) => journeyOf(r).late === 0)
+  const soon = rest.filter((r) => daysBetween(today, r.challan.dueBack) <= 7).sort(byDue)
+  const later = rest.filter((r) => daysBetween(today, r.challan.dueBack) > 7).sort(byDue)
+  return { late, soon, later }
 }
