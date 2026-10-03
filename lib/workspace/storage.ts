@@ -14,6 +14,7 @@
  */
 import { DEFAULT_POLICY } from '@/lib/domain/policy'
 import type { Item, SpecCheck, Vendor } from '@/lib/domain/types'
+import { readBoardHidden } from './boards'
 import { highestIssued } from './defaults'
 import { readJobNumbering } from './jobs'
 import { lotDate, openingMovesFor } from './ledger'
@@ -493,6 +494,8 @@ function migrate(raw: Partial<Workspace>): Workspace {
     rmas,
     dispatchRules: raw.dispatchRules,
     dispatchMetricPicks: raw.dispatchMetricPicks,
+    // a part no dashboard has any more falls away; absent is everything on
+    boardHidden: readBoardHidden(raw.boardHidden),
   }
 }
 

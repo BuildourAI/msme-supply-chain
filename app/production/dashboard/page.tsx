@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { DeskOnly } from '@/components/sourcing/DeskOnly'
 import { BandButton, BandChip, RecentList, StageDashboard, WaitingList } from '@/components/desk/StageDashboard'
 import { ProductionPictures, ProductionStrip } from '@/components/desk/StagePictures'
-import { MetricPicker } from '@/components/sourcing/MetricPicker'
+import { Customise } from '@/components/desk/Customise'
 import { OutputForm, PlanForm } from '@/components/production/desk/PlanDialogs'
 import { ResumeDialog } from '@/components/production/desk/HaltDialogs'
 import { useWorkspace } from '@/components/workspace/store'
@@ -52,12 +52,12 @@ function Dashboard() {
   const runs = lineRunsFor(ws)
   return (
     <>
-      <StageDashboard stage="Production" icon="factory"
+      <StageDashboard board="production" stage="Production" icon="factory"
         chips={<>
           <BandChip alert={queue.length > 0}>{queue.length} need{queue.length === 1 ? 's' : ''} you</BandChip>
           {runs && <BandChip icon="clock">Line runs {runs.days.value >= 100 ? '99+' : Math.round(runs.days.value * 10) / 10} days</BandChip>}
         </>}
-        actions={<BandButton icon="columns" onClick={() => setPicking(true)}>Figures</BandButton>}
+        actions={<BandButton icon="columns" onClick={() => setPicking(true)}>Customise</BandButton>}
         metrics={metrics}
         pictures={<ProductionPictures ws={ws} today={today} />}
         strip={<ProductionStrip ws={ws} today={today} />}
@@ -66,7 +66,7 @@ function Dashboard() {
           clear="Every planned job has what it needs, nothing is behind, nothing is unplanned." />}
         recent={<RecentList title="Recent on the floor" items={recentFor(ws, 'production')} today={today} />} />
 
-      <MetricPicker open={picking} onClose={() => setPicking(false)} stage="production" />
+      <Customise open={picking} onClose={() => setPicking(false)} board="production" />
       <PlanForm jobId={planning} onClose={() => setPlanning(undefined)} />
       <OutputForm open={booking !== null} preset={booking ?? undefined} onClose={() => setBooking(null)} />
       <ResumeDialog haltId={resuming} onClose={() => setResuming(null)} />

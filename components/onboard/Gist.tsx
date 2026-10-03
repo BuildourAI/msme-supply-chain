@@ -1,12 +1,15 @@
 'use client'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Icon, type IconName } from '@/components/ui/icons'
 import {
-  CoverBars, Empty, JobRings, MonthColumns, NavyDisc, OwnerCard, Pill, PromiseTimeline, RankedBars, type Status,
+  CoverBars, Empty, JobRings, MonthColumns, NavyDisc, OwnerCard, Pill, PictureLayout, PromiseTimeline, RankedBars, type Status,
 } from '@/components/charts/owner'
+import { Customise } from '@/components/desk/Customise'
+import { BandButton } from '@/components/desk/StageDashboard'
 import { useWorkspace } from '@/components/workspace/store'
 import { longDate } from '@/lib/domain/format'
+import { hiddenOn, pictureSpans, shownPictures } from '@/lib/workspace/boards'
 import type { Band } from '@/lib/workspace/decisions'
 import {
   GIST_STAGES, compact, gist, monthWord, whenWord,
@@ -28,9 +31,27 @@ import type { Metric, MetricStage, MetricTone } from '@/lib/workspace/metrics'
  * One hue carries it — navy, with greys — and red, amber and green appear only
  * where something is late, tight or fine. See `components/charts/owner.tsx`.
  *
+ * The owner chooses what it shows (Customise, `lib/workspace/boards.ts`): any
+ * money tile, any picture, the goals and the recent activity can be switched
+ * off, and the page closes up — rows renumber, a short row of tiles or
+ * pictures shares the width. The work queues and the stage cards always show.
+ *
  * Rendered only once the company has a record to read (see `hasRecords`), and
  * only for the owner's own company — the sample has its own page.
  */
+
+// the money tiles across the page, however many are kept; static so Tailwind sees them
+const TILE_GRID: Record<number, string> = {
+  1: 'grid-cols-1',
+  2: 'grid-cols-2',
+  3: 'grid-cols-2 sm:grid-cols-3 [&>:nth-child(3)]:col-span-2 sm:[&>:nth-child(3)]:col-span-1',
+  4: 'grid-cols-2 xl:grid-cols-4',
+  5: 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 [&>:nth-child(5)]:col-span-2 sm:[&>:nth-child(5)]:col-span-1',
+}
+// on a laptop the left column's rows, and the right column spanning them
+const ROW_START = ['', 'xl:row-start-1', 'xl:row-start-2', 'xl:row-start-3']
+const ROW_SPAN = ['', 'xl:row-span-1', 'xl:row-span-2', 'xl:row-span-3']
+const SIDE_COLS = ['', 'md:grid-cols-1', 'md:grid-cols-2', 'md:grid-cols-3']
 
 const TILE_ICON: Record<string, IconName> = {
   orderBook: 'cash', dispatchedValue: 'truck', onOrder: 'cart', stockValue: 'boxes', atJobworkers: 'share',
@@ -43,9 +64,22 @@ const iconOf = (stage: MetricStage): IconName => GIST_STAGES.find((s) => s.stage
 
 export function Gist() {
   const { workspace, today } = useWorkspace()
+  const [customising, setCustomising] = useState(false)
   // the set-up wizards below re-render this page on every save; the sums only need to follow the workspace
   const g = useMemo(() => (workspace ? gist(workspace, today) : null), [workspace, today])
   if (!g || !workspace) return null
+
+  // what the owner keeps on this page; the rows number themselves round it
+  const hidden = hiddenOn(workspace, 'welcome')
+  const tiles = g.headlines.filter((m) => !hidden.has(m.key))
+  const pictures = shownPictures(workspace, 'welcome').map((p) => p.key)
+  const withGoals = !hidden.has('goals')
+  const withActivity = !hidden.has('activity')
+  let row = 0
+  const tilesRow = tiles.length > 0 ? ++row : 0
+  const picturesRow = pictures.length > 0 ? ++row : 0
+  const cardsRow = ++row
+  const sideCount = 1 + Number(withGoals) + Number(withActivity)
 
   const month = monthWord(today.slice(0, 7))
   const sitsTotal = g.sits.reduce((a, s) => a + s.value, 0)
@@ -70,31 +104,38 @@ export function Gist() {
             {g.needs.total > 0 && <span aria-hidden className="size-2 rounded-full bg-[#FF6B57]" />}
             {g.needs.total} need{g.needs.total === 1 ? 's' : ''} you
           </Chip>
-          {judged.length > 0 && (
+          {withGoals && judged.length > 0 && (
             <Chip icon="star">{judged.filter((x) => x.state === 'on').length} of {judged.length} goals on track</Chip>
           )}
           <Chip icon="calendar" date>{longDate(today)}</Chip>
+          <BandButton icon="columns" onClick={() => setCustomising(true)}>Customise</BandButton>
         </div>
       </header>
+      <Customise open={customising} onClose={() => setCustomising(false)} board="welcome" headlines={g.headlines} />
 
       <div className="mt-3 grid gap-2.5 xl:grid-cols-[minmax(0,1fr)_20rem]">
-        <div data-gist-tiles className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:col-start-1 xl:row-start-1 xl:grid-cols-5 [&>:nth-child(5)]:col-span-2 sm:[&>:nth-child(5)]:col-span-1">
-          {g.headlines.map((m, i) => <Tile key={m.key} m={m} i={i} />)}
-        </div>
+        {tiles.length > 0 && (
+          <div data-gist-tiles className={`grid gap-2.5 xl:col-start-1 ${ROW_START[tilesRow]} ${TILE_GRID[tiles.length]}`}>
+            {tiles.map((m, i) => <Tile key={m.key} m={m} i={i} />)}
+          </div>
+        )}
 
         {/* On a laptop the right column is as tall as the left and no taller:
             its content sits in an absolute box, so the tiles, pictures and
             stage cards set the height and the activity list takes what is left.
             On a phone it comes straight after the money tiles. */}
-        <aside className="relative min-w-0 xl:col-start-2 xl:row-span-3 xl:row-start-1">
-          <div className="flex flex-col gap-2.5 md:grid md:grid-cols-3 xl:absolute xl:inset-0 xl:flex xl:flex-col">
+        <aside className={`relative min-w-0 xl:col-start-2 xl:row-start-1 ${ROW_SPAN[row]}`}>
+          {/* pinned to the left column's height only while pictures set it */}
+          <div className={`flex flex-col gap-2.5 md:grid ${SIDE_COLS[sideCount]} ${pictures.length > 0 ? 'xl:absolute xl:inset-0' : ''} xl:flex xl:flex-col`}>
             <Queues total={g.needs.total} queues={g.needs.queues} />
-            <Goals goals={g.goals} />
-            <ActivityList items={g.activity} today={today} />
+            {withGoals && <Goals goals={g.goals} />}
+            {withActivity && <ActivityList items={g.activity} today={today} />}
           </div>
         </aside>
 
-        <div className="grid gap-2.5 sm:grid-cols-2 xl:col-start-1 xl:row-start-2 xl:grid-cols-3">
+        {pictures.length > 0 && (
+        <PictureLayout.Provider value={{ hidden, spans: pictureSpans('welcome', pictures) }}>
+        <div className={`grid gap-2.5 sm:grid-cols-2 xl:col-start-1 xl:grid-cols-6 ${ROW_START[picturesRow]}`}>
           <OwnerCard chart="dispatched" title="Dispatched" sub={g.fy.whole ? 'this financial year' : 'last 6 months'} href="/dispatch/notes"
             figure={thisMonth > 0 ? `${compact(thisMonth)} in ${month}` : undefined}>
             <MonthColumns fmt={compact} empty="Nothing dispatched yet"
@@ -130,8 +171,10 @@ export function Gist() {
             {g.cover.length > 0 ? <CoverBars rows={g.cover} /> : <Empty icon="boxes">Give a material its daily use</Empty>}
           </OwnerCard>
         </div>
+        </PictureLayout.Provider>
+        )}
 
-        <ul className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-3 xl:col-start-1 xl:row-start-3 xl:grid-cols-5">
+        <ul className={`grid gap-2.5 sm:grid-cols-2 md:grid-cols-3 xl:col-start-1 xl:grid-cols-5 ${ROW_START[cardsRow]}`}>
           {g.cards.map((c, i) => <StageTile key={c.stage} c={c} i={i} />)}
         </ul>
       </div>

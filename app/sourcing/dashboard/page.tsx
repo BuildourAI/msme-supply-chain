@@ -1,7 +1,7 @@
 'use client'
 import { useMemo, useState } from 'react'
 import { DeskOnly } from '@/components/sourcing/DeskOnly'
-import { MetricPicker } from '@/components/sourcing/MetricPicker'
+import { Customise } from '@/components/desk/Customise'
 import { BandButton, BandChip, RecentList, StageDashboard, WaitingList } from '@/components/desk/StageDashboard'
 import { SourcingPictures, SourcingStrip } from '@/components/desk/StagePictures'
 import { PoDocument } from '@/components/sourcing/PoDocument'
@@ -130,12 +130,12 @@ function Dashboard() {
   const out = moneyOf(ws, today).onOrder
   return (
     <>
-      <StageDashboard stage="Sourcing" icon="cart"
+      <StageDashboard board="sourcing" stage="Sourcing" icon="cart"
         chips={<>
           <BandChip alert={queue.length > 0}>{queue.length} need{queue.length === 1 ? 's' : ''} you</BandChip>
           {out > 0 && <BandChip icon="truck">{compact(out)} out with suppliers</BandChip>}
         </>}
-        actions={<BandButton icon="columns" onClick={() => setPicking(true)}>Figures</BandButton>}
+        actions={<BandButton icon="columns" onClick={() => setPicking(true)}>Customise</BandButton>}
         metrics={metrics}
         pictures={<SourcingPictures ws={ws} today={today} />}
         strip={<SourcingStrip ws={ws} today={today} />}
@@ -143,7 +143,7 @@ function Dashboard() {
           onShowAll={(b) => setOpened((s) => new Set(s).add(b))} />}
         recent={<RecentList title="Recent in sourcing" items={recentFor(ws, 'sourcing')} today={today} />} />
 
-      <MetricPicker open={picking} onClose={() => setPicking(false)} />
+      <Customise open={picking} onClose={() => setPicking(false)} board="sourcing" />
       <PoDocument open={papering !== null} no={papering} onClose={() => setPapering(null)} />
       <AckDialog no={acking} onClose={() => setAcking(null)} />
       <ExpediteDialog line={hurrying} onClose={() => setHurrying(null)} />

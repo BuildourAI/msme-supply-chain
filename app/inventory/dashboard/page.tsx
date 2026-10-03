@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { DeskOnly } from '@/components/sourcing/DeskOnly'
 import { BandButton, BandChip, RecentList, StageDashboard, WaitingList } from '@/components/desk/StageDashboard'
 import { InventoryPictures, InventoryStrip } from '@/components/desk/StagePictures'
-import { MetricPicker } from '@/components/sourcing/MetricPicker'
+import { Customise } from '@/components/desk/Customise'
 import { useWorkspace } from '@/components/workspace/store'
 import { recentFor } from '@/lib/workspace/desk-pictures'
 import { compact, moneyOf } from '@/lib/workspace/executive'
@@ -112,12 +112,12 @@ function Dashboard() {
   const shelf = moneyOf(ws, today).shelf
   return (
     <>
-      <StageDashboard stage="Inventory" icon="boxes"
+      <StageDashboard board="inventory" stage="Inventory" icon="boxes"
         chips={<>
           <BandChip alert={queue.length > 0}>{queue.length} need{queue.length === 1 ? 's' : ''} you</BandChip>
           {shelf > 0 && <BandChip icon="boxes">{compact(shelf)} on the shelf</BandChip>}
         </>}
-        actions={<BandButton icon="columns" onClick={() => setPicking(true)}>Figures</BandButton>}
+        actions={<BandButton icon="columns" onClick={() => setPicking(true)}>Customise</BandButton>}
         metrics={metrics}
         pictures={<InventoryPictures ws={ws} today={today} />}
         strip={<InventoryStrip ws={ws} today={today} />}
@@ -126,7 +126,7 @@ function Dashboard() {
           clear="Every lot counted in time, every lot on a rack, nothing below nothing, nothing overdue at a jobworker." />}
         recent={<RecentList title="Recent in the store" items={recentFor(ws, 'inventory')} today={today} />} />
 
-      <MetricPicker open={picking} onClose={() => setPicking(false)} stage="inventory" />
+      <Customise open={picking} onClose={() => setPicking(false)} board="inventory" />
       <CountDialog lotId={counting} onClose={() => setCounting(null)} />
       <CountSheetDialog scope={walking} onClose={() => setWalking(null)} />
       <LotStateDialog lotId={stating?.lotId ?? null} mode={stating?.mode ?? 'release'} onClose={() => setStating(null)} />

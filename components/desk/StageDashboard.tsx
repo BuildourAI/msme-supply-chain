@@ -2,9 +2,10 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Icon, type IconName } from '@/components/ui/icons'
-import { NavyDisc, STATUS, type Status } from '@/components/charts/owner'
+import { NavyDisc, PictureLayout, STATUS, type Status } from '@/components/charts/owner'
 import { Tiles } from '@/components/sourcing/Tiles'
 import { useWorkspace } from '@/components/workspace/store'
+import { hiddenOn, pictureSpans, shownPictures, type Board } from '@/lib/workspace/boards'
 import { BAND_LABEL, byBand, type Act, type Band, type Decision, type DecisionKind } from '@/lib/workspace/decisions'
 import { whenWord, type Activity } from '@/lib/workspace/executive'
 import type { Metric } from '@/lib/workspace/metrics'
@@ -23,10 +24,18 @@ import type { Metric } from '@/lib/workspace/metrics'
  * is opened out, and the recent list takes what is left. On a phone the
  * waiting list comes straight after the figures, because it is the work.
  *
+ * The owner chooses what it shows (Customise, `lib/workspace/boards.ts`):
+ * any picture, the strip and the recent list can be switched off, and the
+ * page closes up round what is left — an odd picture out takes the whole
+ * row, and with no pictures and no strip the waiting list takes the width.
+ * What is waiting on you is never switched off; it is the work.
+ *
  * Colour follows `components/charts/owner.tsx`: navy and greys, with red,
  * amber and green only where something is late, tight or fine.
  */
-export function StageDashboard({ stage, icon, chips, actions, metrics, pictures, strip, waiting, recent }: {
+export function StageDashboard({ board, stage, icon, chips, actions, metrics, pictures, strip, waiting, recent }: {
+  /** whose choice of pictures and parts applies */
+  board: Exclude<Board, 'welcome'>
   stage: string
   icon: IconName
   chips: React.ReactNode
@@ -38,8 +47,16 @@ export function StageDashboard({ stage, icon, chips, actions, metrics, pictures,
   recent: React.ReactNode
 }) {
   const { workspace } = useWorkspace()
+  const hidden = workspace ? hiddenOn(workspace, board) : new Set<string>()
+  const shown = workspace ? shownPictures(workspace, board).map((p) => p.key) : []
+  const withStrip = Boolean(strip) && !hidden.has('strip')
+  const withRecent = !hidden.has('recent')
+  // nothing left beside it: the waiting list takes the width
+  const side = shown.length > 0 || withStrip
+  // the pictures set the height the right column keeps to; a strip alone is too short to
+  const pinned = shown.length > 0
   return (
-    <div className="anim-page mx-auto w-full max-w-[90rem]">
+    <div data-board={board} className="anim-page mx-auto w-full max-w-[90rem]">
       <header data-desk-band className="flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-2xl bg-gradient-to-r from-navy-deep to-navy px-4 py-2.5 text-white sm:px-5">
         <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/12">
           <Icon name={icon} className="size-[18px]" />
@@ -51,19 +68,27 @@ export function StageDashboard({ stage, icon, chips, actions, metrics, pictures,
         <div className="flex flex-wrap items-center gap-2 sm:ml-auto">{chips}{actions}</div>
       </header>
 
-      {metrics.length > 0 && <div className="mt-2.5"><Tiles metrics={metrics} columns="row" /></div>}
+      {metrics.length > 0 && <div data-figures className="mt-2.5"><Tiles metrics={metrics} columns="row" /></div>}
 
-      <div className="mt-2.5 grid gap-2.5 xl:grid-cols-[minmax(0,1fr)_21rem]">
-        <aside className="relative min-w-0 xl:col-start-2 xl:row-start-1">
-          <div className="flex flex-col gap-2.5 xl:absolute xl:inset-0">
+      <div className={`mt-2.5 grid gap-2.5 ${side ? 'xl:grid-cols-[minmax(0,1fr)_21rem]' : ''}`}>
+        {/* placed in the second column only when there is a first: an empty grid
+            column would otherwise hold the room the pictures left */}
+        <aside className={`relative min-w-0 ${side ? 'xl:col-start-2 xl:row-start-1' : ''}`}>
+          <div className={`flex flex-col gap-2.5 ${pinned ? 'xl:absolute xl:inset-0' : ''}`}>
             {waiting}
-            {recent}
+            {withRecent && recent}
           </div>
         </aside>
-        <div className="min-w-0 space-y-2.5 xl:col-start-1 xl:row-start-1">
-          <div className="grid gap-2.5 md:grid-cols-2">{pictures}</div>
-          {strip && <ul className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-5">{strip}</ul>}
-        </div>
+        {side && (
+          <div className="min-w-0 space-y-2.5 xl:col-start-1 xl:row-start-1">
+            {shown.length > 0 && (
+              <PictureLayout.Provider value={{ hidden, spans: pictureSpans(board, shown) }}>
+                <div className="grid gap-2.5 md:grid-cols-2">{pictures}</div>
+              </PictureLayout.Provider>
+            )}
+            {withStrip && <ul className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-5">{strip}</ul>}
+          </div>
+        )}
       </div>
     </div>
   )

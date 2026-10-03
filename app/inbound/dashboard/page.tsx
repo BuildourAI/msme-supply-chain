@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { DeskOnly } from '@/components/sourcing/DeskOnly'
 import { BandButton, BandChip, RecentList, StageDashboard, WaitingList } from '@/components/desk/StageDashboard'
 import { InboundPictures, InboundStrip } from '@/components/desk/StagePictures'
-import { MetricPicker } from '@/components/sourcing/MetricPicker'
+import { Customise } from '@/components/desk/Customise'
 import { ReceiveForm } from '@/components/sourcing/ReceiveForm'
 import { GrnDocument } from '@/components/inbound/desk/GrnDocument'
 import { InspectForm } from '@/components/inbound/desk/InspectForm'
@@ -78,12 +78,12 @@ function Dashboard() {
   const atGate = ws.receipts.filter(isOpen).length
   return (
     <>
-      <StageDashboard stage="Inbound" icon="tray"
+      <StageDashboard board="inbound" stage="Inbound" icon="tray"
         chips={<>
           <BandChip alert={queue.length > 0}>{queue.length} need{queue.length === 1 ? 's' : ''} you</BandChip>
           {atGate > 0 ? <BandChip icon="tray">{atGate} at the gate</BandChip> : <BandChip icon="tray">nothing at the gate</BandChip>}
         </>}
-        actions={<BandButton icon="columns" onClick={() => setPicking(true)}>Figures</BandButton>}
+        actions={<BandButton icon="columns" onClick={() => setPicking(true)}>Customise</BandButton>}
         metrics={metrics}
         pictures={<InboundPictures ws={ws} today={today} />}
         strip={<InboundStrip ws={ws} today={today} />}
@@ -92,7 +92,7 @@ function Dashboard() {
           clear="Nothing at the gate, nothing waiting on inspection." />}
         recent={<RecentList title="Recent at the gate" items={recentFor(ws, 'inbound')} today={today} />} />
 
-      <MetricPicker open={picking} onClose={() => setPicking(false)} stage="inbound" />
+      <Customise open={picking} onClose={() => setPicking(false)} board="inbound" />
       <ReceiveForm open={receiving !== null} order={receiving} onClose={() => setReceiving(null)}
         onArrived={(orderId) => setPending(orderId)} />
       <InspectForm receiptId={inspecting} onClose={() => setInspecting(null)}

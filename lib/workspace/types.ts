@@ -995,6 +995,13 @@ export interface Workspace {
   rmas: WsRma[]
   dispatchRules?: DispatchRules
   dispatchMetricPicks?: string[]
+
+  /**
+   * The pictures and other parts the owner has switched off, per dashboard —
+   * the Welcome page and the five desks (see `boards.ts`). What is hidden,
+   * not what is shown: absent is everything on.
+   */
+  boardHidden?: Partial<Record<'welcome' | 'sourcing' | 'inbound' | 'inventory' | 'production' | 'dispatch', string[]>>
 }
 
 /**

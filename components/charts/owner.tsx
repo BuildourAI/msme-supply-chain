@@ -1,4 +1,5 @@
 'use client'
+import { createContext, useContext } from 'react'
 import Link from 'next/link'
 import { Icon, type IconName } from '@/components/ui/icons'
 import { addDays, daysBetween } from '@/lib/domain/calc'
@@ -60,9 +61,19 @@ export function Pill({ status, small, children }: { status: Status; small?: bool
 }
 
 /** One picture on a card: a title, a quiet note beside it, the one figure it adds up to. */
+/**
+ * Which pictures a dashboard shows, and how wide each is. The dashboard
+ * provides it from the owner's choice (`lib/workspace/boards.ts`); a card the
+ * owner switched off draws nothing, and the rest take the room it left.
+ * Without a provider every card draws, as it always did.
+ */
+export const PictureLayout = createContext<{ hidden: Set<string>; spans: Record<string, string> } | null>(null)
+
 export function OwnerCard({ chart, title, sub, figure, href, children, className = '' }: {
   chart: string; title: string; sub?: string; figure?: string; href?: string; children: React.ReactNode; className?: string
 }) {
+  const layout = useContext(PictureLayout)
+  if (layout?.hidden.has(chart)) return null
   const head = (
     <>
       <span className="truncate text-[12.5px] font-bold tracking-tight">{title}</span>
@@ -72,7 +83,7 @@ export function OwnerCard({ chart, title, sub, figure, href, children, className
     </>
   )
   return (
-    <section data-chart={chart} className={`flex min-w-0 flex-col gap-1.5 rounded-xl border border-line bg-surface px-3 py-2.5 ${className}`}>
+    <section data-chart={chart} className={`flex min-w-0 flex-col gap-1.5 rounded-xl border border-line bg-surface px-3 py-2.5 ${layout?.spans[chart] ?? ''} ${className}`}>
       {href
         ? <Link href={href} className="flex items-baseline gap-2 hover:text-navy">{head}</Link>
         : <h3 className="flex items-baseline gap-2">{head}</h3>}

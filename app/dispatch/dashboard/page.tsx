@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { DeskOnly } from '@/components/sourcing/DeskOnly'
 import { BandButton, BandChip, RecentList, StageDashboard, WaitingList } from '@/components/desk/StageDashboard'
 import { DispatchPictures, DispatchStrip } from '@/components/desk/StagePictures'
-import { MetricPicker } from '@/components/sourcing/MetricPicker'
+import { Customise } from '@/components/desk/Customise'
 import { BookCarrierDialog, DeliveryDocument, NoteForm } from '@/components/dispatch/desk/NoteDialogs'
 import { ChaseDialog, DeliveredDialog } from '@/components/dispatch/desk/ConsignmentDialogs'
 import { ReceiveReturnDialog } from '@/components/dispatch/desk/ReturnDialogs'
@@ -62,13 +62,13 @@ function Dashboard() {
   const book = moneyOf(ws, today).orderBook
   return (
     <>
-      <StageDashboard stage="Dispatch" icon="truck"
+      <StageDashboard board="dispatch" stage="Dispatch" icon="truck"
         chips={<>
           <BandChip alert={queue.length > 0}>{queue.length} need{queue.length === 1 ? 's' : ''} you</BandChip>
           {book > 0 && <BandChip icon="doc">{compact(book)} to send</BandChip>}
         </>}
         actions={<>
-          <BandButton icon="columns" onClick={() => setPicking(true)}>Figures</BandButton>
+          <BandButton icon="columns" onClick={() => setPicking(true)}>Customise</BandButton>
           <BandButton icon="truck" primary onClick={() => setNoting(null)}>Raise a delivery challan</BandButton>
         </>}
         metrics={metrics}
@@ -79,7 +79,7 @@ function Dashboard() {
           clear="Every open order is inside its promise, with what it needs made or being made." />}
         recent={<RecentList title="Recent in dispatch" items={recentFor(ws, 'dispatch')} today={today} />} />
 
-      <MetricPicker open={picking} onClose={() => setPicking(false)} stage="dispatch" />
+      <Customise open={picking} onClose={() => setPicking(false)} board="dispatch" />
       <NoteForm orderId={noting} onClose={() => setNoting(undefined)} onRaised={setDoc} />
       <DeliveryDocument noteId={doc} onClose={() => setDoc(null)} />
       <BookCarrierDialog noteId={booking} onClose={() => setBooking(null)} />
