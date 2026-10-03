@@ -695,8 +695,8 @@ export type SheetEntity =
   | 'check' | 'receipt' | 'challan'
   /** the store's */
   | 'rack' | 'lot' | 'count' | 'move' | 'job' | 'issue' | 'loss' | 'cut' | 'offcut'
-  /** the floor's */
-  | 'product' | 'output' | 'halt'
+  /** the floor's; turnaround and line watch are readings of the job cards */
+  | 'product' | 'output' | 'halt' | 'turnaround' | 'watch'
   /** the shipping bay's */
   | 'customer' | 'carrier' | 'salesOrder' | 'dispatchNote' | 'consignment' | 'rma'
 

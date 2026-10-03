@@ -122,6 +122,64 @@ export function Jobs() {
   }
   const logKit = buildColumns<OutputRow>(ws, 'output', (r) => r.output.id, logDrawn)
 
+  /*
+   * The job cards' own columns. The owner arranges them, adds their own — a
+   * line, a supervisor, the buyer's style number, filled in on the card's
+   * form — and exports the list; how each built-in cell looks stays here.
+   */
+  const jobDrawn: Record<string, DrawnColumn<JobPlanRow>> = {
+    no: {
+      cell: (r) => (
+        <span className="min-w-0">
+          <span className="mono block whitespace-nowrap font-semibold text-ink">{r.job.no}</span>
+          <span className="block text-[11.5px] text-ink-3">{r.product?.name ?? 'no product yet'}</span>
+        </span>
+      ),
+      text: (r) => r.job.no,
+    },
+    for: {
+      cell: (r) => {
+        const t = madeForText(ws, r.job)
+        return t ? <span className="text-ink-2">{t}</span> : <span className="text-ink-4">For stock</span>
+      },
+      text: (r) => madeForText(ws, r.job) || 'For stock',
+    },
+    qty: { align: 'right', cell: (r) => (r.planned ? num(r.job.qty!, 0) : '—'), text: (r) => (r.planned ? String(r.job.qty) : '') },
+    dates: {
+      cell: (r) => (r.planned ? (
+        <span className="whitespace-nowrap text-ink-2">
+          {shortDate(r.job.plannedStart!)} – {shortDate(r.job.plannedFinish!)}
+          <span className="block text-[11.5px] text-ink-3">{num(r.job.perDay ?? 0, 0)} a day</span>
+        </span>
+      ) : '—'),
+      text: (r) => (r.planned ? `${r.job.plannedStart} to ${r.job.plannedFinish}` : ''),
+    },
+    made: {
+      align: 'right',
+      cell: (r) => (
+        <span>
+          <strong className="text-ink">{r.made}</strong>
+          {r.rejected > 0 && <span className="block whitespace-nowrap text-[11.5px] text-critical">{r.rejected} rejected</span>}
+        </span>
+      ),
+      text: (r) => String(r.made),
+    },
+    first: { align: 'right', cell: (r) => pct(r.firstPass), text: (r) => (r.firstPass === null ? '' : String(r.firstPass)) },
+    att: { align: 'right', cell: (r) => pct(r.attainment), text: (r) => (r.attainment === null ? '' : String(r.attainment)) },
+    vs: {
+      align: 'right',
+      cell: (r) => (!r.planned || r.target === 0 ? <span className="text-ink-4">—</span>
+        : r.vsTarget < 0 ? <span className="text-critical">{r.vsTarget}</span>
+          : <span className="text-good">+{r.vsTarget}</span>),
+      text: (r) => (!r.planned || r.target === 0 ? '' : String(r.vsTarget)),
+    },
+    state: {
+      cell: (r) => <StatePill label={PLAN_STATE_WORD[r.state]} tone={PLAN_STATE_TONE[r.state]} />,
+      text: (r) => PLAN_STATE_WORD[r.state],
+    },
+  }
+  const jobKit = buildColumns<JobPlanRow>(ws, 'job', (r) => r.job.id, jobDrawn)
+
   // the floor's last fourteen days, working days only, oldest first
   const days = Array.from({ length: 14 }, (_, i) => addDays(today, i - 13)).filter((d) => isWorkingDay(d, floor))
   const dayRows = days.map((d) => {
@@ -143,7 +201,7 @@ export function Jobs() {
     <>
       <ListPage
         title={word.many} noun={word.one.toLowerCase()} rows={rows}
-        search={(r) => `${r.job.no} ${r.job.name ?? ''} ${r.product?.name ?? ''} ${madeForText(ws, r.job)} ${PLAN_STATE_WORD[r.state]}`}
+        search={(r) => `${r.job.no} ${r.job.name ?? ''} ${r.product?.name ?? ''} ${madeForText(ws, r.job)} ${PLAN_STATE_WORD[r.state]} ${jobKit.searchText(r)}`}
         filter={{
           label: 'Every state',
           options: (Object.keys(PLAN_STATE_WORD) as PlanState[])
@@ -158,6 +216,7 @@ export function Jobs() {
               className="press inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-[13px] font-medium hover:bg-surface-2">
               <Icon name="check" className="size-3.5" /> Book output
             </button>
+            {view === 'jobs' && <DeskTools entity="job" noun="job card" title="Job cards" rows={() => jobKit.toRows(rows)} />}
             {view === 'log' && <DeskTools entity="output" noun="booking" title="Output log" rows={() => logKit.toRows(log)} />}
           </>
         }
@@ -179,52 +238,7 @@ export function Jobs() {
 
               {view === 'jobs' && (
                 <DataTable rows={shown} keyOf={(r) => r.job.id}
-                  columns={[
-                    {
-                      key: 'no', head: word.one,
-                      cell: (r) => (
-                        <span className="min-w-0">
-                          <span className="mono block whitespace-nowrap font-semibold text-ink">{r.job.no}</span>
-                          <span className="block text-[11.5px] text-ink-3">{r.product?.name ?? 'no product yet'}</span>
-                        </span>
-                      ),
-                    },
-                    {
-                      key: 'for', head: 'For sales order',
-                      cell: (r) => {
-                        const t = madeForText(ws, r.job)
-                        return t ? <span className="text-ink-2">{t}</span> : <span className="text-ink-4">For stock</span>
-                      },
-                    },
-                    { key: 'qty', head: 'Planned', align: 'right', cell: (r) => (r.planned ? num(r.job.qty!, 0) : '—') },
-                    {
-                      key: 'dates', head: 'When',
-                      cell: (r) => (r.planned ? (
-                        <span className="whitespace-nowrap text-ink-2">
-                          {shortDate(r.job.plannedStart!)} – {shortDate(r.job.plannedFinish!)}
-                          <span className="block text-[11.5px] text-ink-3">{num(r.job.perDay ?? 0, 0)} a day</span>
-                        </span>
-                      ) : '—'),
-                    },
-                    {
-                      key: 'made', head: 'Made', align: 'right',
-                      cell: (r) => (
-                        <span>
-                          <strong className="text-ink">{r.made}</strong>
-                          {r.rejected > 0 && <span className="block whitespace-nowrap text-[11.5px] text-critical">{r.rejected} rejected</span>}
-                        </span>
-                      ),
-                    },
-                    { key: 'first', head: 'Right first time', align: 'right', cell: (r) => pct(r.firstPass) },
-                    { key: 'att', head: 'Of plan', align: 'right', cell: (r) => pct(r.attainment) },
-                    {
-                      key: 'vs', head: 'Against target', align: 'right',
-                      cell: (r) => (!r.planned || r.target === 0 ? <span className="text-ink-4">—</span>
-                        : r.vsTarget < 0 ? <span className="text-critical">{r.vsTarget}</span>
-                          : <span className="text-good">+{r.vsTarget}</span>),
-                    },
-                    { key: 'state', head: 'State', cell: (r) => <StatePill label={PLAN_STATE_WORD[r.state]} tone={PLAN_STATE_TONE[r.state]} /> },
-                  ]}
+                  columns={jobKit.columns}
                   extra={{
                     icon: 'doc',
                     label: (r) => `${word.one} ${r.job.no}`,

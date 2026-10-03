@@ -31,7 +31,7 @@ const NOUN: Record<SheetEntity, string> = {
   check: 'checks', receipt: 'receipts', challan: 'challans',
   rack: 'racks', lot: 'lots', count: 'counts', move: 'movements', job: 'jobs', issue: 'issue slips', loss: 'losses',
   cut: 'cuts', offcut: 'remnants',
-  product: 'products', output: 'output bookings', halt: 'halts',
+  product: 'products', output: 'output bookings', halt: 'halts', turnaround: 'job cards', watch: 'job cards',
   customer: 'customers', carrier: 'carriers', salesOrder: 'orders',
   dispatchNote: 'delivery challans', consignment: 'consignments', rma: 'returns',
 }

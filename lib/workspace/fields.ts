@@ -230,19 +230,21 @@ export const BUILTIN: Record<SheetEntity, BuiltinColumn[]> = {
     { key: 'actor', label: 'By', derived: true },
   ],
   /*
-   * A job is typed in or opened from the set-up step; a slip is a record of
-   * material that moved, so neither imports. Both carry columns for
-   * arranging, custom fields — a buyer, a season — and export.
+   * The job cards list. A card is opened on the floor and its figures are
+   * worked out from what was booked against it, so nothing imports — but the
+   * owner can arrange it, add their own columns (a line, a supervisor, the
+   * buyer's style number) and export it.
    */
   job: [
-    { key: 'no', label: 'No.', identity: true, derived: true },
-    { key: 'name', label: 'What it is', derived: true },
-    { key: 'customer', label: 'For sales order', derived: true },
-    { key: 'opened', label: 'Opened', derived: true },
+    { key: 'no', label: 'Job card', identity: true, derived: true },
+    { key: 'for', label: 'For sales order', derived: true },
+    { key: 'qty', label: 'Planned', derived: true },
+    { key: 'dates', label: 'When', derived: true },
+    { key: 'made', label: 'Made', derived: true },
+    { key: 'first', label: 'Right first time', derived: true },
+    { key: 'att', label: 'Of plan', derived: true },
+    { key: 'vs', label: 'Against target', derived: true },
     { key: 'state', label: 'State', derived: true },
-    { key: 'materials', label: 'Material used', derived: true },
-    { key: 'consumption', label: 'Worth', derived: true },
-    { key: 'wasted', label: 'Wasted', derived: true },
   ],
   issue: [
     { key: 'no', label: 'Slip', identity: true, derived: true },
@@ -324,6 +326,29 @@ export const BUILTIN: Record<SheetEntity, BuiltinColumn[]> = {
     { key: 'note', label: 'Note', derived: true },
     { key: 'resumed', label: 'Resumed', derived: true },
     { key: 'days', label: 'Days down', derived: true },
+  ],
+  /*
+   * Two readings of the job cards: how long each took from raw material to
+   * finished, and whether the store can feed it this week. Nothing here is
+   * typed, so neither invents columns of its own; each can show the ones the
+   * owner added to the job cards (see FIELDS_FROM).
+   */
+  turnaround: [
+    { key: 'no', label: 'Job card', identity: true, derived: true },
+    { key: 'in', label: 'On the book', derived: true },
+    { key: 'issue', label: 'First issue', derived: true },
+    { key: 'out', label: 'Last output', derived: true },
+    { key: 'wait', label: 'Shelf', derived: true },
+    { key: 'floor', label: 'Floor', derived: true },
+    { key: 'total', label: 'Raw to finished', derived: true },
+    { key: 'state', label: 'State', derived: true },
+  ],
+  watch: [
+    { key: 'no', label: 'Job card', identity: true, derived: true },
+    { key: 'qty', label: 'To make', derived: true },
+    { key: 'when', label: 'When', derived: true },
+    { key: 'status', label: 'Status', derived: true },
+    { key: 'why', label: 'Why', derived: true },
   ],
   /* the shipping bay's */
   customer: [
@@ -416,6 +441,8 @@ export const EMPTY_VIEWS: Record<SheetEntity, TableView> = {
   product: EMPTY_VIEW,
   output: EMPTY_VIEW,
   halt: EMPTY_VIEW,
+  turnaround: EMPTY_VIEW,
+  watch: EMPTY_VIEW,
   customer: EMPTY_VIEW,
   carrier: EMPTY_VIEW,
   salesOrder: EMPTY_VIEW,
@@ -463,6 +490,15 @@ const HIDDEN_UNTIL_USED: Record<string, (ws: Workspace, entity: SheetEntity) => 
 export const fieldsFor = (ws: Workspace, entity: SheetEntity): FieldDef[] =>
   (ws.fields ?? []).filter((f) => f.entity === entity)
 
+/**
+ * Lists that are readings of another list's records, and whose columns they
+ * borrow. A turnaround row and a line-watch row are each one job card, so a
+ * "Line" or "Supervisor" the owner added to the job cards can be shown on
+ * them too — but it is added, changed and deleted on the job cards, where it
+ * is filled in. These lists invent no columns of their own.
+ */
+export const FIELDS_FROM: Partial<Record<SheetEntity, SheetEntity>> = { turnaround: 'job', watch: 'job' }
+
 export const fieldById = (ws: Workspace, id: string): FieldDef | undefined =>
   (ws.fields ?? []).find((f) => f.id === id)
 
@@ -496,7 +532,7 @@ export interface ResolvedColumn {
 export function resolveColumns(ws: Workspace, entity: SheetEntity): ResolvedColumn[] {
   const view = ws.views?.[entity] ?? EMPTY_VIEW
   const builtins = BUILTIN[entity]
-  const fields = fieldsFor(ws, entity)
+  const fields = fieldsFor(ws, FIELDS_FROM[entity] ?? entity)
 
   const byKey = new Map<string, ResolvedColumn>()
   for (const b of builtins) {

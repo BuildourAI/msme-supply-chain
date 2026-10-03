@@ -5,6 +5,8 @@ import { DataTable, StatePill } from '@/components/ui/DataTable'
 import { Icon } from '@/components/ui/icons'
 import { Tabs } from '@/components/ui/Tabs'
 import { ConfirmDelete } from '@/components/sourcing/ConfirmDelete'
+import { DeskTools } from '@/components/sheet/DeskTools'
+import { buildColumns, type DrawnColumn } from '@/components/sheet/columns'
 import { useWorkspace } from '@/components/workspace/store'
 import { IssueForm } from '@/components/inventory/desk/IssueDialogs'
 import { num, shortDate } from '@/lib/domain/format'
@@ -39,7 +41,8 @@ const dayName = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString
  * under it every planned job with the reason in words — which material is
  * short and by how much, what is on its way and when, which jobworker is late,
  * how far behind its daily target it is. From a row: what it needs (and issue
- * it), book what came off, or plan it again.
+ * it), book what came off, or plan it again. The table can be arranged and
+ * exported, and can show the owner's own columns from Job cards.
  */
 export function LineWatch() {
   const { workspace, update, today } = useWorkspace()
@@ -69,11 +72,41 @@ export function LineWatch() {
   const stopping = stoppingThisWeek(watch)
   const runs = lineRunsFor(ws)
 
+  const drawn: Record<string, DrawnColumn<JobWatch>> = {
+    no: {
+      cell: (w) => (
+        <span className="min-w-0">
+          <span className="mono block font-semibold text-ink">{w.job.no}</span>
+          <span className="block text-[11.5px] text-ink-3">{w.product?.name}</span>
+        </span>
+      ),
+      text: (w) => w.job.no,
+    },
+    qty: { align: 'right', cell: (w) => <>{w.made} <span className="text-ink-3">/ {w.job.qty}</span></>, text: (w) => `${w.made} / ${w.job.qty}` },
+    when: {
+      cell: (w) => <span className="whitespace-nowrap text-ink-2">{shortDate(w.job.plannedStart!)} – {shortDate(w.job.plannedFinish!)}</span>,
+      text: (w) => `${w.job.plannedStart} to ${w.job.plannedFinish}`,
+    },
+    status: { cell: (w) => <StatePill label={WATCH_WORD[w.status]} tone={WATCH_TONE[w.status]} />, text: (w) => WATCH_WORD[w.status] },
+    why: {
+      cell: (w) => (w.reasons.length === 0
+        ? <span className="text-ink-3">{w.status === 'made' ? 'Everything planned has come off.' : 'Everything it still needs is on the shelf.'}</span>
+        : (
+          <ul className="space-y-0.5 text-[12.5px] leading-snug text-ink-2">
+            {w.reasons.slice(0, 3).map((r, i) => <li key={i}>{r}</li>)}
+            {w.reasons.length > 3 && <li className="text-ink-3">and {w.reasons.length - 3} more</li>}
+          </ul>
+        )),
+      text: (w) => w.reasons.join('; '),
+    },
+  }
+  const kit = buildColumns<JobWatch>(ws, 'watch', (w) => w.job.id, drawn)
+
   return (
     <>
       <ListPage
         title="Line watch" noun={`planned ${word.one.toLowerCase()}`} rows={watch}
-        search={(w) => `${w.job.no} ${w.job.name ?? ''} ${w.product?.name ?? ''} ${w.reasons.join(' ')}`}
+        search={(w) => `${w.job.no} ${w.job.name ?? ''} ${w.product?.name ?? ''} ${w.reasons.join(' ')} ${kit.searchText(w)}`}
         filter={{
           label: 'Every status',
           options: (['halted', 'will_halt', 'at_risk', 'will_run', 'made'] as const)
@@ -83,10 +116,13 @@ export function LineWatch() {
         }}
         action={{ label: `Plan a ${word.one.toLowerCase()}`, icon: 'calendar', onClick: () => setPlanning(null) }}
         tools={watch.length > 0 ? (
-          <button type="button" onClick={() => setHalting({})}
-            className="press inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-[13px] font-medium hover:bg-surface-2">
-            <Icon name="alert" className="size-3.5" /> Record a halt
-          </button>
+          <>
+            <button type="button" onClick={() => setHalting({})}
+              className="press inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-[13px] font-medium hover:bg-surface-2">
+              <Icon name="alert" className="size-3.5" /> Record a halt
+            </button>
+            {view === 'week' && <DeskTools entity="watch" noun="job card" title="Line watch" rows={() => kit.toRows(watch)} />}
+          </>
         ) : undefined}
         empty={{
           line: `Nothing planned. Give an open ${word.one.toLowerCase()} its product, how many and when, and Line watch says whether the store can feed it — before the floor finds out.`,
@@ -187,34 +223,7 @@ export function LineWatch() {
               )}
 
               <DataTable rows={shown} keyOf={(w) => w.job.id}
-                columns={[
-                  {
-                    key: 'no', head: word.one,
-                    cell: (w) => (
-                      <span className="min-w-0">
-                        <span className="mono block font-semibold text-ink">{w.job.no}</span>
-                        <span className="block text-[11.5px] text-ink-3">{w.product?.name}</span>
-                      </span>
-                    ),
-                  },
-                  { key: 'qty', head: 'To make', align: 'right', cell: (w) => <>{w.made} <span className="text-ink-3">/ {w.job.qty}</span></> },
-                  {
-                    key: 'when', head: 'When',
-                    cell: (w) => <span className="whitespace-nowrap text-ink-2">{shortDate(w.job.plannedStart!)} – {shortDate(w.job.plannedFinish!)}</span>,
-                  },
-                  { key: 'status', head: 'Status', cell: (w) => <StatePill label={WATCH_WORD[w.status]} tone={WATCH_TONE[w.status]} /> },
-                  {
-                    key: 'why', head: 'Why',
-                    cell: (w: JobWatch) => (w.reasons.length === 0
-                      ? <span className="text-ink-3">{w.status === 'made' ? 'Everything planned has come off.' : 'Everything it still needs is on the shelf.'}</span>
-                      : (
-                        <ul className="space-y-0.5 text-[12.5px] leading-snug text-ink-2">
-                          {w.reasons.slice(0, 3).map((r, i) => <li key={i}>{r}</li>)}
-                          {w.reasons.length > 3 && <li className="text-ink-3">and {w.reasons.length - 3} more</li>}
-                        </ul>
-                      )),
-                  },
-                ]}
+                columns={kit.columns}
                 extra={{ icon: 'boxes', label: (w) => `What ${w.job.no} needs`, onClick: (w) => setNeedsOf(w.job.id) }}
                 extra2={{
                   icon: 'plus',

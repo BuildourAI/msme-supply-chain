@@ -5,7 +5,7 @@ import { Field, Select, TextInput } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/icons'
 import { useWorkspace } from '@/components/workspace/store'
 import {
-  addField, filledCount, moveColumn, removeField, renameColumn, resolveColumns,
+  FIELDS_FROM, addField, filledCount, moveColumn, removeField, renameColumn, resolveColumns,
   setHidden, updateField, type ResolvedColumn,
 } from '@/lib/workspace/fields'
 import type { FieldDef, FieldKind, SheetEntity } from '@/lib/workspace/types'
@@ -18,6 +18,10 @@ import type { FieldDef, FieldKind, SheetEntity } from '@/lib/workspace/types'
  * distinction they should have to hold. What differs is only what may be done:
  * a built-in can be renamed, moved and hidden but not deleted, since the screen
  * knows how to draw it and the data behind it is not the owner's to discard.
+ *
+ * A list that reads another list's records — turnaround and line watch read
+ * the job cards — shows that list's own columns but adds none: a column is
+ * added where it is filled in, and changed or deleted there too.
  *
  * Reordering is two buttons rather than dragging. Dragging is nicer with a
  * mouse and unusable with a keyboard, impossible on a phone without a library,
@@ -49,13 +53,17 @@ export function ColumnsDialog({ open, onClose, entity, noun }: {
 
   if (!open || !workspace) return null
   const columns = resolveColumns(workspace, entity)
+  // the list whose columns this one borrows, if it borrows them
+  const from = FIELDS_FROM[entity]
 
   const close = () => { setAdding(false); setEditing(null); setConfirmDrop(null); onClose() }
 
   return (
     <>
       <Dialog open onClose={close} wide title="Columns"
-        sub="Rename them, move them, hide the ones you do not use — or add your own.">
+        sub={from
+          ? 'Rename them, move them, hide the ones you do not use.'
+          : 'Rename them, move them, hide the ones you do not use — or add your own.'}>
         <div className="px-4 py-4">
           <ul className="divide-y divide-line-soft rounded-lg border border-line">
             {columns.map((c, i) => (
@@ -66,15 +74,22 @@ export function ColumnsDialog({ open, onClose, entity, noun }: {
                 onHide={(hidden) => update((w) => setHidden(w, entity, c.key, hidden))}
                 onEdit={() => setEditing(c.field ?? null)}
                 onDelete={() => setConfirmDrop(c.field ?? null)}
+                borrowed={Boolean(c.field && c.field.entity !== entity)}
               />
             ))}
           </ul>
 
-          <button type="button" onClick={() => setAdding(true)}
-            className="press mt-3 inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-[13px] font-medium hover:bg-surface-2">
-            <Icon name="plus" className="size-3.5" />
-            Add a column
-          </button>
+          {from ? (
+            <p data-borrowed-note className="mt-3 text-[12px] leading-snug text-ink-3">
+              Want another column here? Add it on Job cards, where it is filled in — it can then be shown on this list too.
+            </p>
+          ) : (
+            <button type="button" onClick={() => setAdding(true)}
+              className="press mt-3 inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-[13px] font-medium hover:bg-surface-2">
+              <Icon name="plus" className="size-3.5" />
+              Add a column
+            </button>
+          )}
         </div>
 
         <footer className="flex justify-end border-t border-line-soft px-4 py-3">
@@ -118,7 +133,7 @@ export function ColumnsDialog({ open, onClose, entity, noun }: {
   )
 }
 
-function ColumnRow({ column, first, last, onMove, onRename, onHide, onEdit, onDelete }: {
+function ColumnRow({ column, first, last, onMove, onRename, onHide, onEdit, onDelete, borrowed = false }: {
   column: ResolvedColumn
   first: boolean
   last: boolean
@@ -127,12 +142,14 @@ function ColumnRow({ column, first, last, onMove, onRename, onHide, onEdit, onDe
   onHide: (hidden: boolean) => void
   onEdit: () => void
   onDelete: () => void
+  /** a column another list owns: shown, moved, renamed and hidden here, changed there */
+  borrowed?: boolean
 }) {
   const [renaming, setRenaming] = useState(false)
   const [draft, setDraft] = useState(column.label)
 
   const commit = () => { onRename(draft); setRenaming(false) }
-  const kind = column.field ? KIND_LABEL[column.field.kind]
+  const kind = borrowed ? 'From job cards' : column.field ? KIND_LABEL[column.field.kind]
     : column.builtin?.derived ? 'Worked out' : 'Built in'
 
   return (
@@ -179,7 +196,7 @@ function ColumnRow({ column, first, last, onMove, onRename, onHide, onEdit, onDe
             <span className="sr-only">Rename {column.label}</span>
           </button>
 
-          {column.field && (
+          {column.field && !borrowed && (
             <>
               <button type="button" onClick={onEdit} title={`Change what ${column.label} holds`}
                 className="press rounded-md p-1.5 text-ink-3 hover:bg-surface-3 hover:text-ink">

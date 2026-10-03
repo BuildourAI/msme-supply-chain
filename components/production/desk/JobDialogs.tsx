@@ -4,9 +4,11 @@ import { Dialog } from '@/components/ui/Dialog'
 import { StatePill } from '@/components/ui/DataTable'
 import { Field, Select, TextInput } from '@/components/ui/Field'
 import { useWorkspace } from '@/components/workspace/store'
+import { CustomFields } from '@/components/sheet/CustomFields'
 import { JobHistory, JobMaterials } from '@/components/inventory/desk/IssueDialogs'
 import { statePill } from '@/components/inventory/desk/Jobwork'
 import { longDate, num, shortDate } from '@/lib/domain/format'
+import { setValues } from '@/lib/workspace/fields'
 import { challanRows } from '@/lib/workspace/inbound'
 import { JOB_CARD, addJob, jobProblem, jobRows, nextJobNo, updateJob } from '@/lib/workspace/jobs'
 import { jobworkers } from '@/lib/workspace/jobwork'
@@ -47,6 +49,8 @@ export function JobForm({ job, onClose, onSaved }: {
   const [lineId, setLineId] = useState('')
   const [was, setWas] = useState<string | undefined>(undefined)
   const [tried, setTried] = useState(false)
+  // the owner's own columns on the job cards list, filled in here
+  const [custom, setCustom] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (job === undefined || !workspace) return
@@ -54,6 +58,7 @@ export function JobForm({ job, onClose, onSaved }: {
     // the line it is made for now, which a change here moves it off
     const on = job ? linesMadeOn(workspace, job.id)[0]?.line.id : undefined
     setLineId(on ?? ''); setWas(on)
+    setCustom(job ? { ...(workspace.custom?.[job.id] ?? {}) } : {})
     setTried(false)
   }, [job]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -72,9 +77,10 @@ export function JobForm({ job, onClose, onSaved }: {
     setTried(true)
     if (problem) return
     update((w) => {
-      if (job) return setMadeFor(updateJob(w, job.id, input), job.id, was, lineId)
+      if (job) return setValues(setMadeFor(updateJob(w, job.id, input), job.id, was, lineId), job.id, custom)
       const [w1, id] = addJob(w, input)
-      return id && lineId ? setMadeFor(w1, id, undefined, lineId) : w1
+      if (!id) return w1
+      return setValues(lineId ? setMadeFor(w1, id, undefined, lineId) : w1, id, custom)
     })
     onSaved?.(no.trim())
     onClose()
@@ -101,6 +107,7 @@ export function JobForm({ job, onClose, onSaved }: {
         {!lineId && job?.customer && (
           <p className="text-[12px] text-ink-3">Typed before it could name a sales order: “{job.customer}”.</p>
         )}
+        <CustomFields entity="job" values={custom} onChange={setCustom} />
       </div>
       <Foot onClose={onClose} onSave={save} label={job ? 'Save' : `Open the ${word.toLowerCase()}`} />
     </Dialog>

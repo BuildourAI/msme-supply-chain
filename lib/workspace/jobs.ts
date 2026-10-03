@@ -8,6 +8,7 @@
  * Every issue slip then names one, so every metre that left the store is
  * somebody's, and consumption per job is a sum rather than a guess.
  */
+import { pruneCustom } from './fields'
 import { issueId } from './defaults'
 import { allocate, dropLots, newLot, post, postMany, reverse, usableOnHand } from './ledger'
 import { jobKey, nextNo } from './sourcing'
@@ -151,8 +152,9 @@ export function jobProblemToRemove(ws: Workspace, id: string): string | null {
   return `Material has moved against it (${parts}). Close it instead — its record stays.`
 }
 
+// what the owner wrote in their own columns on the card goes with it
 export const removeJob = (ws: Workspace, id: string): Workspace =>
-  (jobProblemToRemove(ws, id) ? ws : { ...ws, jobs: (ws.jobs ?? []).filter((j) => j.id !== id) })
+  (jobProblemToRemove(ws, id) ? ws : pruneCustom({ ...ws, jobs: (ws.jobs ?? []).filter((j) => j.id !== id) }))
 
 /* ------------------------------------------------------------- the slips -- */
 

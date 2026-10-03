@@ -420,6 +420,8 @@ function migrate(raw: Partial<Workspace>): Workspace {
       product: view(views.product),
       output: view(views.output),
       halt: view(views.halt),
+      turnaround: view(views.turnaround),
+      watch: view(views.watch),
       customer: view(views.customer),
       carrier: view(views.carrier),
       salesOrder: view(views.salesOrder),

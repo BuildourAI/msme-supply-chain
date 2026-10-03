@@ -140,7 +140,7 @@ export function emptyWorkspace(input: {
       rack: BLANK_VIEW, lot: BLANK_VIEW, count: BLANK_VIEW, move: BLANK_VIEW,
       job: BLANK_VIEW, issue: BLANK_VIEW, loss: BLANK_VIEW,
       cut: BLANK_VIEW, offcut: BLANK_VIEW,
-      product: BLANK_VIEW, output: BLANK_VIEW, halt: BLANK_VIEW,
+      product: BLANK_VIEW, output: BLANK_VIEW, halt: BLANK_VIEW, turnaround: BLANK_VIEW, watch: BLANK_VIEW,
       customer: BLANK_VIEW, carrier: BLANK_VIEW, salesOrder: BLANK_VIEW,
       dispatchNote: BLANK_VIEW, consignment: BLANK_VIEW, rma: BLANK_VIEW,
     },
