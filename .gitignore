@@ -11,3 +11,8 @@ next-env.d.ts
 
 # built by scripts/ocr-assets.mjs, not by hand
 public/ocr/
+
+# the demo pack is generated, but committed so it can be downloaded as it is;
+# its zip is rebuilt by demo/make-demo-pack.mjs
+!demo/pack/**/*.png
+demo/*.zip
