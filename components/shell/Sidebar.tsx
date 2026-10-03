@@ -179,7 +179,7 @@ export function Sidebar({ drawer, onClose }: { drawer: boolean; onClose: () => v
               set-up they are, which is the thing worth a permanent place on
               every screen until it is finished. */}
           {mode === 'mine' ? (
-            <Checklist compact stage={isBuilt(stageOf(pathname)) ? stageOf(pathname)! : 'sourcing'} />
+            <Checklist stage={isBuilt(stageOf(pathname)) ? stageOf(pathname)! : 'sourcing'} />
           ) : (
             <div className="rounded-lg bg-accent-tint p-2.5">
               <p className="text-[12px] font-bold leading-tight">Suggests, never sends</p>

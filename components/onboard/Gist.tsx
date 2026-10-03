@@ -289,7 +289,7 @@ function StageTile({ c, i }: { c: StageCard; i: number }) {
   return (
     <li data-stage-card={c.stage} style={{ '--i': i } as React.CSSProperties}
       className="anim-fade-up flex min-w-0 flex-col gap-1.5 rounded-xl border border-line bg-surface p-3">
-      <Link href={c.href} className="flex items-center gap-2 text-[13px] font-bold tracking-tight hover:text-navy">
+      <Link href={c.href} data-stage-tile={c.stage} className="flex items-center gap-2 text-[13px] font-bold tracking-tight hover:text-navy">
         <NavyDisc icon={iconOf(c.stage)} />
         <span className="min-w-0 flex-1 truncate">{c.label}</span>
         <span data-stage-open={c.open} title={`${c.open} open`}
