@@ -36,7 +36,12 @@ export function ListPage<T>({
   filter?: {
     label: string
     options: FilterOption[]
-    of: (row: T) => string
+    of?: (row: T) => string
+    /**
+     * Whether a row is one the pick names, when that is not one word a row —
+     * "past the promise" cuts across every other place a sales order can be.
+     */
+    match?: (row: T, pick: string) => boolean
   }
   action?: { label: string; onClick: () => void; icon?: IconName }
   /**
@@ -73,7 +78,7 @@ export function ListPage<T>({
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase()
     return rows.filter((r) => {
-      if (pick && filter && filter.of(r) !== pick) return false
+      if (pick && filter && !(filter.match ? filter.match(r, pick) : filter.of?.(r) === pick)) return false
       if (needle && search && !search(r).toLowerCase().includes(needle)) return false
       return true
     })

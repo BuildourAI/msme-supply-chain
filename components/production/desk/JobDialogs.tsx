@@ -7,11 +7,13 @@ import { useWorkspace } from '@/components/workspace/store'
 import { CustomFields } from '@/components/sheet/CustomFields'
 import { JobHistory, JobMaterials } from '@/components/inventory/desk/IssueDialogs'
 import { statePill } from '@/components/inventory/desk/Jobwork'
+import { JourneyStrip } from '@/components/charts/journey'
 import { longDate, num, shortDate } from '@/lib/domain/format'
 import { setValues } from '@/lib/workspace/fields'
 import { challanRows } from '@/lib/workspace/inbound'
 import { JOB_CARD, addJob, jobProblem, jobRows, nextJobNo, updateJob } from '@/lib/workspace/jobs'
 import { jobworkers } from '@/lib/workspace/jobwork'
+import { jobJourney } from '@/lib/workspace/journeys'
 import { lineWatch } from '@/lib/workspace/linewatch'
 import { PLAN_STATE_TONE, PLAN_STATE_WORD, jobPlanRow } from '@/lib/workspace/plan'
 import { linesMadeOn, linkableLines, madeForProblem, madeForText, salesLineLabel, setMadeFor } from '@/lib/workspace/sales'
@@ -175,6 +177,8 @@ export function JobCard({ jobId, onClose, onAct }: {
     <Dialog open onClose={onClose} wide title={`${word} ${job.no}${job.name ? ` — ${job.name}` : ''}`}
       sub={`Opened ${longDate(job.openedOn)} · ${madeFor ? `for ${madeFor}` : 'for stock'}${job.closedOn ? ` · closed ${longDate(job.closedOn)}` : ''}`}>
       <div className="space-y-5 px-4 py-4" data-job-card={job.no}>
+        <JourneyStrip journey={jobJourney(ws, job, today)} label={job.no}
+          onDoc={(d) => { if (d.kind === 'slip') act('slip', d.id) }} />
         <Section title="Plan" actions={open && (
           <>
             <Quiet onClick={() => act('plan')}>{row.planned ? 'Re-plan' : 'Plan it'}</Quiet>

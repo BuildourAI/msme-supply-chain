@@ -4,6 +4,7 @@ import { ListPage } from '@/components/ui/ListPage'
 import { StatePill, type PillTone } from '@/components/ui/DataTable'
 import { Icon } from '@/components/ui/icons'
 import { DeskTools } from '@/components/sheet/DeskTools'
+import { JourneyStrip } from '@/components/charts/journey'
 import { buildColumns, type DrawnColumn } from '@/components/sheet/columns'
 import { OrderForm } from './OrderForm'
 import { PoDocument, PoSentPill } from './PoDocument'
@@ -14,6 +15,7 @@ import { useWorkspace } from '@/components/workspace/store'
 import { dropFile } from '@/lib/intake/blobs'
 import { mirrorRemove } from '@/lib/intake/mirror'
 import { boardLines, type BoardLine } from '@/lib/workspace/board'
+import { purchaseJourney, type Journey } from '@/lib/workspace/journeys'
 import { SYNC_WORDS, syncOrders, type SyncOrder } from '@/lib/workspace/orders'
 import { AckDialog, ackPath } from './AckDialog'
 import { ExpediteDialog } from './ExpediteDialog'
@@ -89,6 +91,8 @@ export function PurchaseOrders() {
   if (!workspace) return null
   const ws = workspace
   const rows = orderRows(ws)
+  // where each order has got to, over all its lines — a search that narrows the lines does not narrow this
+  const journeys = new Map(orderGroups(rows).map((g) => [g.no, purchaseJourney(ws, g, today)]))
   const sync = new Map(syncOrders(ws, today).map((o) => [o.no, o]))
   const board = boardLines(ws, today)
 
@@ -216,7 +220,7 @@ export function PurchaseOrders() {
             <div className="space-y-3">
               {orderGroups(shown).map((g) => (
                 <Order
-                  key={g.no} group={g} today={today} columns={kit.columns}
+                  key={g.no} group={g} today={today} columns={kit.columns} journey={journeys.get(g.no)}
                   sync={sync.get(g.no)} board={board.filter((l) => l.order.no === g.no)}
                   onPaper={() => setPapering(g.no)}
                   onReceive={setReceiving} onEdit={setEditing} onDelete={setDeleting}
@@ -273,11 +277,13 @@ export function PurchaseOrders() {
  * change it and to record that they confirmed.
  */
 function Order({
-  group, today, columns, sync, board, onPaper, onReceive, onEdit, onDelete, onRevise, onAck, onHurry, onRemoveImage,
+  group, today, columns, journey, sync, board, onPaper, onReceive, onEdit, onDelete, onRevise, onAck, onHurry, onRemoveImage,
 }: {
   group: OrderGroup
   today: string
   columns: { key: string; head: string; align?: 'left' | 'right'; cell: (r: OrderRow) => React.ReactNode }[]
+  /** where it has got to: handed over, confirmed, at the gate, checked, on the shelf */
+  journey?: Journey
   /** absent until it has been handed over */
   sync?: SyncOrder
   board: BoardLine[]
@@ -350,6 +356,8 @@ function Order({
           Make the document
         </button>
       </div>
+
+      {journey && !journey.cancelled && <JourneyStrip journey={journey} label={no} className="mt-3.5 mb-1" />}
 
       <div className="scroll-x relative mt-3 overflow-x-auto">
         <table className="w-full border-collapse text-[13px]">

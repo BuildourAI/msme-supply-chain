@@ -454,3 +454,90 @@ body {
   box-shadow: var(--sh-1);
   transition: transform 260ms var(--ease-spring), width 260ms var(--ease-spring);
 }
+
+/* ============================================================== journeys ====
+   Where a record has got to, as a row of steps (components/charts/journey.tsx).
+   A step is a disc and its words; the line between two steps can carry words
+   of its own ("9 days on the road"). Navy for what is done, a navy ring for
+   where it is now, grey for what is still to come, dashed for a step it never
+   needed, red only for what is late. Drawn in CSS rather than utilities
+   because the joining lines are pseudo-elements.
+
+   A strip stands up — steps down the left — whenever its box is narrower than
+   five steps can sit side by side: on a phone, in a narrow card. That is a
+   container query, so it follows the card, not the window.
+   ========================================================================== */
+
+.jr-box { container-type: inline-size; min-width: 0 }
+.jr { --jr-ahead: #C9CDD6; --jr-d: 46px; display: flex; align-items: flex-start; list-style: none; margin: 0; padding: 0 }
+.jr-step { position: relative; z-index: 1; flex: 0 1 132px; min-width: 92px; display: flex; flex-direction: column; align-items: center; text-align: center }
+.jr-txt { display: flex; flex-direction: column; align-items: center; width: 100% }
+.jr-disc { position: relative; z-index: 1; flex: 0 0 var(--jr-d); width: var(--jr-d); height: var(--jr-d); border-radius: 50%; display: grid; place-items: center }
+.jr-disc > svg:not(.jr-ring) { width: 20px; height: 20px }
+.jr-ring { position: absolute; inset: -4px; width: calc(100% + 8px); height: calc(100% + 8px) }
+.jr-pct { position: absolute; bottom: -8px; font-style: normal; font-size: 10px; font-weight: 700; line-height: 1.3; background: var(--surface); padding: 0 3px; border-radius: 6px; color: var(--navy) }
+.jr-done .jr-disc { background: var(--navy); color: #fff }
+.jr-part .jr-disc { background: var(--surface); color: var(--navy); box-shadow: inset 0 0 0 2px var(--accent-icon) }
+.jr-now  .jr-disc { background: var(--surface); color: var(--navy); box-shadow: inset 0 0 0 3px var(--navy), 0 0 0 5px color-mix(in srgb, var(--navy) 12%, transparent) }
+.jr-next .jr-disc { background: var(--line-soft); color: var(--ink-4) }
+.jr-skip .jr-disc { background: var(--surface); color: var(--ink-4); border: 2px dashed var(--jr-ahead) }
+.jr-late .jr-disc, .jr-late .jr-pct { color: var(--critical) }
+.jr-now.jr-late .jr-disc { box-shadow: inset 0 0 0 3px var(--critical), 0 0 0 5px color-mix(in srgb, var(--critical) 12%, transparent) }
+.jr-lbl { margin-top: 8px; font-size: 12.5px; font-weight: 700; color: var(--ink); line-height: 1.2 }
+.jr-part .jr-lbl { margin-top: 13px }
+.jr-next .jr-lbl, .jr-skip .jr-lbl { color: var(--ink-3); font-weight: 600 }
+.jr-dt { font-size: 11.5px; color: var(--ink-2); margin-top: 2px; min-height: 14px }
+.jr-sub { font-size: 11px; color: var(--ink-3); margin-top: 1px; line-height: 1.3; max-width: 128px; overflow-wrap: anywhere }
+.jr-sub.warn { color: var(--warn) }
+.jr-docs { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; margin-top: 4px }
+.jr-doc { font-family: var(--font-plex-mono), ui-monospace, monospace; font-size: 10.5px; color: var(--navy); background: var(--accent-tint); border-radius: 6px; padding: 1px 6px; white-space: nowrap }
+a.jr-doc, button.jr-doc { text-decoration: underline; text-underline-offset: 2px; cursor: pointer }
+a.jr-doc:hover, button.jr-doc:hover { background: var(--accent-soft) }
+.jr-pill { display: inline-flex; align-items: center; gap: 4px; margin-top: 5px; font-size: 11px; font-weight: 700; color: var(--critical); background: var(--critical-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap }
+.jr-line { position: relative; flex: 1 1 0; min-width: 16px; height: var(--jr-d) }
+.jr-line::before { content: ''; position: absolute; left: -36px; right: -36px; top: calc(var(--jr-d) / 2 - 1.5px); border-top: 3px solid var(--navy) }
+.jr-line.ahead::before { border-top: 3px dashed var(--jr-ahead) }
+.jr-line.late::before { border-top-color: var(--critical); border-top-style: dashed }
+.jr-line > span { position: absolute; z-index: 2; left: 50%; transform: translateX(-50%); top: 2px; white-space: nowrap; font-size: 11px; color: var(--ink-3); background: var(--surface); padding: 0 6px }
+.jr-line.late > span { color: var(--critical); font-weight: 700 }
+
+/* the smaller strip, one to a row in a list */
+.jr-sm { --jr-d: 38px }
+.jr-sm .jr-step { flex: 0 1 150px; min-width: 80px }
+.jr-sm .jr-disc > svg:not(.jr-ring) { width: 17px; height: 17px }
+.jr-sm .jr-lbl { font-size: 12px; margin-top: 6px }
+.jr-sm .jr-part .jr-lbl { margin-top: 11px }
+.jr-sm .jr-dt { font-size: 11px }
+.jr-sm .jr-sub { font-size: 10.5px }
+.jr-sm .jr-doc { font-size: 10px }
+.jr-sm .jr-pill { font-size: 10.5px; padding: 1px 7px; margin-top: 4px }
+.jr-sm .jr-line > span { font-size: 10.5px; top: 0 }
+
+/* standing up, on a phone or in a narrow card */
+@container (max-width: 530px) {
+  /* .jr-prefixed so they outrank the smaller strip's own sizes */
+  .jr { flex-direction: column }
+  .jr .jr-step { flex: 0 0 auto; flex-direction: row; align-items: flex-start; text-align: left; gap: 12px; width: 100%; min-width: 0 }
+  .jr .jr-txt { align-items: flex-start; padding-top: 2px; min-width: 0 }
+  .jr .jr-lbl, .jr .jr-part .jr-lbl { margin-top: 0 }
+  .jr .jr-docs { justify-content: flex-start }
+  .jr .jr-sub { max-width: none }
+  .jr .jr-pct { bottom: -9px }
+  .jr .jr-line { flex: 0 0 26px; height: 26px; min-height: 26px; min-width: 0 }
+  .jr .jr-line::before { left: calc(var(--jr-d) / 2 - 1.5px); right: auto; top: -6px; bottom: -6px; border-top: 0; border-left: 3px solid var(--navy) }
+  .jr .jr-line.ahead::before { border-top: 0; border-left: 3px dashed var(--jr-ahead) }
+  .jr .jr-line.late::before { border-left-color: var(--critical); border-left-style: dashed }
+  .jr .jr-line > span { left: calc(var(--jr-d) + 12px); transform: none; top: 5px; background: transparent; padding: 0 }
+}
+
+/* five dots and a word, for a row on a phone */
+.jr-dots { display: flex; align-items: center }
+.jr-dots i { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%; background: var(--surface-3) }
+.jr-dots i.d { background: var(--navy) }
+.jr-dots i.p { background: conic-gradient(var(--navy) var(--p), var(--surface-3) 0) }
+.jr-dots i.n { background: var(--surface); box-shadow: inset 0 0 0 2.5px var(--navy) }
+.jr-dots i.l { background: var(--surface); box-shadow: inset 0 0 0 2.5px var(--critical) }
+.jr-dots i.pl { background: conic-gradient(var(--critical) var(--p), var(--critical-soft) 0) }
+.jr-dots i.s { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--jr-ahead, #C9CDD6) }
+.jr-dots b { flex: 0 0 auto; width: 10px; height: 2px; background: var(--navy) }
+.jr-dots b.a { background: var(--surface-3) }

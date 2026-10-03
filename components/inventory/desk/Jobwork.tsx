@@ -4,6 +4,7 @@ import { ListPage } from '@/components/ui/ListPage'
 import { DataTable, StatePill, type PillTone } from '@/components/ui/DataTable'
 import { Tabs } from '@/components/ui/Tabs'
 import { Icon } from '@/components/ui/icons'
+import { JourneyStrip } from '@/components/charts/journey'
 import { DeskTools } from '@/components/sheet/DeskTools'
 import { buildColumns, type DrawnColumn } from '@/components/sheet/columns'
 import { ConfirmDelete } from '@/components/sourcing/ConfirmDelete'
@@ -16,6 +17,7 @@ import {
   GST_JOBWORK_WARN_DAYS, challanLedger, gstDaysLeft, gstDueBy, registerLedger, removeChallan, type LedgerKind,
 } from '@/lib/workspace/jobwork'
 import { isOpen } from '@/lib/workspace/receipts'
+import { jobworkJourney } from '@/lib/workspace/journeys'
 import { ChaseDialog } from '@/components/sourcing/ChaseDialog'
 import { InspectForm } from '@/components/inbound/desk/InspectForm'
 import { GrnDocument } from '@/components/inbound/desk/GrnDocument'
@@ -318,7 +320,7 @@ function ChallanCard({ r, i, onReturn, onChase, onExtend, onClose, onInspect, on
   const hasReturns = (workspace?.receipts ?? []).some((x) => x.challanId === c.id)
   return (
     <li style={{ '--i': i } as React.CSSProperties} data-challan={c.no}
-      className={`anim-fade-up rounded-xl px-3.5 py-3 ${fill}`}>
+      className={`anim-fade-up min-w-0 rounded-xl px-3.5 py-3 ${fill}`}>
       <div className="flex items-start gap-3">
         <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-full bg-surface text-ink-2">
           <Icon name="factory" className="size-4" />
@@ -335,6 +337,9 @@ function ChallanCard({ r, i, onReturn, onChase, onExtend, onClose, onInspect, on
         </span>
         <StatePill label={pill.label} tone={pill.tone} />
       </div>
+
+      {/* where it has got to: sent, with them, back at the gate, back on the shelf, settled */}
+      {workspace && <JourneyStrip journey={jobworkJourney(workspace, c, today)} label={c.no} className="mt-3" />}
 
       {/* the five-way split, summing to what was sent */}
       <span className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-surface" data-split
